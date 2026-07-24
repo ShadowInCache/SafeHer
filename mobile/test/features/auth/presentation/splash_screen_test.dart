@@ -16,6 +16,9 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<bool> hasActiveSession() async => hasSession;
+
+  @override
+  Future<void> signInWithEmail({required String email, required String password}) async {}
 }
 
 class _FakeKeyValueStore implements LocalKeyValueStore {

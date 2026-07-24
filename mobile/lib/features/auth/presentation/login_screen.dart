@@ -1,0 +1,232 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_radius.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
+import '../../../shared/components/buttons/sa_button.dart';
+import '../../../shared/components/icons/sa_icon.dart';
+import '../../../shared/components/inputs/sa_password_field.dart';
+import '../../../shared/components/inputs/sa_text_field.dart';
+import '../../../shared/components/overlays/sa_toast.dart';
+import 'login_controller.dart';
+
+final _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
+class LoginScreen extends ConsumerStatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends ConsumerState<LoginScreen> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  String? _emailError;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  String? _validateEmail(String value) {
+    if (value.trim().isEmpty) return 'Email is required';
+    if (!_emailRegex.hasMatch(value.trim())) return 'Enter a valid email address';
+    return null;
+  }
+
+  void _submit() {
+    final error = _validateEmail(_emailController.text);
+    setState(() => _emailError = error);
+    if (error != null) return;
+    ref.read(loginControllerProvider.notifier).signIn(
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+
+    ref.listen(loginControllerProvider, (previous, next) {
+      if (next.hasError && !next.isLoading) {
+        showSaToast(context, message: next.error.toString(), type: SaToastType.error);
+      }
+      final wasLoading = previous?.isLoading ?? false;
+      if (wasLoading && !next.isLoading && !next.hasError) {
+        context.go('/home');
+      }
+    });
+
+    final loginState = ref.watch(loginControllerProvider);
+
+    return Scaffold(
+      backgroundColor: AppColors.dark900,
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment.topCenter,
+            radius: 1.0,
+            colors: [AppColors.violet950, AppColors.dark900],
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.screenMarginPhone,
+              AppSpacing.space8,
+              AppSpacing.screenMarginPhone,
+              MediaQuery.of(context).viewInsets.bottom + AppSpacing.space8,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: const Duration(milliseconds: 300),
+                  builder: (context, opacity, child) => Opacity(opacity: opacity, child: child),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const SaIcon(SaIconGlyph.shield, size: 48, color: Colors.white),
+                      const SizedBox(width: AppSpacing.space2),
+                      Text('SAFEHER', style: AppTypography.headingL.copyWith(color: Colors.white, letterSpacing: 1.5)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.space10),
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 16, end: 0),
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, offsetY, child) => Transform.translate(offset: Offset(0, offsetY), child: child),
+                  child: Text('Welcome back', style: AppTypography.displayM.copyWith(color: Colors.white)),
+                ),
+                const SizedBox(height: AppSpacing.space2),
+                Text(
+                  'Sign in to your safe space',
+                  style: AppTypography.bodyL.copyWith(color: Colors.white.withValues(alpha: 0.7)),
+                ),
+                const SizedBox(height: AppSpacing.space8),
+                SaTextField(
+                  label: 'Email',
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  errorText: _emailError,
+                  semanticsLabel: 'Email',
+                  onChanged: (_) {
+                    if (_emailError != null) setState(() => _emailError = null);
+                  },
+                ),
+                const SizedBox(height: AppSpacing.space4),
+                SaPasswordField(label: 'Password', controller: _passwordController, semanticsLabel: 'Password'),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => context.go('/auth/forgot'),
+                    child: Text('Forgot?', style: AppTypography.labelL.copyWith(color: AppColors.violet500)),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.space4),
+                SaButton(
+                  label: 'Sign In',
+                  size: SaButtonSize.lg,
+                  fullWidth: true,
+                  isLoading: loginState.isLoading,
+                  onPressed: _submit,
+                ),
+                const SizedBox(height: AppSpacing.space8),
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: onSurface.withValues(alpha: 0.15))),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space3),
+                      child: Text(
+                        'or continue with',
+                        style: AppTypography.bodyS.copyWith(color: AppColors.neutral400),
+                      ),
+                    ),
+                    Expanded(child: Divider(color: onSurface.withValues(alpha: 0.15))),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.space6),
+                _SocialSignInButton(
+                  label: 'Continue with Google',
+                  glyph: SaIconGlyph.shield,
+                  onPressed: () {},
+                ),
+                if (defaultTargetPlatform == TargetPlatform.iOS) ...[
+                  const SizedBox(height: AppSpacing.space3),
+                  SaButton(
+                    label: 'Continue with Apple',
+                    variant: SaButtonVariant.secondary,
+                    size: SaButtonSize.lg,
+                    fullWidth: true,
+                    onPressed: () {},
+                  ),
+                ],
+                const SizedBox(height: AppSpacing.space8),
+                Center(
+                  child: Wrap(
+                    children: [
+                      Text('New here? ', style: AppTypography.bodyM.copyWith(color: Colors.white.withValues(alpha: 0.7))),
+                      GestureDetector(
+                        onTap: () => context.go('/auth/signup'),
+                        child: Text(
+                          'Create account',
+                          style: AppTypography.bodyM.copyWith(color: AppColors.violet500, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SocialSignInButton extends StatelessWidget {
+  const _SocialSignInButton({required this.label, required this.glyph, required this.onPressed});
+
+  final String label;
+  final SaIconGlyph glyph;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: label,
+      button: true,
+      child: Material(
+        color: Colors.white,
+        borderRadius: AppRadius.mdRadius,
+        child: InkWell(
+          borderRadius: AppRadius.mdRadius,
+          onTap: onPressed,
+          child: SizedBox(
+            height: 54,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SaIcon(glyph, size: 20, color: AppColors.neutral900),
+                const SizedBox(width: AppSpacing.space3),
+                Text(label, style: AppTypography.labelL.copyWith(color: AppColors.neutral900)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -9,4 +9,15 @@ class AuthRepositoryMock implements AuthRepository {
     await Future.delayed(const Duration(milliseconds: 150));
     return false;
   }
+
+  @override
+  Future<void> signInWithEmail({required String email, required String password}) async {
+    await Future.delayed(const Duration(milliseconds: 400));
+    // Deterministic mock rule so tests can trigger success/failure without
+    // depending on a hardcoded "correct" credential: real validation
+    // arrives with Phase 4's Firebase-backed implementation.
+    if (password.length < 6) {
+      throw const AuthException('Incorrect email or password.');
+    }
+  }
 }
