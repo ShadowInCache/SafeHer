@@ -1,0 +1,185 @@
+import 'package:flutter/material.dart';
+
+import 'app_colors.dart';
+import 'app_shadows.dart';
+
+/// Brightness-aware brand tokens that don't map cleanly onto Material's
+/// [ColorScheme] (glassmorphism fills/borders, threat-state colors,
+/// violet-tinted elevation shadows). Access via `context.saColors`.
+@immutable
+class SafeHerColors extends ThemeExtension<SafeHerColors> {
+  const SafeHerColors({
+    required this.glassFill,
+    required this.glassBorder,
+    required this.surfaceBase,
+    required this.surfaceElevated,
+    required this.surfaceHighest,
+    required this.threatSafe,
+    required this.threatSafeGlow,
+    required this.threatCaution,
+    required this.threatCautionGlow,
+    required this.threatElevated,
+    required this.threatElevatedGlow,
+    required this.threatDanger,
+    required this.threatDangerGlow,
+    required this.shadowLevel1,
+    required this.shadowLevel2,
+    required this.shadowLevel3,
+    required this.shadowLevel4,
+    required this.shadowLevel5,
+  });
+
+  final Color glassFill;
+  final Color glassBorder;
+  final Color surfaceBase;
+  final Color surfaceElevated;
+  final Color surfaceHighest;
+
+  final Color threatSafe;
+  final Color threatSafeGlow;
+  final Color threatCaution;
+  final Color threatCautionGlow;
+  final Color threatElevated;
+  final Color threatElevatedGlow;
+  final Color threatDanger;
+  final Color threatDangerGlow;
+
+  final List<BoxShadow> shadowLevel1;
+  final List<BoxShadow> shadowLevel2;
+  final List<BoxShadow> shadowLevel3;
+  final List<BoxShadow> shadowLevel4;
+  final List<BoxShadow> shadowLevel5;
+
+  static const dark = SafeHerColors(
+    glassFill: AppColors.glassFillDark,
+    glassBorder: AppColors.glassBorderDark,
+    surfaceBase: AppColors.dark900,
+    surfaceElevated: AppColors.dark800,
+    surfaceHighest: AppColors.dark700,
+    threatSafe: AppColors.threatSafe,
+    threatSafeGlow: AppColors.threatSafeGlow,
+    threatCaution: AppColors.threatCaution,
+    threatCautionGlow: AppColors.threatCautionGlow,
+    threatElevated: AppColors.threatElevated,
+    threatElevatedGlow: AppColors.threatElevatedGlow,
+    threatDanger: AppColors.threatDanger,
+    threatDangerGlow: AppColors.threatDangerGlow,
+    shadowLevel1: [],
+    shadowLevel2: [],
+    shadowLevel3: [],
+    shadowLevel4: [],
+    shadowLevel5: [],
+  );
+
+  static const light = SafeHerColors(
+    glassFill: AppColors.glassFillLight,
+    glassBorder: AppColors.glassBorderLight,
+    surfaceBase: AppColors.light50,
+    surfaceElevated: Color(0xFFFFFFFF),
+    surfaceHighest: AppColors.light100,
+    threatSafe: AppColors.threatSafe,
+    threatSafeGlow: AppColors.threatSafeGlow,
+    threatCaution: AppColors.threatCaution,
+    threatCautionGlow: AppColors.threatCautionGlow,
+    threatElevated: AppColors.threatElevated,
+    threatElevatedGlow: AppColors.threatElevatedGlow,
+    threatDanger: AppColors.threatDanger,
+    threatDangerGlow: AppColors.threatDangerGlow,
+    shadowLevel1: [],
+    shadowLevel2: [],
+    shadowLevel3: [],
+    shadowLevel4: [],
+    shadowLevel5: [],
+  );
+
+  /// Shadow lists are computed (not const) because [AppShadows] derives
+  /// its color per-brightness; call this once at theme construction.
+  static SafeHerColors darkResolved() => dark.copyWith(
+    shadowLevel1: AppShadows.level1(dark: true),
+    shadowLevel2: AppShadows.level2(dark: true),
+    shadowLevel3: AppShadows.level3(dark: true),
+    shadowLevel4: AppShadows.level4(dark: true),
+    shadowLevel5: AppShadows.level5(dark: true),
+  );
+
+  static SafeHerColors lightResolved() => light.copyWith(
+    shadowLevel1: AppShadows.level1(dark: false),
+    shadowLevel2: AppShadows.level2(dark: false),
+    shadowLevel3: AppShadows.level3(dark: false),
+    shadowLevel4: AppShadows.level4(dark: false),
+    shadowLevel5: AppShadows.level5(dark: false),
+  );
+
+  @override
+  SafeHerColors copyWith({
+    Color? glassFill,
+    Color? glassBorder,
+    Color? surfaceBase,
+    Color? surfaceElevated,
+    Color? surfaceHighest,
+    Color? threatSafe,
+    Color? threatSafeGlow,
+    Color? threatCaution,
+    Color? threatCautionGlow,
+    Color? threatElevated,
+    Color? threatElevatedGlow,
+    Color? threatDanger,
+    Color? threatDangerGlow,
+    List<BoxShadow>? shadowLevel1,
+    List<BoxShadow>? shadowLevel2,
+    List<BoxShadow>? shadowLevel3,
+    List<BoxShadow>? shadowLevel4,
+    List<BoxShadow>? shadowLevel5,
+  }) {
+    return SafeHerColors(
+      glassFill: glassFill ?? this.glassFill,
+      glassBorder: glassBorder ?? this.glassBorder,
+      surfaceBase: surfaceBase ?? this.surfaceBase,
+      surfaceElevated: surfaceElevated ?? this.surfaceElevated,
+      surfaceHighest: surfaceHighest ?? this.surfaceHighest,
+      threatSafe: threatSafe ?? this.threatSafe,
+      threatSafeGlow: threatSafeGlow ?? this.threatSafeGlow,
+      threatCaution: threatCaution ?? this.threatCaution,
+      threatCautionGlow: threatCautionGlow ?? this.threatCautionGlow,
+      threatElevated: threatElevated ?? this.threatElevated,
+      threatElevatedGlow: threatElevatedGlow ?? this.threatElevatedGlow,
+      threatDanger: threatDanger ?? this.threatDanger,
+      threatDangerGlow: threatDangerGlow ?? this.threatDangerGlow,
+      shadowLevel1: shadowLevel1 ?? this.shadowLevel1,
+      shadowLevel2: shadowLevel2 ?? this.shadowLevel2,
+      shadowLevel3: shadowLevel3 ?? this.shadowLevel3,
+      shadowLevel4: shadowLevel4 ?? this.shadowLevel4,
+      shadowLevel5: shadowLevel5 ?? this.shadowLevel5,
+    );
+  }
+
+  @override
+  SafeHerColors lerp(ThemeExtension<SafeHerColors>? other, double t) {
+    if (other is! SafeHerColors) return this;
+    return SafeHerColors(
+      glassFill: Color.lerp(glassFill, other.glassFill, t)!,
+      glassBorder: Color.lerp(glassBorder, other.glassBorder, t)!,
+      surfaceBase: Color.lerp(surfaceBase, other.surfaceBase, t)!,
+      surfaceElevated: Color.lerp(surfaceElevated, other.surfaceElevated, t)!,
+      surfaceHighest: Color.lerp(surfaceHighest, other.surfaceHighest, t)!,
+      threatSafe: Color.lerp(threatSafe, other.threatSafe, t)!,
+      threatSafeGlow: Color.lerp(threatSafeGlow, other.threatSafeGlow, t)!,
+      threatCaution: Color.lerp(threatCaution, other.threatCaution, t)!,
+      threatCautionGlow: Color.lerp(threatCautionGlow, other.threatCautionGlow, t)!,
+      threatElevated: Color.lerp(threatElevated, other.threatElevated, t)!,
+      threatElevatedGlow: Color.lerp(threatElevatedGlow, other.threatElevatedGlow, t)!,
+      threatDanger: Color.lerp(threatDanger, other.threatDanger, t)!,
+      threatDangerGlow: Color.lerp(threatDangerGlow, other.threatDangerGlow, t)!,
+      shadowLevel1: t < 0.5 ? shadowLevel1 : other.shadowLevel1,
+      shadowLevel2: t < 0.5 ? shadowLevel2 : other.shadowLevel2,
+      shadowLevel3: t < 0.5 ? shadowLevel3 : other.shadowLevel3,
+      shadowLevel4: t < 0.5 ? shadowLevel4 : other.shadowLevel4,
+      shadowLevel5: t < 0.5 ? shadowLevel5 : other.shadowLevel5,
+    );
+  }
+}
+
+extension SafeHerThemeContext on BuildContext {
+  /// Shorthand for `Theme.of(context).extension<SafeHerColors>()!`.
+  SafeHerColors get saColors => Theme.of(this).extension<SafeHerColors>()!;
+}
