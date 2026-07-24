@@ -50,4 +50,11 @@ class AuthRepositoryMock implements AuthRepository {
   Future<void> resendOtp() async {
     await Future.delayed(const Duration(milliseconds: 300));
   }
+
+  @override
+  Future<void> sendPasswordResetEmail(String email) async {
+    await Future.delayed(const Duration(milliseconds: 400));
+    // Deliberately doesn't reject unknown emails — real implementations
+    // shouldn't reveal whether an address has an account either.
+  }
 }

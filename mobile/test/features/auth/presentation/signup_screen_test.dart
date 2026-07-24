@@ -37,6 +37,9 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<void> resendOtp() async {}
+
+  @override
+  Future<void> sendPasswordResetEmail(String email) async {}
 }
 
 GoRouter _buildTestRouter() {

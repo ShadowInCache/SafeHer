@@ -39,6 +39,9 @@ class _FakeAuthRepository implements AuthRepository {
     resendCallCount++;
     await Future.delayed(const Duration(milliseconds: 50));
   }
+
+  @override
+  Future<void> sendPasswordResetEmail(String email) async {}
 }
 
 GoRouter _buildTestRouter() {
