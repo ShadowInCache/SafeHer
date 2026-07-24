@@ -44,6 +44,12 @@ dependencies:
   lottie: ^3.1.0
   animations: ^2.0.11
 
+  # 3D model rendering — added on explicit request, not part of the
+  # original locked tech stack. No SafeHer-branded .glb assets exist yet,
+  # so components using this point at Google's official model-viewer.dev
+  # sample models as clearly-labeled stand-ins until real models land.
+  model_viewer_plus: ^1.9.3
+
   # Typography / design
   google_fonts: ^6.2.1
 
@@ -85,6 +91,7 @@ dev_dependencies:
   injectable_generator: ^2.4.1
   golden_toolkit: ^0.15.0
   mockito: ^5.4.4
+  webview_flutter_platform_interface: ^2.15.1
 
 flutter:
   uses-material-design: true
