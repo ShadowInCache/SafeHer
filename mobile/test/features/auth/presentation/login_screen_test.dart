@@ -20,6 +20,15 @@ class _FakeAuthRepository implements AuthRepository {
     await Future.delayed(const Duration(milliseconds: 50));
     if (shouldFail) throw const AuthException('Incorrect email or password.');
   }
+
+  @override
+  Future<void> signUp({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phoneE164,
+    required String password,
+  }) async {}
 }
 
 GoRouter _buildTestRouter() {

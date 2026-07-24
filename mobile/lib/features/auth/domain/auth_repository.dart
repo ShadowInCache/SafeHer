@@ -15,4 +15,12 @@ abstract class AuthRepository {
   Future<bool> hasActiveSession();
 
   Future<void> signInWithEmail({required String email, required String password});
+
+  Future<void> signUp({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phoneE164,
+    required String password,
+  });
 }

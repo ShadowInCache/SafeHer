@@ -20,4 +20,20 @@ class AuthRepositoryMock implements AuthRepository {
       throw const AuthException('Incorrect email or password.');
     }
   }
+
+  @override
+  Future<void> signUp({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phoneE164,
+    required String password,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 400));
+    // Deterministic mock rule for testing the failure path, same spirit as
+    // signInWithEmail's password-length rule.
+    if (email.toLowerCase().startsWith('taken@')) {
+      throw const AuthException('An account with this email already exists.');
+    }
+  }
 }

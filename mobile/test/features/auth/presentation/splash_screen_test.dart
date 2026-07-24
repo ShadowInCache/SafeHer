@@ -19,6 +19,15 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<void> signInWithEmail({required String email, required String password}) async {}
+
+  @override
+  Future<void> signUp({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phoneE164,
+    required String password,
+  }) async {}
 }
 
 class _FakeKeyValueStore implements LocalKeyValueStore {
