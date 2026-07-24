@@ -1,0 +1,51 @@
+{
+  "accuracy": 0.9817171717171718,
+  "precision": 0.9817528705552512,
+  "recall": 0.9817171717171718,
+  "f1_score": 0.9817053871397037,
+  "classification_report": {
+    "0": {
+      "precision": 0.9788440763413756,
+      "recall": 0.9884545454545455,
+      "f1-score": 0.983625836801158,
+      "support": 11000.0
+    },
+    "1": {
+      "precision": 0.9853888633225955,
+      "recall": 0.9732954545454545,
+      "f1-score": 0.9793048250628859,
+      "support": 8800.0
+    },
+    "accuracy": 0.9817171717171718,
+    "macro avg": {
+      "precision": 0.9821164698319855,
+      "recall": 0.9808749999999999,
+      "f1-score": 0.9814653309320219,
+      "support": 19800.0
+    },
+    "weighted avg": {
+      "precision": 0.9817528705552512,
+      "recall": 0.9817171717171718,
+      "f1-score": 0.9817053871397037,
+      "support": 19800.0
+    }
+  },
+  "n_estimators": 500,
+  "max_depth": 6,
+  "n_features": 7,
+  "device": "cpu",
+  "tree_method": "hist",
+  "feature_names": [
+    "acceleration_x",
+    "acceleration_y",
+    "acceleration_z",
+    "gyroscope_x",
+    "gyroscope_y",
+    "gyroscope_z",
+    "magnitude"
+  ],
+  "training_samples": 79200,
+  "test_samples": 19800,
+  "dataset_type": "synthetic_realistic_combined",
+  "training_date": "2026-03-23T23:49:58.223140"
+}

@@ -1,0 +1,10 @@
+# SafeHer Event Processor - Simplified Requirements
+flask==3.0.0
+flask-cors==4.0.0
+redis==5.0.1
+paho-mqtt==1.6.1
+python-dotenv==1.0.0
+requests==2.31.0
+numpy==1.24.3
+opencv-python==4.8.0.76
+supabase==2.0.2

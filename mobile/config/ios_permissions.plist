@@ -1,0 +1,27 @@
+<!-- Add these entries to ios/Runner/Info.plist -->
+<dict>
+    <!-- Existing entries... -->
+    
+    <!-- Bluetooth Permissions -->
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>SafeHer needs Bluetooth to connect to your smart glove and glasses for safety monitoring</string>
+    
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>SafeHer needs Bluetooth to communicate with your wearable safety devices</string>
+    
+    <!-- Location Permission (required for BLE scanning) -->
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>SafeHer needs location permission for Bluetooth device scanning</string>
+    
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>SafeHer needs location to send your GPS coordinates during emergencies</string>
+    
+    <!-- Background Modes -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>bluetooth-central</string>
+        <string>bluetooth-peripheral</string>
+        <string>location</string>
+    </array>
+    
+</dict>

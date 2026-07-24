@@ -1,0 +1,121 @@
+# SafeHer Simplified Event-Driven Architecture
+# Single unified processor replacing complex microservices
+# Just 3 essential services: Redis + MQTT + Event Processor
+
+networks:
+  safeher_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+
+services:
+  #############################################################################
+  # SIMPLIFIED ARCHITECTURE - Only 3 Services
+  #############################################################################
+
+  # PostgreSQL - Persistent transactional database for FastAPI auth/data
+  postgres:
+    image: postgres:16-alpine
+    container_name: safeher_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-safeher}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-safeher}
+      - POSTGRES_DB=${POSTGRES_DB:-safeher}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - safeher_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-safeher} -d ${POSTGRES_DB:-safeher}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
+  # Redis - Event Store & Message Queue
+  redis:
+    image: redis:7-alpine
+    container_name: safeher_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - safeher_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      
+  # MQTT Broker - Device Communication
+  mqtt:
+    image: eclipse-mosquitto:2.0
+    container_name: safeher_mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    networks:
+      - safeher_network
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 5 mosquitto_pub -h localhost -t test -m test"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+
+  # SafeHer Event Processor - Unified ML Processing
+  safeher_processor:
+    build:
+      context: .
+      dockerfile: Dockerfile.processor
+    container_name: safeher_event_processor
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - ../../.env
+    environment:
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - MQTT_HOST=${MQTT_HOST:-mqtt}
+      - MQTT_PORT=${MQTT_PORT:-1883}
+      - HTTP_PORT=${HTTP_PORT:-8080}
+      - PYTHONUNBUFFERED=1
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_PUBLISHABLE_KEY=${SUPABASE_PUBLISHABLE_KEY}
+      - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}
+    volumes:
+      - ./event_system:/app/event_system:ro
+    networks:
+      - safeher_network
+    depends_on:
+      redis:
+        condition: service_healthy
+      mqtt:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+#############################################################################
+# REMOVED SERVICES (No longer needed with unified processor)
+#############################################################################
+# ❌ motion_service
+# ❌ vision_service  
+# ❌ voice_service
+# ❌ alert_service
+# ❌ communication_layer
+# ❌ evidence_storage_service  
+# ❌ threat_fusion_engine
+# ❌ postgres (using Redis for everything)
+# ❌ nginx (direct API access)
+# ❌ prometheus (simplified monitoring)
+# ❌ grafana (simplified monitoring)

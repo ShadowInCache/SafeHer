@@ -1,0 +1,117 @@
+# SafeHer Prometheus Configuration
+# Monitoring and metrics collection
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'safeher-monitor'
+    environment: 'production'
+
+# Alertmanager configuration (optional)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # API Gateway
+  - job_name: 'api_gateway'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['api_gateway:5000']
+        labels:
+          service: 'api-gateway'
+          layer: 'gateway'
+
+  # Microservices - AI Layer
+  - job_name: 'motion_service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['motion_service:8001']
+        labels:
+          service: 'motion-detection'
+          layer: 'ai'
+
+  - job_name: 'vision_service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['vision_service:8002']
+        labels:
+          service: 'vision-detection'
+          layer: 'ai'
+
+  - job_name: 'voice_service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['voice_service:8006']
+        labels:
+          service: 'voice-detection'
+          layer: 'ai'
+
+  # Microservices - Processing Layer
+  - job_name: 'threat_fusion_engine'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['threat_fusion_engine:8003']
+        labels:
+          service: 'threat-fusion'
+          layer: 'processing'
+
+  - job_name: 'alert_service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['alert_service:8004']
+        labels:
+          service: 'alerts'
+          layer: 'action'
+
+  - job_name: 'evidence_storage_service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['evidence_storage_service:8005']
+        labels:
+          service: 'evidence-storage'
+          layer: 'storage'
+
+  # Communication Layer
+  - job_name: 'communication_service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['communication_service:8765']
+        labels:
+          service: 'communication'
+          layer: 'communication'
+
+  # Infrastructure Services
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+        labels:
+          service: 'redis'
+          layer: 'infrastructure'
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+        labels:
+          service: 'postgres'
+          layer: 'infrastructure'
+
+  # Node Exporter (if added for system metrics)
+  # - job_name: 'node_exporter'
+  #   static_configs:
+  #     - targets: ['node-exporter:9100']
+
+# Recording rules (optional - for aggregations)
+# rule_files:
+#   - 'alerts.yml'
+#   - 'rules/*.yml'

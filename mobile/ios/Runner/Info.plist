@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Safeher App</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>safeher_app</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>SafeHer uses Bluetooth to pair and monitor your safety wearables.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>SafeHer connects to your wearable devices to receive emergency signals.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>SafeHer uses the camera for evidence capture and threat validation.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>SafeHer accesses contacts so you can quickly add trusted emergency contacts.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>SafeHer uses biometric authentication to secure your account and evidence vault.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>SafeHer shares your live location during emergencies to help guardians and responders reach you.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>SafeHer needs your location to show safe routing, tracking, and incident context.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>SafeHer uses the microphone for voice-triggered SOS and threat audio analysis.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>SafeHer uses motion data to improve fall and anomaly detection.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>SafeHer saves encrypted evidence snapshots to your protected storage.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>SafeHer accesses selected media when you attach evidence to incidents.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>SafeHer uses speech recognition to detect SOS voice commands.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>location</string>
+		<string>processing</string>
+		<string>remote-notification</string>
+		<string>bluetooth-central</string>
+	</array>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>
