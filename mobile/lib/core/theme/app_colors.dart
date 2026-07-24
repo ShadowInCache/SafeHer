@@ -12,10 +12,18 @@ abstract final class AppColors {
   static const violet900 = Color(0xFF4C1D95);
   static const violet950 = Color(0xFF2E1065);
 
+  // Onboarding page-2 background accent (Tailwind indigo-900); not part of
+  // the primary brand scale, used only for the Onboarding gradient per spec.
+  static const indigo900 = Color(0xFF312E81);
+
   // Accent — Soft Coral Scale
   static const coral400 = Color(0xFFFF8A80);
   static const coral500 = Color(0xFFFF6B6B);
   static const coral600 = Color(0xFFE53935);
+
+  /// Onboarding page-3 background accent (deep coral), used only for the
+  /// Onboarding gradient per spec — not part of the interactive coral scale.
+  static const coral900 = Color(0xFF7F1D1D);
 
   // Semantic
   static const success500 = Color(0xFF10B981);
