@@ -113,7 +113,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       }
       final wasLoading = previous?.isLoading ?? false;
       if (wasLoading && !next.isLoading && !next.hasError) {
-        context.go('/auth/otp');
+        context.go('/auth/otp', extra: toE164(_countryCode, _phoneController.text));
       }
     });
 

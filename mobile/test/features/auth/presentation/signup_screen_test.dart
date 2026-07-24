@@ -31,6 +31,12 @@ class _FakeAuthRepository implements AuthRepository {
       throw const AuthException('An account with this email already exists.');
     }
   }
+
+  @override
+  Future<void> verifyOtp(String code) async {}
+
+  @override
+  Future<void> resendOtp() async {}
 }
 
 GoRouter _buildTestRouter() {

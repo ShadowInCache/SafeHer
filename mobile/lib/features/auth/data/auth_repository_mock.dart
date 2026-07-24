@@ -36,4 +36,18 @@ class AuthRepositoryMock implements AuthRepository {
       throw const AuthException('An account with this email already exists.');
     }
   }
+
+  @override
+  Future<void> verifyOtp(String code) async {
+    await Future.delayed(const Duration(milliseconds: 400));
+    // Deterministic mock rule, same spirit as the other mock methods.
+    if (code != '123456') {
+      throw const AuthException('Incorrect code. Please try again.');
+    }
+  }
+
+  @override
+  Future<void> resendOtp() async {
+    await Future.delayed(const Duration(milliseconds: 300));
+  }
 }

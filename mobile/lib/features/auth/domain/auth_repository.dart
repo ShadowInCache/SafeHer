@@ -23,4 +23,8 @@ abstract class AuthRepository {
     required String phoneE164,
     required String password,
   });
+
+  Future<void> verifyOtp(String code);
+
+  Future<void> resendOtp();
 }

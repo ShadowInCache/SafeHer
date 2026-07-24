@@ -28,6 +28,12 @@ class _FakeAuthRepository implements AuthRepository {
     required String phoneE164,
     required String password,
   }) async {}
+
+  @override
+  Future<void> verifyOtp(String code) async {}
+
+  @override
+  Future<void> resendOtp() async {}
 }
 
 class _FakeKeyValueStore implements LocalKeyValueStore {
