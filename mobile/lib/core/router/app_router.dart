@@ -11,6 +11,7 @@ import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/devices/presentation/device_management_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/monitoring/presentation/live_monitoring_screen.dart';
+import '../../features/search/presentation/search_screen.dart';
 
 /// Central route table. Routes are added incrementally as each screen in
 /// the build sequence lands — see the spec's ROUTE TABLE for the full,
@@ -38,6 +39,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/monitor', name: 'monitor', builder: (context, state) => const LiveMonitoringScreen()),
       GoRoute(path: '/dashboard', name: 'dashboard', builder: (context, state) => const DashboardScreen()),
+      GoRoute(path: '/search', name: 'search', builder: (context, state) => const SearchScreen()),
     ],
   );
 });
