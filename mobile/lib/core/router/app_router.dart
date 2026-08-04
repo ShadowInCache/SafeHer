@@ -7,6 +7,7 @@ import '../../features/auth/presentation/onboarding_screen.dart';
 import '../../features/auth/presentation/otp_screen.dart';
 import '../../features/auth/presentation/signup_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
+import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/devices/presentation/device_management_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/monitoring/presentation/live_monitoring_screen.dart';
@@ -36,6 +37,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => DeviceManagementScreen(initialExpandedId: state.pathParameters['id']),
       ),
       GoRoute(path: '/monitor', name: 'monitor', builder: (context, state) => const LiveMonitoringScreen()),
+      GoRoute(path: '/dashboard', name: 'dashboard', builder: (context, state) => const DashboardScreen()),
     ],
   );
 });

@@ -167,6 +167,9 @@ class _NavTabItem extends StatelessWidget {
                         tab.label,
                         key: ValueKey(tab),
                         style: AppTypography.labelM.copyWith(color: Colors.white),
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
                       )
                     : const SizedBox(height: 14, key: ValueKey('empty')),
               ),
