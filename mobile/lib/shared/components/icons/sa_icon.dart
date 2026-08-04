@@ -21,6 +21,11 @@ enum SaIconGlyph {
   signal,
   camera,
   mapPin,
+  ring,
+  glove,
+  pendant,
+  refresh,
+  plus,
 }
 
 /// Renders a [SaIconGlyph] via [CustomPainter] — a hand-drawn vector icon,
@@ -103,6 +108,16 @@ class _SaIconPainter extends CustomPainter {
         _paintCamera(canvas, size, stroke);
       case SaIconGlyph.mapPin:
         _paintMapPin(canvas, size, stroke, fill);
+      case SaIconGlyph.ring:
+        _paintRing(canvas, size, stroke);
+      case SaIconGlyph.glove:
+        _paintGlove(canvas, size, stroke);
+      case SaIconGlyph.pendant:
+        _paintPendant(canvas, size, stroke, fill);
+      case SaIconGlyph.refresh:
+        _paintRefresh(canvas, size, stroke);
+      case SaIconGlyph.plus:
+        _paintPlus(canvas, size, stroke);
     }
   }
 
@@ -301,6 +316,61 @@ class _SaIconPainter extends CustomPainter {
       ..close();
     canvas.drawPath(path, stroke);
     canvas.drawCircle(Offset(w * 0.5, h * 0.38), w * 0.1, fill);
+  }
+
+  void _paintRing(Canvas canvas, Size size, Paint stroke) {
+    final w = size.width, h = size.height;
+    canvas.drawOval(Rect.fromCenter(center: Offset(w * 0.5, h * 0.58), width: w * 0.6, height: h * 0.32), stroke);
+    final gem = Path()
+      ..moveTo(w * 0.5, h * 0.14)
+      ..lineTo(w * 0.62, h * 0.3)
+      ..lineTo(w * 0.5, h * 0.44)
+      ..lineTo(w * 0.38, h * 0.3)
+      ..close();
+    canvas.drawPath(gem, stroke);
+  }
+
+  void _paintGlove(Canvas canvas, Size size, Paint stroke) {
+    final w = size.width, h = size.height;
+    final palm = Path()
+      ..moveTo(w * 0.3, h * 0.55)
+      ..lineTo(w * 0.3, h * 0.85)
+      ..cubicTo(w * 0.3, h * 0.92, w * 0.36, h * 0.94, w * 0.68, h * 0.94)
+      ..cubicTo(w * 0.78, h * 0.94, w * 0.8, h * 0.88, w * 0.8, h * 0.8)
+      ..lineTo(w * 0.8, h * 0.5);
+    canvas.drawPath(palm, stroke);
+    for (var i = 0; i < 4; i++) {
+      final x = w * (0.34 + i * 0.14);
+      canvas.drawLine(Offset(x, h * 0.5), Offset(x, h * 0.12 + (i.isEven ? 0 : h * 0.08)), stroke);
+    }
+  }
+
+  void _paintPendant(Canvas canvas, Size size, Paint stroke, Paint fill) {
+    final w = size.width, h = size.height;
+    canvas.drawArc(Rect.fromCenter(center: Offset(w * 0.5, h * 0.18), width: w * 0.3, height: h * 0.2), 3.4, 2.6, false, stroke);
+    final drop = Path()
+      ..moveTo(w * 0.5, h * 0.3)
+      ..cubicTo(w * 0.28, h * 0.55, w * 0.28, h * 0.78, w * 0.5, h * 0.92)
+      ..cubicTo(w * 0.72, h * 0.78, w * 0.72, h * 0.55, w * 0.5, h * 0.3)
+      ..close();
+    canvas.drawPath(drop, stroke);
+  }
+
+  void _paintRefresh(Canvas canvas, Size size, Paint stroke) {
+    final w = size.width, h = size.height;
+    final rect = Rect.fromCenter(center: Offset(w * 0.5, h * 0.5), width: w * 0.6, height: h * 0.6);
+    canvas.drawArc(rect, -1.8, 4.2, false, stroke);
+    final arrow = Path()
+      ..moveTo(w * 0.78, h * 0.18)
+      ..lineTo(w * 0.82, h * 0.38)
+      ..lineTo(w * 0.62, h * 0.34);
+    canvas.drawPath(arrow, stroke);
+  }
+
+  void _paintPlus(Canvas canvas, Size size, Paint stroke) {
+    final w = size.width, h = size.height;
+    canvas.drawLine(Offset(w * 0.5, h * 0.2), Offset(w * 0.5, h * 0.8), stroke);
+    canvas.drawLine(Offset(w * 0.2, h * 0.5), Offset(w * 0.8, h * 0.5), stroke);
   }
 
   @override
