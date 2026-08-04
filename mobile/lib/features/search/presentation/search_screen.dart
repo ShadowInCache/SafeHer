@@ -16,12 +16,19 @@ import '../../../shared/components/feedback/sa_empty_state.dart';
 import '../../../shared/components/feedback/sa_loading_shimmer.dart';
 import '../../../shared/components/icons/sa_icon.dart';
 import '../../../shared/components/inputs/sa_search_bar.dart';
-import '../data/search_providers.dart';
+import '../../contacts/data/contacts_providers.dart';
+import '../../contacts/domain/models/contact.dart';
+import '../../devices/data/device_providers.dart';
+import '../../devices/domain/models/device_detail.dart';
+import '../../reports/data/reports_providers.dart';
+import '../../reports/domain/models/report_summary.dart';
 import '../domain/models/search_result.dart';
 
-/// Unified search across incidents, contacts, and devices. Filters the
-/// (mock, Phase-4-swappable) [searchIndexProvider] client-side as the user
-/// types, debounced by 250ms.
+/// Unified search across incidents, contacts, and devices. Reads straight
+/// from each feature's own shared provider (the same one Reports, Settings,
+/// and Devices use) rather than a separate copy of the data, so results
+/// here always match what those screens show. Filters client-side as the
+/// user types, debounced by 250ms.
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
 
@@ -51,7 +58,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final indexAsync = ref.watch(searchIndexProvider);
+    final reportsAsync = ref.watch(reportsListProvider);
+    final contactsAsync = ref.watch(contactsNotifierProvider);
+    final devicesAsync = ref.watch(devicesProvider);
+
+    final error = reportsAsync.error ?? contactsAsync.error ?? devicesAsync.error;
+    final hasAllData = reportsAsync.hasValue && contactsAsync.hasValue && devicesAsync.hasValue;
 
     return Scaffold(
       body: SafeArea(
@@ -101,16 +113,26 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             ),
             const SizedBox(height: AppSpacing.space3),
             Expanded(
-              child: indexAsync.when(
-                data: (index) => _SearchResults(index: index, query: _query, category: _category),
-                loading: () => const _SearchLoading(),
-                error: (error, stackTrace) => SaEmptyState(
-                  title: "Couldn't load search",
-                  body: 'Check your connection and try again.',
-                  ctaLabel: 'Retry',
-                  onCtaTap: () => ref.invalidate(searchIndexProvider),
-                ),
-              ),
+              child: error != null
+                  ? SaEmptyState(
+                      title: "Couldn't load search",
+                      body: 'Check your connection and try again.',
+                      ctaLabel: 'Retry',
+                      onCtaTap: () {
+                        ref.invalidate(reportsListProvider);
+                        ref.invalidate(contactsNotifierProvider);
+                        ref.invalidate(devicesProvider);
+                      },
+                    )
+                  : !hasAllData
+                  ? const _SearchLoading()
+                  : _SearchResults(
+                      incidents: reportsAsync.requireValue,
+                      contacts: contactsAsync.requireValue,
+                      devices: devicesAsync.requireValue,
+                      query: _query,
+                      category: _category,
+                    ),
             ),
           ],
         ),
@@ -164,9 +186,17 @@ class _CategoryChip extends StatelessWidget {
 }
 
 class _SearchResults extends StatelessWidget {
-  const _SearchResults({required this.index, required this.query, required this.category});
+  const _SearchResults({
+    required this.incidents,
+    required this.contacts,
+    required this.devices,
+    required this.query,
+    required this.category,
+  });
 
-  final SearchIndex index;
+  final List<ReportSummary> incidents;
+  final List<Contact> contacts;
+  final List<DeviceDetail> devices;
   final String query;
   final SearchCategory category;
 
@@ -186,17 +216,17 @@ class _SearchResults extends StatelessWidget {
       );
     }
 
-    final incidents = category == SearchCategory.all || category == SearchCategory.incidents
-        ? index.incidents.where((i) => _matches('${i.type} ${i.summarySnippet}')).toList()
-        : <SearchIncidentResult>[];
-    final contacts = category == SearchCategory.all || category == SearchCategory.contacts
-        ? index.contacts.where((c) => _matches('${c.name} ${c.relationship}')).toList()
-        : <SearchContactResult>[];
-    final devices = category == SearchCategory.all || category == SearchCategory.devices
-        ? index.devices.where((d) => _matches(d.name)).toList()
-        : <SearchDeviceResult>[];
+    final matchedIncidents = category == SearchCategory.all || category == SearchCategory.incidents
+        ? incidents.where((i) => _matches('${i.type} ${i.summarySnippet}')).toList()
+        : <ReportSummary>[];
+    final matchedContacts = category == SearchCategory.all || category == SearchCategory.contacts
+        ? contacts.where((c) => _matches('${c.name} ${c.relationship}')).toList()
+        : <Contact>[];
+    final matchedDevices = category == SearchCategory.all || category == SearchCategory.devices
+        ? devices.where((d) => _matches(d.name)).toList()
+        : <DeviceDetail>[];
 
-    if (incidents.isEmpty && contacts.isEmpty && devices.isEmpty) {
+    if (matchedIncidents.isEmpty && matchedContacts.isEmpty && matchedDevices.isEmpty) {
       return SaEmptyState(
         title: 'No results',
         body: query.isEmpty ? 'Nothing in this category yet.' : 'Nothing matched "$query". Try a different term.',
@@ -211,10 +241,10 @@ class _SearchResults extends StatelessWidget {
         AppSpacing.space6,
       ),
       children: [
-        if (incidents.isNotEmpty) ...[
+        if (matchedIncidents.isNotEmpty) ...[
           Text('Incidents', style: AppTypography.headingS.copyWith(color: onSurface)),
           const SizedBox(height: AppSpacing.space2),
-          for (final incident in incidents) ...[
+          for (final incident in matchedIncidents) ...[
             SaIncidentCard(
               date: incident.date,
               type: incident.type,
@@ -226,25 +256,25 @@ class _SearchResults extends StatelessWidget {
           ],
           const SizedBox(height: AppSpacing.space3),
         ],
-        if (contacts.isNotEmpty) ...[
+        if (matchedContacts.isNotEmpty) ...[
           Text('Contacts', style: AppTypography.headingS.copyWith(color: onSurface)),
           const SizedBox(height: AppSpacing.space2),
-          for (final contact in contacts) ...[
+          for (final contact in matchedContacts) ...[
             SaContactCard(
               name: contact.name,
               relationship: contact.relationship,
               priority: contact.priority,
               confirmed: contact.confirmed,
-              onTap: () => context.go('/profile'),
+              onTap: () => context.go('/settings/contacts'),
             ),
             const SizedBox(height: AppSpacing.space3),
           ],
           const SizedBox(height: AppSpacing.space3),
         ],
-        if (devices.isNotEmpty) ...[
+        if (matchedDevices.isNotEmpty) ...[
           Text('Devices', style: AppTypography.headingS.copyWith(color: onSurface)),
           const SizedBox(height: AppSpacing.space2),
-          for (final device in devices) ...[
+          for (final device in matchedDevices) ...[
             SizedBox(
               width: double.infinity,
               child: SaDeviceCard(

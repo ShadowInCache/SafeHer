@@ -4,46 +4,48 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
-import 'package:safeher_app/features/settings/data/settings_providers.dart';
-import 'package:safeher_app/features/settings/domain/contacts_repository.dart';
-import 'package:safeher_app/features/settings/domain/models/managed_contact.dart';
+import 'package:safeher_app/features/contacts/data/contacts_providers.dart';
+import 'package:safeher_app/features/contacts/domain/contacts_repository.dart';
+import 'package:safeher_app/features/contacts/domain/models/contact.dart';
 import 'package:safeher_app/features/settings/presentation/emergency_contacts_screen.dart';
 
-List<ManagedContact> _sampleContacts() => [
-  const ManagedContact(id: '1', name: 'Anika Sharma', relationship: 'Sister', confirmed: true),
-  const ManagedContact(id: '2', name: 'Rahul Verma', relationship: 'Partner', confirmed: true),
+List<Contact> _sampleContacts() => [
+  const Contact(id: '1', name: 'Anika Sharma', relationship: 'Sister', priority: 1, confirmed: true),
+  const Contact(id: '2', name: 'Rahul Verma', relationship: 'Partner', priority: 2, confirmed: true),
 ];
 
 class _FakeContactsRepository implements ContactsRepository {
-  _FakeContactsRepository({this.shouldFail = false, List<ManagedContact>? initialContacts})
+  _FakeContactsRepository({this.shouldFail = false, List<Contact>? initialContacts})
     : _contacts = initialContacts ?? _sampleContacts();
   final bool shouldFail;
-  final List<ManagedContact> _contacts;
+  final List<Contact> _contacts;
   var _nextId = 3;
 
   @override
-  Future<List<ManagedContact>> getContacts() async {
+  Future<List<Contact>> getContacts() async {
     await Future.delayed(const Duration(milliseconds: 50));
     if (shouldFail) throw Exception('network error');
     return List.unmodifiable(_contacts);
   }
 
   @override
-  Future<List<ManagedContact>> addContact(String name, String relationship) async {
+  Future<List<Contact>> addContact(String name, String relationship) async {
     await Future.delayed(const Duration(milliseconds: 50));
-    _contacts.add(ManagedContact(id: '${_nextId++}', name: name, relationship: relationship, confirmed: false));
+    _contacts.add(
+      Contact(id: '${_nextId++}', name: name, relationship: relationship, priority: _contacts.length + 1, confirmed: false),
+    );
     return List.unmodifiable(_contacts);
   }
 
   @override
-  Future<List<ManagedContact>> removeContact(String id) async {
+  Future<List<Contact>> removeContact(String id) async {
     await Future.delayed(const Duration(milliseconds: 50));
     _contacts.removeWhere((c) => c.id == id);
     return List.unmodifiable(_contacts);
   }
 
   @override
-  Future<List<ManagedContact>> reorderContacts(List<ManagedContact> newOrder) async {
+  Future<List<Contact>> reorderContacts(List<Contact> newOrder) async {
     await Future.delayed(const Duration(milliseconds: 50));
     _contacts
       ..clear()

@@ -4,37 +4,77 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
-import 'package:safeher_app/features/search/data/search_providers.dart';
-import 'package:safeher_app/features/search/domain/models/search_result.dart';
-import 'package:safeher_app/features/search/domain/search_repository.dart';
+import 'package:safeher_app/features/contacts/data/contacts_providers.dart';
+import 'package:safeher_app/features/contacts/domain/contacts_repository.dart';
+import 'package:safeher_app/features/contacts/domain/models/contact.dart';
+import 'package:safeher_app/features/devices/data/device_providers.dart';
+import 'package:safeher_app/features/devices/domain/device_repository.dart';
+import 'package:safeher_app/features/devices/domain/models/device_detail.dart';
+import 'package:safeher_app/features/reports/data/reports_providers.dart';
+import 'package:safeher_app/features/reports/domain/models/report_detail.dart';
+import 'package:safeher_app/features/reports/domain/models/report_summary.dart';
+import 'package:safeher_app/features/reports/domain/reports_repository.dart';
 import 'package:safeher_app/features/search/presentation/search_screen.dart';
 import 'package:safeher_app/shared/models/threat_level.dart';
 
-SearchIndex _sampleIndex() => const SearchIndex(
-  incidents: [
-    SearchIncidentResult(
-      id: '1',
-      date: 'Aug 2',
-      type: 'Elevated motion detected',
-      level: ThreatLevel.elevated,
-      summarySnippet: 'Sudden acceleration spike near Elm Street.',
-    ),
-  ],
-  contacts: [SearchContactResult(id: '1', name: 'Anika Sharma', relationship: 'Sister', priority: 1)],
-  devices: [
-    SearchDeviceResult(id: 'ring', name: 'Smart Ring', batteryPercent: 0.82, signalStrength: 3, isOnline: true),
-  ],
-);
-
-class _FakeSearchRepository implements SearchRepository {
-  _FakeSearchRepository({this.shouldFail = false});
+class _FakeReportsRepository implements ReportsRepository {
+  _FakeReportsRepository({this.shouldFail = false});
   final bool shouldFail;
 
   @override
-  Future<SearchIndex> getSearchIndex() async {
+  Future<List<ReportSummary>> getReports() async {
     await Future.delayed(const Duration(milliseconds: 50));
     if (shouldFail) throw Exception('network error');
-    return _sampleIndex();
+    return const [
+      ReportSummary(
+        id: '1',
+        date: 'Aug 2',
+        type: 'Elevated motion detected',
+        level: ThreatLevel.elevated,
+        summarySnippet: 'Sudden acceleration spike near Elm Street.',
+      ),
+    ];
+  }
+
+  @override
+  Future<ReportDetail> getReportDetail(String id) => throw UnimplementedError();
+}
+
+class _FakeContactsRepository implements ContactsRepository {
+  @override
+  Future<List<Contact>> getContacts() async {
+    await Future.delayed(const Duration(milliseconds: 50));
+    return const [Contact(id: '1', name: 'Anika Sharma', relationship: 'Sister', priority: 1, confirmed: true)];
+  }
+
+  @override
+  Future<List<Contact>> addContact(String name, String relationship) => throw UnimplementedError();
+
+  @override
+  Future<List<Contact>> removeContact(String id) => throw UnimplementedError();
+
+  @override
+  Future<List<Contact>> reorderContacts(List<Contact> newOrder) => throw UnimplementedError();
+}
+
+class _FakeDeviceRepository implements DeviceRepository {
+  @override
+  Future<List<DeviceDetail>> getDevices() async {
+    await Future.delayed(const Duration(milliseconds: 50));
+    return const [
+      DeviceDetail(
+        id: 'ring',
+        name: 'Smart Ring',
+        type: DeviceType.ring,
+        isOnline: true,
+        batteryPercent: 0.82,
+        batteryHoursRemaining: 36,
+        signalStrength: 3,
+        firmwareVersion: 'v2.4.1',
+        updateAvailable: false,
+        sensors: SensorReading(accelG: 1.02, gyroDps: 4.3, flexPercent: 0),
+      ),
+    ];
   }
 }
 
@@ -48,7 +88,10 @@ GoRouter _buildTestRouter() {
         path: '/reports/:id',
         builder: (context, state) => Scaffold(body: Text('report-${state.pathParameters['id']}-stub')),
       ),
-      GoRoute(path: '/profile', builder: (context, state) => const Scaffold(body: Text('profile-stub'))),
+      GoRoute(
+        path: '/settings/contacts',
+        builder: (context, state) => const Scaffold(body: Text('settings-contacts-stub')),
+      ),
       GoRoute(
         path: '/devices/:id',
         builder: (context, state) => Scaffold(body: Text('device-${state.pathParameters['id']}-stub')),
@@ -57,9 +100,13 @@ GoRouter _buildTestRouter() {
   );
 }
 
-Widget _harness({Brightness brightness = Brightness.dark, SearchRepository? repo}) {
+Widget _harness({Brightness brightness = Brightness.dark, ReportsRepository? reportsRepo}) {
   return ProviderScope(
-    overrides: [searchRepositoryProvider.overrideWithValue(repo ?? _FakeSearchRepository())],
+    overrides: [
+      reportsRepositoryProvider.overrideWithValue(reportsRepo ?? _FakeReportsRepository()),
+      contactsRepositoryProvider.overrideWithValue(_FakeContactsRepository()),
+      deviceRepositoryProvider.overrideWithValue(_FakeDeviceRepository()),
+    ],
     child: MaterialApp.router(
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
       routerConfig: _buildTestRouter(),
@@ -130,7 +177,7 @@ void main() {
     });
 
     testWidgets('renders_empty_state (error + retry)', (tester) async {
-      await tester.pumpWidget(_harness(repo: _FakeSearchRepository(shouldFail: true)));
+      await tester.pumpWidget(_harness(reportsRepo: _FakeReportsRepository(shouldFail: true)));
       await tester.pump(const Duration(milliseconds: 100));
       expect(tester.takeException(), isNull);
       expect(find.text("Couldn't load search"), findsOneWidget);

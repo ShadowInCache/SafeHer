@@ -4,6 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
+import 'package:safeher_app/features/contacts/data/contacts_providers.dart';
+import 'package:safeher_app/features/contacts/domain/contacts_repository.dart';
+import 'package:safeher_app/features/contacts/domain/models/contact.dart';
+import 'package:safeher_app/features/devices/data/device_providers.dart';
+import 'package:safeher_app/features/devices/domain/device_repository.dart';
+import 'package:safeher_app/features/devices/domain/models/device_detail.dart';
 import 'package:safeher_app/features/profile/data/profile_providers.dart';
 import 'package:safeher_app/features/profile/domain/models/user_profile.dart';
 import 'package:safeher_app/features/profile/domain/profile_repository.dart';
@@ -16,11 +22,6 @@ UserProfile _sampleProfile() => const UserProfile(
   memberSince: 'March 2025',
   safetyScore: 87,
   streakDays: 12,
-  deviceCount: 3,
-  contactsPreview: [
-    ProfileContactPreview(id: '1', name: 'Anika Sharma', relationship: 'Sister', priority: 1),
-    ProfileContactPreview(id: '2', name: 'Rahul Verma', relationship: 'Partner', priority: 2),
-  ],
 );
 
 class _FakeProfileRepository implements ProfileRepository {
@@ -35,6 +36,52 @@ class _FakeProfileRepository implements ProfileRepository {
   }
 }
 
+class _FakeContactsRepository implements ContactsRepository {
+  @override
+  Future<List<Contact>> getContacts() async {
+    // _ProfileContent (and this provider) only mounts once the profile
+    // future above resolves, so this delay is additive with that one —
+    // kept short so the combined wait stays well inside this test file's
+    // pump budgets.
+    await Future.delayed(const Duration(milliseconds: 10));
+    return const [
+      Contact(id: '1', name: 'Anika Sharma', relationship: 'Sister', priority: 1, confirmed: true),
+      Contact(id: '2', name: 'Rahul Verma', relationship: 'Partner', priority: 2, confirmed: true),
+    ];
+  }
+
+  @override
+  Future<List<Contact>> addContact(String name, String relationship) => throw UnimplementedError();
+
+  @override
+  Future<List<Contact>> removeContact(String id) => throw UnimplementedError();
+
+  @override
+  Future<List<Contact>> reorderContacts(List<Contact> newOrder) => throw UnimplementedError();
+}
+
+class _FakeDeviceRepository implements DeviceRepository {
+  @override
+  Future<List<DeviceDetail>> getDevices() async {
+    // Same staggered-mount reasoning as _FakeContactsRepository above.
+    await Future.delayed(const Duration(milliseconds: 10));
+    return const [
+      DeviceDetail(
+        id: 'ring',
+        name: 'Smart Ring',
+        type: DeviceType.ring,
+        isOnline: true,
+        batteryPercent: 0.82,
+        batteryHoursRemaining: 36,
+        signalStrength: 3,
+        firmwareVersion: 'v2.4.1',
+        updateAvailable: false,
+        sensors: SensorReading(accelG: 1.02, gyroDps: 4.3, flexPercent: 0),
+      ),
+    ];
+  }
+}
+
 GoRouter _buildTestRouter() {
   return GoRouter(
     initialLocation: '/profile',
@@ -45,6 +92,10 @@ GoRouter _buildTestRouter() {
       GoRoute(path: '/dashboard', builder: (context, state) => const Scaffold(body: Text('dashboard-stub'))),
       GoRoute(path: '/emergency', builder: (context, state) => const Scaffold(body: Text('emergency-stub'))),
       GoRoute(path: '/settings', builder: (context, state) => const Scaffold(body: Text('settings-stub'))),
+      GoRoute(
+        path: '/settings/contacts',
+        builder: (context, state) => const Scaffold(body: Text('settings-contacts-stub')),
+      ),
       GoRoute(path: '/auth/login', builder: (context, state) => const Scaffold(body: Text('login-stub'))),
     ],
   );
@@ -52,7 +103,11 @@ GoRouter _buildTestRouter() {
 
 Widget _harness({Brightness brightness = Brightness.dark, ProfileRepository? repo}) {
   return ProviderScope(
-    overrides: [profileRepositoryProvider.overrideWithValue(repo ?? _FakeProfileRepository())],
+    overrides: [
+      profileRepositoryProvider.overrideWithValue(repo ?? _FakeProfileRepository()),
+      contactsRepositoryProvider.overrideWithValue(_FakeContactsRepository()),
+      deviceRepositoryProvider.overrideWithValue(_FakeDeviceRepository()),
+    ],
     child: MaterialApp.router(
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
       routerConfig: _buildTestRouter(),
@@ -67,12 +122,14 @@ void main() {
       await tester.pump();
       expect(tester.takeException(), isNull);
       await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
     });
 
     testWidgets('renders_with_data (mocked repository)', (tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 1200));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(_harness());
+      await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 100));
       expect(tester.takeException(), isNull);
       expect(find.text('Priya Patel'), findsOneWidget);
@@ -95,11 +152,13 @@ void main() {
     testWidgets('renders in light mode', (tester) async {
       await tester.pumpWidget(_harness(brightness: Brightness.light));
       await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('renders in dark mode', (tester) async {
       await tester.pumpWidget(_harness());
+      await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 100));
       expect(tester.takeException(), isNull);
     });

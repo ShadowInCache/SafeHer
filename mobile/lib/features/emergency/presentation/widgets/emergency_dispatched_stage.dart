@@ -8,7 +8,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/components/buttons/sa_button.dart';
 import '../../../../shared/components/cards/sa_contact_card.dart';
 import '../../../../shared/components/icons/sa_icon.dart';
-import '../../domain/models/emergency_contact_summary.dart';
+import '../../../contacts/domain/models/contact.dart';
 
 /// Stage 3 — the alert has been sent. Shows a simulated "sharing your
 /// location" panel and staggers each contact from "Notifying…" to
@@ -21,7 +21,7 @@ class EmergencyDispatchedStage extends StatelessWidget {
     super.key,
   });
 
-  final AsyncValue<List<EmergencyContactSummary>> contactsAsync;
+  final AsyncValue<List<Contact>> contactsAsync;
   final Set<String> notifiedContactIds;
   final VoidCallback onMarkSafe;
 

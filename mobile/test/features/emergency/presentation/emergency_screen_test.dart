@@ -4,27 +4,36 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
-import 'package:safeher_app/features/emergency/data/emergency_providers.dart';
-import 'package:safeher_app/features/emergency/domain/emergency_repository.dart';
-import 'package:safeher_app/features/emergency/domain/models/emergency_contact_summary.dart';
+import 'package:safeher_app/features/contacts/data/contacts_providers.dart';
+import 'package:safeher_app/features/contacts/domain/contacts_repository.dart';
+import 'package:safeher_app/features/contacts/domain/models/contact.dart';
 import 'package:safeher_app/features/emergency/presentation/emergency_screen.dart';
 import 'package:safeher_app/shared/components/buttons/sa_sos_button.dart';
 
-List<EmergencyContactSummary> _sampleContacts() => const [
-  EmergencyContactSummary(id: '1', name: 'Anika Sharma', relationship: 'Sister', priority: 1),
-  EmergencyContactSummary(id: '2', name: 'Rahul Verma', relationship: 'Partner', priority: 2),
+List<Contact> _sampleContacts() => const [
+  Contact(id: '1', name: 'Anika Sharma', relationship: 'Sister', priority: 1, confirmed: true),
+  Contact(id: '2', name: 'Rahul Verma', relationship: 'Partner', priority: 2, confirmed: true),
 ];
 
-class _FakeEmergencyRepository implements EmergencyRepository {
-  _FakeEmergencyRepository({this.shouldFail = false});
+class _FakeContactsRepository implements ContactsRepository {
+  _FakeContactsRepository({this.shouldFail = false});
   final bool shouldFail;
 
   @override
-  Future<List<EmergencyContactSummary>> getEmergencyContacts() async {
+  Future<List<Contact>> getContacts() async {
     await Future.delayed(const Duration(milliseconds: 50));
     if (shouldFail) throw Exception('network error');
     return _sampleContacts();
   }
+
+  @override
+  Future<List<Contact>> addContact(String name, String relationship) => throw UnimplementedError();
+
+  @override
+  Future<List<Contact>> removeContact(String id) => throw UnimplementedError();
+
+  @override
+  Future<List<Contact>> reorderContacts(List<Contact> newOrder) => throw UnimplementedError();
 }
 
 GoRouter _buildTestRouter() {
@@ -37,9 +46,9 @@ GoRouter _buildTestRouter() {
   );
 }
 
-Widget _harness({Brightness brightness = Brightness.dark, EmergencyRepository? repo}) {
+Widget _harness({Brightness brightness = Brightness.dark, ContactsRepository? repo}) {
   return ProviderScope(
-    overrides: [emergencyRepositoryProvider.overrideWithValue(repo ?? _FakeEmergencyRepository())],
+    overrides: [contactsRepositoryProvider.overrideWithValue(repo ?? _FakeContactsRepository())],
     child: MaterialApp.router(
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
       routerConfig: _buildTestRouter(),
@@ -201,7 +210,7 @@ void main() {
     });
 
     testWidgets('renders_empty_state: contact load failure does not crash dispatched stage', (tester) async {
-      await tester.pumpWidget(_harness(repo: _FakeEmergencyRepository(shouldFail: true)));
+      await tester.pumpWidget(_harness(repo: _FakeContactsRepository(shouldFail: true)));
       await tester.pump(const Duration(milliseconds: 100));
       await _holdSos(tester);
       for (var i = 0; i < 6; i++) {

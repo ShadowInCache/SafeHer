@@ -11,8 +11,8 @@ import '../../../shared/components/feedback/sa_empty_state.dart';
 import '../../../shared/components/feedback/sa_loading_shimmer.dart';
 import '../../../shared/components/icons/sa_icon.dart';
 import '../../../shared/components/overlays/sa_bottom_sheet.dart';
-import '../data/settings_providers.dart';
-import '../domain/models/managed_contact.dart';
+import '../../contacts/data/contacts_providers.dart';
+import '../../contacts/domain/models/contact.dart';
 import 'widgets/add_contact_sheet.dart';
 
 /// Manage emergency contacts: reorder by drag (priority), add, and
@@ -23,12 +23,12 @@ class EmergencyContactsScreen extends ConsumerWidget {
   Future<void> _handleAdd(BuildContext context, WidgetRef ref) async {
     final result = await showSaBottomSheet<(String, String)>(context, builder: (context) => const AddContactSheet());
     if (result == null) return;
-    await ref.read(managedContactsNotifierProvider.notifier).addContact(result.$1, result.$2);
+    await ref.read(contactsNotifierProvider.notifier).addContact(result.$1, result.$2);
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final contactsAsync = ref.watch(managedContactsNotifierProvider);
+    final contactsAsync = ref.watch(contactsNotifierProvider);
     final onSurface = Theme.of(context).colorScheme.onSurface;
 
     return Scaffold(
@@ -68,7 +68,7 @@ class EmergencyContactsScreen extends ConsumerWidget {
                   title: "Couldn't load your contacts",
                   body: 'Check your connection and try again.',
                   ctaLabel: 'Retry',
-                  onCtaTap: () => ref.invalidate(managedContactsNotifierProvider),
+                  onCtaTap: () => ref.invalidate(contactsNotifierProvider),
                 ),
               ),
             ),
@@ -82,7 +82,7 @@ class EmergencyContactsScreen extends ConsumerWidget {
 class _ContactsList extends ConsumerWidget {
   const _ContactsList({required this.contacts});
 
-  final List<ManagedContact> contacts;
+  final List<Contact> contacts;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -102,11 +102,11 @@ class _ContactsList extends ConsumerWidget {
       ),
       itemCount: contacts.length,
       onReorder: (oldIndex, newIndex) {
-        final reordered = List<ManagedContact>.of(contacts);
+        final reordered = List<Contact>.of(contacts);
         if (newIndex > oldIndex) newIndex -= 1;
         final moved = reordered.removeAt(oldIndex);
         reordered.insert(newIndex, moved);
-        ref.read(managedContactsNotifierProvider.notifier).reorder(reordered);
+        ref.read(contactsNotifierProvider.notifier).reorder(reordered);
       },
       itemBuilder: (context, index) {
         final contact = contacts[index];
@@ -117,7 +117,7 @@ class _ContactsList extends ConsumerWidget {
             key: ValueKey('dismiss-${contact.id}'),
             direction: DismissDirection.endToStart,
             background: _DeleteBackground(),
-            onDismissed: (_) => ref.read(managedContactsNotifierProvider.notifier).removeContact(contact.id),
+            onDismissed: (_) => ref.read(contactsNotifierProvider.notifier).removeContact(contact.id),
             child: SaContactCard(
               name: contact.name,
               relationship: contact.relationship,

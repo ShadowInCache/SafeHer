@@ -4,16 +4,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
+import 'package:safeher_app/features/devices/data/device_providers.dart';
+import 'package:safeher_app/features/devices/domain/device_repository.dart';
+import 'package:safeher_app/features/devices/domain/models/device_detail.dart';
 import 'package:safeher_app/features/home/data/home_providers.dart';
 import 'package:safeher_app/features/home/domain/home_repository.dart';
 import 'package:safeher_app/features/home/domain/models/home_summary.dart';
 import 'package:safeher_app/features/home/presentation/home_screen.dart';
+import 'package:safeher_app/features/profile/data/profile_providers.dart';
+import 'package:safeher_app/features/profile/domain/models/user_profile.dart';
+import 'package:safeher_app/features/profile/domain/profile_repository.dart';
+import 'package:safeher_app/features/reports/data/reports_providers.dart';
+import 'package:safeher_app/features/reports/domain/models/report_detail.dart';
+import 'package:safeher_app/features/reports/domain/models/report_summary.dart';
+import 'package:safeher_app/features/reports/domain/reports_repository.dart';
 import 'package:safeher_app/shared/components/cards/sa_stat_card.dart';
 import 'package:safeher_app/shared/models/threat_level.dart';
 
 HomeSummary _sampleSummary() {
   return HomeSummary(
-    userName: 'Priya',
     hasUnreadAlerts: true,
     threat: ThreatSnapshot(
       score: 0.28,
@@ -22,21 +31,8 @@ HomeSummary _sampleSummary() {
       visionScore: 0.35,
       lastUpdated: DateTime.now().subtract(const Duration(minutes: 2)),
     ),
-    devices: const [
-      DeviceSummary(id: 'ring', name: 'Smart Ring', batteryPercent: 0.82, signalStrength: 3, isOnline: true),
-      DeviceSummary(id: 'glasses', name: 'Safety Glasses', batteryPercent: 0.46, signalStrength: 2, isOnline: true),
-    ],
     waveformPreview: List.generate(32, (i) => (i % 6) / 8),
     motionPreview: List.generate(30, (i) => 0.4 + 0.1 * i),
-    recentAlerts: const [
-      AlertSummary(
-        id: '1',
-        title: 'Elevated motion detected',
-        timestamp: '2h ago',
-        level: ThreatLevel.elevated,
-        summary: 'Sudden acceleration spike near Elm Street.',
-      ),
-    ],
     safetyScore: const SafetyScoreSummary(score: 87, streakDays: 12, trend: SaTrendDirection.up),
   );
 }
@@ -51,6 +47,61 @@ class _FakeHomeRepository implements HomeRepository {
     if (shouldFail) throw Exception('network error');
     return _sampleSummary();
   }
+}
+
+class _FakeProfileRepository implements ProfileRepository {
+  @override
+  Future<UserProfile> getUserProfile() async {
+    await Future.delayed(const Duration(milliseconds: 50));
+    return const UserProfile(
+      name: 'Priya Patel',
+      email: 'priya.patel@example.com',
+      phone: '+1 555 123 4567',
+      memberSince: 'March 2025',
+      safetyScore: 87,
+      streakDays: 12,
+    );
+  }
+}
+
+class _FakeDeviceRepository implements DeviceRepository {
+  @override
+  Future<List<DeviceDetail>> getDevices() async {
+    await Future.delayed(const Duration(milliseconds: 50));
+    return const [
+      DeviceDetail(
+        id: 'ring',
+        name: 'Smart Ring',
+        type: DeviceType.ring,
+        isOnline: true,
+        batteryPercent: 0.82,
+        batteryHoursRemaining: 36,
+        signalStrength: 3,
+        firmwareVersion: 'v2.4.1',
+        updateAvailable: false,
+        sensors: SensorReading(accelG: 1.02, gyroDps: 4.3, flexPercent: 0),
+      ),
+    ];
+  }
+}
+
+class _FakeReportsRepository implements ReportsRepository {
+  @override
+  Future<List<ReportSummary>> getReports() async {
+    await Future.delayed(const Duration(milliseconds: 50));
+    return const [
+      ReportSummary(
+        id: '1',
+        date: '2h ago',
+        type: 'Elevated motion detected',
+        level: ThreatLevel.elevated,
+        summarySnippet: 'Sudden acceleration spike near Elm Street.',
+      ),
+    ];
+  }
+
+  @override
+  Future<ReportDetail> getReportDetail(String id) => throw UnimplementedError();
 }
 
 GoRouter _buildTestRouter() {
@@ -77,7 +128,12 @@ GoRouter _buildTestRouter() {
 
 Widget _harness({Brightness brightness = Brightness.dark, HomeRepository? repo}) {
   return ProviderScope(
-    overrides: [homeRepositoryProvider.overrideWithValue(repo ?? _FakeHomeRepository())],
+    overrides: [
+      homeRepositoryProvider.overrideWithValue(repo ?? _FakeHomeRepository()),
+      profileRepositoryProvider.overrideWithValue(_FakeProfileRepository()),
+      deviceRepositoryProvider.overrideWithValue(_FakeDeviceRepository()),
+      reportsRepositoryProvider.overrideWithValue(_FakeReportsRepository()),
+    ],
     child: MaterialApp.router(
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
       routerConfig: _buildTestRouter(),
@@ -91,7 +147,7 @@ void main() {
       await tester.pumpWidget(_harness());
       await tester.pump();
       expect(tester.takeException(), isNull);
-      // Flush the mock repository's Future.delayed so its timer doesn't
+      // Flush the mock repositories' Future.delayed so their timers don't
       // leak past this test's teardown.
       await tester.pump(const Duration(milliseconds: 100));
     });

@@ -14,6 +14,8 @@ import '../../../shared/components/feedback/sa_empty_state.dart';
 import '../../../shared/components/feedback/sa_loading_shimmer.dart';
 import '../../../shared/components/icons/sa_icon.dart';
 import '../../../shared/components/navigation/sa_bottom_nav_bar.dart';
+import '../../contacts/data/contacts_providers.dart';
+import '../../devices/data/device_providers.dart';
 import '../data/profile_providers.dart';
 import '../domain/models/user_profile.dart';
 
@@ -70,14 +72,18 @@ class ProfileScreen extends ConsumerWidget {
   }
 }
 
-class _ProfileContent extends StatelessWidget {
+class _ProfileContent extends ConsumerWidget {
   const _ProfileContent({required this.profile});
 
   final UserProfile profile;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final onSurface = Theme.of(context).colorScheme.onSurface;
+    final devicesAsync = ref.watch(devicesProvider);
+    final contactsAsync = ref.watch(contactsNotifierProvider);
+    final deviceCount = devicesAsync.valueOrNull?.length;
+    final contactsPreview = contactsAsync.valueOrNull?.take(3).toList() ?? const [];
 
     return CustomScrollView(
       physics: const ClampingScrollPhysics(),
@@ -123,7 +129,7 @@ class _ProfileContent extends StatelessWidget {
             delegate: SliverChildListDelegate([
               SaStatCard(value: '${profile.safetyScore}', label: 'Safety Score'),
               SaStatCard(value: '${profile.streakDays}d', label: 'Safe Streak'),
-              SaStatCard(value: '${profile.deviceCount}', label: 'Devices'),
+              SaStatCard(value: deviceCount != null ? '$deviceCount' : '—', label: 'Devices'),
             ]),
           ),
         ),
@@ -147,7 +153,7 @@ class _ProfileContent extends StatelessWidget {
                     ),
                     const SizedBox(width: AppSpacing.space2),
                     GestureDetector(
-                      onTap: () => context.go('/settings'),
+                      onTap: () => context.go('/settings/contacts'),
                       child: Text(
                         'Manage',
                         style: AppTypography.labelL.copyWith(color: AppColors.violet500),
@@ -156,15 +162,22 @@ class _ProfileContent extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.space3),
-                for (final contact in profile.contactsPreview) ...[
-                  SaContactCard(
-                    name: contact.name,
-                    relationship: contact.relationship,
-                    priority: contact.priority,
-                    onTap: () => context.go('/settings'),
-                  ),
-                  const SizedBox(height: AppSpacing.space3),
-                ],
+                if (contactsPreview.isEmpty)
+                  Text(
+                    'No emergency contacts yet.',
+                    style: AppTypography.bodyM.copyWith(color: onSurface.withValues(alpha: 0.6)),
+                  )
+                else
+                  for (final contact in contactsPreview) ...[
+                    SaContactCard(
+                      name: contact.name,
+                      relationship: contact.relationship,
+                      priority: contact.priority,
+                      confirmed: contact.confirmed,
+                      onTap: () => context.go('/settings/contacts'),
+                    ),
+                    const SizedBox(height: AppSpacing.space3),
+                  ],
               ],
             ),
           ),

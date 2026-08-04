@@ -14,6 +14,11 @@ import '../../../shared/components/cards/sa_threat_gauge_card.dart';
 import '../../../shared/components/feedback/sa_empty_state.dart';
 import '../../../shared/components/feedback/sa_loading_shimmer.dart';
 import '../../../shared/components/navigation/sa_bottom_nav_bar.dart';
+import '../../devices/data/device_providers.dart';
+import '../../devices/domain/models/device_detail.dart';
+import '../../profile/data/profile_providers.dart';
+import '../../reports/data/reports_providers.dart';
+import '../../reports/domain/models/report_summary.dart';
 import '../data/home_providers.dart';
 import '../domain/models/home_summary.dart';
 import 'widgets/home_greeting_section.dart';
@@ -66,15 +71,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final summaryAsync = ref.watch(homeSummaryProvider);
+    final profileAsync = ref.watch(userProfileProvider);
+    final devicesAsync = ref.watch(devicesProvider);
+    final reportsAsync = ref.watch(reportsListProvider);
+
+    final error = summaryAsync.error ?? profileAsync.error ?? devicesAsync.error ?? reportsAsync.error;
+    final hasAllData =
+        summaryAsync.hasValue && profileAsync.hasValue && devicesAsync.hasValue && reportsAsync.hasValue;
+
+    void retry() {
+      ref.invalidate(homeSummaryProvider);
+      ref.invalidate(userProfileProvider);
+      ref.invalidate(devicesProvider);
+      ref.invalidate(reportsListProvider);
+    }
 
     return Scaffold(
       body: Stack(
         children: [
-          summaryAsync.when(
-            data: (summary) => _HomeContent(summary: summary, scrollController: _scrollController, scrollOffset: _scrollOffset),
-            loading: () => const _HomeLoading(),
-            error: (error, stackTrace) => _HomeError(onRetry: () => ref.invalidate(homeSummaryProvider)),
-          ),
+          error != null
+              ? _HomeError(onRetry: retry)
+              : !hasAllData
+              ? const _HomeLoading()
+              : _HomeContent(
+                  summary: summaryAsync.requireValue,
+                  userName: profileAsync.requireValue.name.split(' ').first,
+                  devices: devicesAsync.requireValue,
+                  recentAlerts: reportsAsync.requireValue.take(3).toList(),
+                  scrollController: _scrollController,
+                  scrollOffset: _scrollOffset,
+                ),
           _BlurAppBar(scrollOffset: _scrollOffset),
           Positioned(
             left: 0,
@@ -125,9 +151,19 @@ class _BlurAppBar extends StatelessWidget {
 }
 
 class _HomeContent extends ConsumerWidget {
-  const _HomeContent({required this.summary, required this.scrollController, required this.scrollOffset});
+  const _HomeContent({
+    required this.summary,
+    required this.userName,
+    required this.devices,
+    required this.recentAlerts,
+    required this.scrollController,
+    required this.scrollOffset,
+  });
 
   final HomeSummary summary;
+  final String userName;
+  final List<DeviceDetail> devices;
+  final List<ReportSummary> recentAlerts;
   final ScrollController scrollController;
   final double scrollOffset;
 
@@ -142,7 +178,7 @@ class _HomeContent extends ConsumerWidget {
         SliverPadding(padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top)),
         SliverToBoxAdapter(
           child: HomeGreetingSection(
-            userName: summary.userName,
+            userName: userName,
             hasUnreadAlerts: summary.hasUnreadAlerts,
             onBellTap: () {},
             parallaxOffset: scrollOffset,
@@ -169,10 +205,10 @@ class _HomeContent extends ConsumerWidget {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenMarginPhone),
-              itemCount: summary.devices.length,
+              itemCount: devices.length,
               separatorBuilder: (context, index) => const SizedBox(width: AppSpacing.space3),
               itemBuilder: (context, index) {
-                final device = summary.devices[index];
+                final device = devices[index];
                 return SaDeviceCard(
                   name: device.name,
                   batteryPercent: device.batteryPercent,
@@ -210,12 +246,17 @@ class _HomeContent extends ConsumerWidget {
               children: [
                 Text('Recent Alerts', style: AppTypography.headingM.copyWith(color: onSurface)),
                 const SizedBox(height: AppSpacing.space3),
-                for (final alert in summary.recentAlerts) ...[
+                if (recentAlerts.isEmpty)
+                  Text(
+                    'No alerts yet. Nice and quiet out there.',
+                    style: AppTypography.bodyM.copyWith(color: onSurface.withValues(alpha: 0.6)),
+                  ),
+                for (final alert in recentAlerts) ...[
                   SaAlertCard(
-                    title: alert.title,
-                    timestamp: alert.timestamp,
+                    title: alert.type,
+                    timestamp: alert.date,
                     level: alert.level,
-                    summary: alert.summary,
+                    summary: alert.summarySnippet,
                     onTap: () => context.go('/reports/${alert.id}'),
                   ),
                   const SizedBox(height: AppSpacing.space3),

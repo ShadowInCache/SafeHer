@@ -8,8 +8,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/components/icons/sa_icon.dart';
-import '../data/emergency_providers.dart';
-import '../domain/models/emergency_contact_summary.dart';
+import '../../contacts/data/contacts_providers.dart';
+import '../../contacts/domain/models/contact.dart';
 import 'widgets/emergency_cancelled_stage.dart';
 import 'widgets/emergency_countdown_stage.dart';
 import 'widgets/emergency_dispatched_stage.dart';
@@ -36,7 +36,7 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
   Timer? _notifyTimer;
   int _notifyIndex = 0;
   final Set<String> _notifiedContactIds = {};
-  List<EmergencyContactSummary> _contacts = const [];
+  List<Contact> _contacts = const [];
 
   @override
   void dispose() {
@@ -71,7 +71,7 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
   }
 
   void _startNotifyingContacts() {
-    _contacts = ref.read(emergencyContactsProvider).valueOrNull ?? const [];
+    _contacts = ref.read(contactsNotifierProvider).valueOrNull ?? const [];
     _notifyIndex = 0;
     _notifiedContactIds.clear();
     if (_contacts.isEmpty) return;
@@ -102,7 +102,7 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final contactsAsync = ref.watch(emergencyContactsProvider);
+    final contactsAsync = ref.watch(contactsNotifierProvider);
     final canLeave = _stage == EmergencyStage.preActivation || _stage == EmergencyStage.cancelled;
 
     return Scaffold(
