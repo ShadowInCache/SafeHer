@@ -12,6 +12,7 @@ import '../../../../shared/components/feedback/sa_signal_bars.dart';
 import '../../../../shared/components/feedback/sa_status_dot.dart';
 import '../../../../shared/components/icons/sa_icon.dart';
 import '../../../../shared/components/media/sa_3d_model_viewer.dart';
+import '../../../../shared/components/overlays/sa_toast.dart';
 import '../../domain/models/device_detail.dart';
 
 SaIconGlyph _glyphFor(DeviceType type) => switch (type) {
@@ -148,7 +149,12 @@ class DeviceExpandableCardState extends State<DeviceExpandableCard> {
             ],
           ),
           const SizedBox(height: AppSpacing.space4),
-          SaButton(label: 'Calibrate', variant: SaButtonVariant.secondary, fullWidth: true, onPressed: () {}),
+          SaButton(
+            label: 'Calibrate',
+            variant: SaButtonVariant.secondary,
+            fullWidth: true,
+            onPressed: () => showSaToast(context, message: 'Calibrating ${device.name}…'),
+          ),
         ],
       ),
     );

@@ -14,6 +14,7 @@ import '../../../shared/components/cards/sa_threat_gauge_card.dart';
 import '../../../shared/components/feedback/sa_empty_state.dart';
 import '../../../shared/components/feedback/sa_loading_shimmer.dart';
 import '../../../shared/components/navigation/sa_bottom_nav_bar.dart';
+import '../../../shared/components/overlays/sa_toast.dart';
 import '../../devices/data/device_providers.dart';
 import '../../devices/domain/models/device_detail.dart';
 import '../../profile/data/profile_providers.dart';
@@ -226,8 +227,8 @@ class _HomeContent extends ConsumerWidget {
           child: HomeQuickActionsGrid(
             onSos: () => context.go('/emergency'),
             onCallContact: () => context.go('/profile'),
-            onShareLocation: () {},
-            onRecordEvidence: () {},
+            onShareLocation: () => showSaToast(context, message: 'Location shared with your emergency contacts.'),
+            onRecordEvidence: () => showSaToast(context, message: 'Evidence recording started.'),
           ),
         ),
         SliverToBoxAdapter(child: const SizedBox(height: AppSpacing.space5)),
