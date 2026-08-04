@@ -16,6 +16,8 @@ import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/reports/presentation/report_detail_screen.dart';
 import '../../features/reports/presentation/reports_list_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
+import '../../features/settings/presentation/emergency_contacts_screen.dart';
+import '../../features/settings/presentation/settings_screen.dart';
 
 /// Central route table. Routes are added incrementally as each screen in
 /// the build sequence lands — see the spec's ROUTE TABLE for the full,
@@ -52,6 +54,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => ReportDetailScreen(reportId: state.pathParameters['id']!),
       ),
       GoRoute(path: '/profile', name: 'profile', builder: (context, state) => const ProfileScreen()),
+      GoRoute(path: '/settings', name: 'settings', builder: (context, state) => const SettingsScreen()),
+      GoRoute(
+        path: '/settings/contacts',
+        name: 'settings-contacts',
+        builder: (context, state) => const EmergencyContactsScreen(),
+      ),
     ],
   );
 });
