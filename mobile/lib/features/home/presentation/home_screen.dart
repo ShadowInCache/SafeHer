@@ -181,6 +181,7 @@ class _HomeContent extends ConsumerWidget {
             userName: userName,
             hasUnreadAlerts: summary.hasUnreadAlerts,
             onBellTap: () {},
+            onSearchTap: () => context.go('/search'),
             parallaxOffset: scrollOffset,
           ),
         ),

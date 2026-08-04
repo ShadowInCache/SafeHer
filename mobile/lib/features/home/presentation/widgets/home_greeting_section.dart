@@ -8,14 +8,15 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/components/buttons/sa_icon_button.dart';
 import '../../../../shared/components/icons/sa_icon.dart';
 
-/// Greeting header: avatar, "Good {time}, {name}", bell (with unread
-/// badge), date, and a "Monitoring Active" chip. [parallaxOffset] is
-/// applied as a vertical translate so the section scrolls at 0.5x speed.
+/// Greeting header: avatar, "Good {time}, {name}", search, bell (with
+/// unread badge), date, and a "Monitoring Active" chip. [parallaxOffset]
+/// is applied as a vertical translate so the section scrolls at 0.5x speed.
 class HomeGreetingSection extends StatelessWidget {
   const HomeGreetingSection({
     required this.userName,
     required this.hasUnreadAlerts,
     required this.onBellTap,
+    required this.onSearchTap,
     super.key,
     this.parallaxOffset = 0,
   });
@@ -23,6 +24,7 @@ class HomeGreetingSection extends StatelessWidget {
   final String userName;
   final bool hasUnreadAlerts;
   final VoidCallback onBellTap;
+  final VoidCallback onSearchTap;
   final double parallaxOffset;
 
   String get _greeting {
@@ -64,6 +66,11 @@ class HomeGreetingSection extends StatelessWidget {
                     style: AppTypography.headingL.copyWith(color: onSurface),
                     overflow: TextOverflow.ellipsis,
                   ),
+                ),
+                SaIconButton(
+                  icon: const SaIcon(SaIconGlyph.search),
+                  semanticsLabel: 'Search',
+                  onPressed: onSearchTap,
                 ),
                 Stack(
                   clipBehavior: Clip.none,

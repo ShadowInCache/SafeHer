@@ -113,6 +113,7 @@ GoRouter _buildTestRouter() {
       GoRoute(path: '/dashboard', builder: (context, state) => const Scaffold(body: Text('dashboard-stub'))),
       GoRoute(path: '/profile', builder: (context, state) => const Scaffold(body: Text('profile-stub'))),
       GoRoute(path: '/emergency', builder: (context, state) => const Scaffold(body: Text('emergency-stub'))),
+      GoRoute(path: '/search', builder: (context, state) => const Scaffold(body: Text('search-stub'))),
       GoRoute(path: '/reports', builder: (context, state) => const Scaffold(body: Text('reports-stub'))),
       GoRoute(
         path: '/reports/:id',
@@ -263,6 +264,15 @@ void main() {
       await tester.tap(find.bySemanticsLabel('Dashboard'));
       await tester.pumpAndSettle();
       expect(find.text('dashboard-stub'), findsOneWidget);
+    });
+
+    testWidgets('navigation_actions_work: search button navigates to search', (tester) async {
+      await tester.pumpWidget(_harness());
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.bySemanticsLabel('Search'));
+      await tester.pumpAndSettle();
+      expect(find.text('search-stub'), findsOneWidget);
     });
 
     testGoldens('golden - light', (tester) async {
