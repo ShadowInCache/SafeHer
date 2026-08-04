@@ -12,6 +12,8 @@ import '../../features/devices/presentation/device_management_screen.dart';
 import '../../features/emergency/presentation/emergency_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/monitoring/presentation/live_monitoring_screen.dart';
+import '../../features/reports/presentation/report_detail_screen.dart';
+import '../../features/reports/presentation/reports_list_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
 
 /// Central route table. Routes are added incrementally as each screen in
@@ -42,6 +44,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/dashboard', name: 'dashboard', builder: (context, state) => const DashboardScreen()),
       GoRoute(path: '/search', name: 'search', builder: (context, state) => const SearchScreen()),
       GoRoute(path: '/emergency', name: 'emergency', builder: (context, state) => const EmergencyScreen()),
+      GoRoute(path: '/reports', name: 'reports', builder: (context, state) => const ReportsListScreen()),
+      GoRoute(
+        path: '/reports/:id',
+        name: 'report-detail',
+        builder: (context, state) => ReportDetailScreen(reportId: state.pathParameters['id']!),
+      ),
     ],
   );
 });
