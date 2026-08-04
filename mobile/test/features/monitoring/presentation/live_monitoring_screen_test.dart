@@ -66,7 +66,7 @@ void main() {
       expect(find.text('Audio'), findsOneWidget);
       expect(find.text('Motion'), findsOneWidget);
       expect(find.text('Camera'), findsOneWidget);
-      expect(find.text('Glasses not connected'), findsOneWidget);
+      expect(find.text('Connect glasses'), findsOneWidget);
     });
 
     testWidgets('renders_error_state (retry)', (tester) async {

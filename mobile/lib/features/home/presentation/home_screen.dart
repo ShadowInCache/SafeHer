@@ -151,17 +151,14 @@ class _HomeContent extends ConsumerWidget {
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenMarginPhone),
           sliver: SliverToBoxAdapter(
-            child: Hero(
-              tag: 'threat_gauge',
-              child: SaThreatGaugeCard(
-                score: summary.threat.score,
-                componentScores: [
-                  SaComponentScore(label: 'Motion', score: summary.threat.motionScore),
-                  SaComponentScore(label: 'Audio', score: summary.threat.audioScore),
-                  SaComponentScore(label: 'Vision', score: summary.threat.visionScore),
-                ],
-                lastUpdated: _formatRelative(summary.threat.lastUpdated),
-              ),
+            child: SaThreatGaugeCard(
+              score: summary.threat.score,
+              componentScores: [
+                SaComponentScore(label: 'Motion', score: summary.threat.motionScore),
+                SaComponentScore(label: 'Audio', score: summary.threat.audioScore),
+                SaComponentScore(label: 'Vision', score: summary.threat.visionScore),
+              ],
+              lastUpdated: _formatRelative(summary.threat.lastUpdated),
             ),
           ),
         ),

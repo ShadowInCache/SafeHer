@@ -10,6 +10,7 @@ import '../../../shared/components/feedback/sa_empty_state.dart';
 import '../../../shared/components/feedback/sa_loading_shimmer.dart';
 import '../../../shared/components/feedback/sa_status_dot.dart';
 import '../../../shared/components/icons/sa_icon.dart';
+import '../../../shared/components/navigation/sa_bottom_nav_bar.dart';
 import '../data/monitoring_providers.dart';
 import '../domain/models/monitoring_snapshot.dart';
 import 'widgets/audio_waveform_panel.dart';
@@ -25,37 +26,64 @@ const _tabletBreakpoint = 600.0;
 class LiveMonitoringScreen extends ConsumerWidget {
   const LiveMonitoringScreen({super.key});
 
+  void _handleTabSelected(BuildContext context, SaNavTab tab) {
+    switch (tab) {
+      case SaNavTab.home:
+        context.go('/home');
+      case SaNavTab.monitor:
+        return;
+      case SaNavTab.dashboard:
+        context.go('/dashboard');
+      case SaNavTab.profile:
+        context.go('/profile');
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final snapshotAsync = ref.watch(monitoringStreamProvider);
 
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            _MonitoringHeader(isLive: snapshotAsync.hasValue),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.screenMarginPhone,
-                  AppSpacing.space2,
-                  AppSpacing.screenMarginPhone,
-                  AppSpacing.space4,
-                ),
-                child: snapshotAsync.when(
-                  data: (snapshot) => _MonitoringPanels(snapshot: snapshot),
-                  loading: () => const _MonitoringLoading(),
-                  error: (error, stackTrace) => SaEmptyState(
-                    title: "Couldn't start live monitoring",
-                    body: 'Check your connection and try again.',
-                    ctaLabel: 'Retry',
-                    onCtaTap: () => ref.invalidate(monitoringStreamProvider),
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
+              children: [
+                _MonitoringHeader(isLive: snapshotAsync.hasValue),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.screenMarginPhone,
+                      AppSpacing.space2,
+                      AppSpacing.screenMarginPhone,
+                      AppSpacing.space16 + AppSpacing.space8,
+                    ),
+                    child: snapshotAsync.when(
+                      data: (snapshot) => _MonitoringPanels(snapshot: snapshot),
+                      loading: () => const _MonitoringLoading(),
+                      error: (error, stackTrace) => SaEmptyState(
+                        title: "Couldn't start live monitoring",
+                        body: 'Check your connection and try again.',
+                        ctaLabel: 'Retry',
+                        onCtaTap: () => ref.invalidate(monitoringStreamProvider),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SaBottomNavBar(
+              currentTab: SaNavTab.monitor,
+              onTabSelected: (tab) => _handleTabSelected(context, tab),
+              onSosTap: () => context.go('/emergency'),
+            ),
+          ),
+        ],
       ),
     );
   }
