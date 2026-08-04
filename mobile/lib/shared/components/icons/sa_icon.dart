@@ -26,6 +26,7 @@ enum SaIconGlyph {
   pendant,
   refresh,
   plus,
+  glasses,
 }
 
 /// Renders a [SaIconGlyph] via [CustomPainter] — a hand-drawn vector icon,
@@ -118,6 +119,8 @@ class _SaIconPainter extends CustomPainter {
         _paintRefresh(canvas, size, stroke);
       case SaIconGlyph.plus:
         _paintPlus(canvas, size, stroke);
+      case SaIconGlyph.glasses:
+        _paintGlasses(canvas, size, stroke);
     }
   }
 
@@ -371,6 +374,15 @@ class _SaIconPainter extends CustomPainter {
     final w = size.width, h = size.height;
     canvas.drawLine(Offset(w * 0.5, h * 0.2), Offset(w * 0.5, h * 0.8), stroke);
     canvas.drawLine(Offset(w * 0.2, h * 0.5), Offset(w * 0.8, h * 0.5), stroke);
+  }
+
+  void _paintGlasses(Canvas canvas, Size size, Paint stroke) {
+    final w = size.width, h = size.height;
+    canvas.drawOval(Rect.fromCenter(center: Offset(w * 0.27, h * 0.52), width: w * 0.32, height: h * 0.28), stroke);
+    canvas.drawOval(Rect.fromCenter(center: Offset(w * 0.73, h * 0.52), width: w * 0.32, height: h * 0.28), stroke);
+    canvas.drawLine(Offset(w * 0.43, h * 0.48), Offset(w * 0.57, h * 0.48), stroke);
+    canvas.drawLine(Offset(w * 0.11, h * 0.48), Offset(w * 0.02, h * 0.38), stroke);
+    canvas.drawLine(Offset(w * 0.89, h * 0.48), Offset(w * 0.98, h * 0.38), stroke);
   }
 
   @override

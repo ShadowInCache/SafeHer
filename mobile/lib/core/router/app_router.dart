@@ -9,6 +9,7 @@ import '../../features/auth/presentation/signup_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/devices/presentation/device_management_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
+import '../../features/monitoring/presentation/live_monitoring_screen.dart';
 
 /// Central route table. Routes are added incrementally as each screen in
 /// the build sequence lands — see the spec's ROUTE TABLE for the full,
@@ -34,6 +35,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         name: 'device-detail',
         builder: (context, state) => DeviceManagementScreen(initialExpandedId: state.pathParameters['id']),
       ),
+      GoRoute(path: '/monitor', name: 'monitor', builder: (context, state) => const LiveMonitoringScreen()),
     ],
   );
 });
