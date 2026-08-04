@@ -1,0 +1,179 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:golden_toolkit/golden_toolkit.dart';
+import 'package:safeher_app/core/theme/app_theme.dart';
+import 'package:safeher_app/features/profile/data/profile_providers.dart';
+import 'package:safeher_app/features/profile/domain/models/user_profile.dart';
+import 'package:safeher_app/features/profile/domain/profile_repository.dart';
+import 'package:safeher_app/features/profile/presentation/profile_screen.dart';
+
+UserProfile _sampleProfile() => const UserProfile(
+  name: 'Priya Patel',
+  email: 'priya.patel@example.com',
+  phone: '+1 (555) 123-4567',
+  memberSince: 'March 2025',
+  safetyScore: 87,
+  streakDays: 12,
+  deviceCount: 3,
+  contactsPreview: [
+    ProfileContactPreview(id: '1', name: 'Anika Sharma', relationship: 'Sister', priority: 1),
+    ProfileContactPreview(id: '2', name: 'Rahul Verma', relationship: 'Partner', priority: 2),
+  ],
+);
+
+class _FakeProfileRepository implements ProfileRepository {
+  _FakeProfileRepository({this.shouldFail = false});
+  final bool shouldFail;
+
+  @override
+  Future<UserProfile> getUserProfile() async {
+    await Future.delayed(const Duration(milliseconds: 50));
+    if (shouldFail) throw Exception('network error');
+    return _sampleProfile();
+  }
+}
+
+GoRouter _buildTestRouter() {
+  return GoRouter(
+    initialLocation: '/profile',
+    routes: [
+      GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
+      GoRoute(path: '/home', builder: (context, state) => const Scaffold(body: Text('home-stub'))),
+      GoRoute(path: '/monitor', builder: (context, state) => const Scaffold(body: Text('monitor-stub'))),
+      GoRoute(path: '/dashboard', builder: (context, state) => const Scaffold(body: Text('dashboard-stub'))),
+      GoRoute(path: '/emergency', builder: (context, state) => const Scaffold(body: Text('emergency-stub'))),
+      GoRoute(path: '/settings', builder: (context, state) => const Scaffold(body: Text('settings-stub'))),
+      GoRoute(path: '/auth/login', builder: (context, state) => const Scaffold(body: Text('login-stub'))),
+    ],
+  );
+}
+
+Widget _harness({Brightness brightness = Brightness.dark, ProfileRepository? repo}) {
+  return ProviderScope(
+    overrides: [profileRepositoryProvider.overrideWithValue(repo ?? _FakeProfileRepository())],
+    child: MaterialApp.router(
+      theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
+      routerConfig: _buildTestRouter(),
+    ),
+  );
+}
+
+void main() {
+  group('ProfileScreen', () {
+    testWidgets('renders_without_exception (loading state)', (tester) async {
+      await tester.pumpWidget(_harness());
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      await tester.pump(const Duration(milliseconds: 100));
+    });
+
+    testWidgets('renders_with_data (mocked repository)', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(_harness());
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.takeException(), isNull);
+      expect(find.text('Priya Patel'), findsOneWidget);
+      expect(find.text('priya.patel@example.com'), findsOneWidget);
+      expect(find.text('87'), findsOneWidget);
+      expect(find.text('Anika Sharma'), findsOneWidget);
+      expect(find.text('Rahul Verma'), findsOneWidget);
+      expect(find.text('Settings'), findsOneWidget);
+      expect(find.text('Sign Out'), findsOneWidget);
+    });
+
+    testWidgets('renders_empty_state (error + retry)', (tester) async {
+      await tester.pumpWidget(_harness(repo: _FakeProfileRepository(shouldFail: true)));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.takeException(), isNull);
+      expect(find.text("Couldn't load your profile"), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+    });
+
+    testWidgets('renders in light mode', (tester) async {
+      await tester.pumpWidget(_harness(brightness: Brightness.light));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('renders in dark mode', (tester) async {
+      await tester.pumpWidget(_harness());
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('navigation_actions_work: Settings row navigates to settings', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(_harness());
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.scrollUntilVisible(find.text('Settings'), 200, scrollable: find.byType(Scrollable).first);
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      expect(find.text('settings-stub'), findsOneWidget);
+    });
+
+    testWidgets('navigation_actions_work: Sign Out requires a second confirm tap', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(_harness());
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.scrollUntilVisible(find.text('Sign Out'), 200, scrollable: find.byType(Scrollable).first);
+      await tester.tap(find.text('Sign Out'));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Tap again to confirm'), findsOneWidget);
+
+      await tester.tap(find.text('Tap again to confirm'));
+      await tester.pumpAndSettle();
+      expect(find.text('login-stub'), findsOneWidget);
+    });
+
+    testWidgets('navigation_actions_work: bottom nav tabs switch routes', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(_harness());
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 400));
+
+      await tester.tap(find.bySemanticsLabel('Home'));
+      await tester.pumpAndSettle();
+      expect(find.text('home-stub'), findsOneWidget);
+    });
+
+    testWidgets('navigation_actions_work: SOS FAB navigates to emergency', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(_harness());
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 400));
+
+      await tester.tap(find.bySemanticsLabel('SOS emergency'));
+      await tester.pumpAndSettle();
+      expect(find.text('emergency-stub'), findsOneWidget);
+    });
+
+    testGoldens('golden - light', (tester) async {
+      await tester.pumpWidgetBuilder(_harness(brightness: Brightness.light), surfaceSize: const Size(390, 844));
+      await tester.pump(const Duration(milliseconds: 100));
+      await screenMatchesGolden(
+        tester,
+        'profile_screen_light',
+        customPump: (tester) async => tester.pump(const Duration(milliseconds: 100)),
+      );
+    });
+
+    testGoldens('golden - dark', (tester) async {
+      await tester.pumpWidgetBuilder(_harness(), surfaceSize: const Size(390, 844));
+      await tester.pump(const Duration(milliseconds: 100));
+      await screenMatchesGolden(
+        tester,
+        'profile_screen_dark',
+        customPump: (tester) async => tester.pump(const Duration(milliseconds: 100)),
+      );
+    });
+  });
+}
