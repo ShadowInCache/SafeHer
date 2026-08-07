@@ -40,11 +40,15 @@ class HomeLivePreviewSection extends StatelessWidget {
               const SizedBox(height: AppSpacing.space3),
               SizedBox(height: 48, child: SaSparkline(values: motionPreview, height: 48, color: AppColors.violet500)),
               const SizedBox(height: AppSpacing.space3),
-              GestureDetector(
-                onTap: onViewLiveFeed,
-                child: Text(
-                  'View Live Feed →',
-                  style: AppTypography.labelL.copyWith(color: AppColors.violet500),
+              Semantics(
+                button: true,
+                label: 'View Live Feed',
+                child: GestureDetector(
+                  onTap: onViewLiveFeed,
+                  child: Text(
+                    'View Live Feed →',
+                    style: AppTypography.labelL.copyWith(color: AppColors.violet500),
+                  ),
                 ),
               ),
             ],

@@ -296,11 +296,15 @@ class _HomeContent extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.space3),
                 ],
-                GestureDetector(
-                  onTap: () => context.go('/reports'),
-                  child: Text(
-                    'View all reports →',
-                    style: AppTypography.labelL.copyWith(color: Theme.of(context).colorScheme.primary),
+                Semantics(
+                  button: true,
+                  label: 'View all reports',
+                  child: GestureDetector(
+                    onTap: () => context.go('/reports'),
+                    child: Text(
+                      'View all reports →',
+                      style: AppTypography.labelL.copyWith(color: Theme.of(context).colorScheme.primary),
+                    ),
                   ),
                 ),
               ],

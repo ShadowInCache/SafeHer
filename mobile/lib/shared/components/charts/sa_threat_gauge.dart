@@ -68,35 +68,40 @@ class _SaThreatGaugeState extends State<SaThreatGauge> with SingleTickerProvider
       builder: (context, child) {
         final value = _animation.value.clamp(0.0, 1.0);
         final level = ThreatLevel.fromScore(value);
-        return SizedBox(
-          width: widget.size,
-          height: widget.size,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              CustomPaint(
-                size: Size.square(widget.size),
-                painter: _GaugePainter(value: value, saColors: saColors),
-              ),
-              Column(
-                mainAxisSize: MainAxisSize.min,
+        return Semantics(
+          label: 'Threat level ${(value * 100).round()}, ${level.label}',
+          child: RepaintBoundary(
+            child: SizedBox(
+              width: widget.size,
+              height: widget.size,
+              child: Stack(
+                alignment: Alignment.center,
                 children: [
-                  Text(
-                    '${(value * 100).round()}',
-                    style: AppTypography.monoDataL.copyWith(color: onSurface),
+                  CustomPaint(
+                    size: Size.square(widget.size),
+                    painter: _GaugePainter(value: value, saColors: saColors),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'THREAT LEVEL',
-                    style: AppTypography.labelM.copyWith(color: onSurface.withValues(alpha: 0.5)),
-                  ),
-                  Text(
-                    level.label,
-                    style: AppTypography.headingS.copyWith(color: level.color(context)),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${(value * 100).round()}',
+                        style: AppTypography.monoDataL.copyWith(color: onSurface),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'THREAT LEVEL',
+                        style: AppTypography.labelM.copyWith(color: onSurface.withValues(alpha: 0.5)),
+                      ),
+                      Text(
+                        level.label,
+                        style: AppTypography.headingS.copyWith(color: level.color(context)),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
+            ),
           ),
         );
       },

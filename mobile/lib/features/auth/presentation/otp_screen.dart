@@ -121,11 +121,15 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                         'Resend OTP in ${_secondsRemaining}s',
                         style: AppTypography.bodyM.copyWith(color: onSurface.withValues(alpha: 0.5)),
                       )
-                    : GestureDetector(
-                        onTap: _handleResend,
-                        child: Text(
-                          'Resend OTP',
-                          style: AppTypography.bodyM.copyWith(color: AppColors.violet500, fontWeight: FontWeight.w600),
+                    : Semantics(
+                        button: true,
+                        label: 'Resend OTP',
+                        child: GestureDetector(
+                          onTap: _handleResend,
+                          child: Text(
+                            'Resend OTP',
+                            style: AppTypography.bodyM.copyWith(color: AppColors.violet500, fontWeight: FontWeight.w600),
+                          ),
                         ),
                       ),
               ),

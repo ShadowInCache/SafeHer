@@ -208,11 +208,15 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 child: Wrap(
                   children: [
                     Text('Already have an account? ', style: AppTypography.bodyM.copyWith(color: onSurface.withValues(alpha: 0.7))),
-                    GestureDetector(
-                      onTap: () => context.go('/auth/login'),
-                      child: Text(
-                        'Sign in',
-                        style: AppTypography.bodyM.copyWith(color: AppColors.violet500, fontWeight: FontWeight.w600),
+                    Semantics(
+                      button: true,
+                      label: 'Sign in',
+                      child: GestureDetector(
+                        onTap: () => context.go('/auth/login'),
+                        child: Text(
+                          'Sign in',
+                          style: AppTypography.bodyM.copyWith(color: AppColors.violet500, fontWeight: FontWeight.w600),
+                        ),
                       ),
                     ),
                   ],

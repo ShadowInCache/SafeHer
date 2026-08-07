@@ -152,11 +152,15 @@ class _ProfileContent extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(width: AppSpacing.space2),
-                    GestureDetector(
-                      onTap: () => context.go('/settings/contacts'),
-                      child: Text(
-                        'Manage',
-                        style: AppTypography.labelL.copyWith(color: AppColors.violet500),
+                    Semantics(
+                      button: true,
+                      label: 'Manage emergency contacts',
+                      child: GestureDetector(
+                        onTap: () => context.go('/settings/contacts'),
+                        child: Text(
+                          'Manage',
+                          style: AppTypography.labelL.copyWith(color: AppColors.violet500),
+                        ),
                       ),
                     ),
                   ],
