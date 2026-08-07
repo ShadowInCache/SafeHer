@@ -1,3 +1,33 @@
+# Secrets
 .env
 .env.*
 !.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Runtime / local databases (regenerated via Alembic migrations, never committed)
+*.db
+*.sqlite
+*.sqlite3
+
+# Node / tooling caches
+node_modules/
+
+# Browser automation profiles (accidentally produced by local `flutter run -d chrome` sessions)
+.chrome_fresh_profile/
+*_fresh_profile/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+
+# Flutter/Dart (see mobile/.gitignore for the authoritative, tool-generated version)
+**/build/
+.dart_tool/
