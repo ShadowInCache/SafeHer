@@ -17,6 +17,8 @@ import 'package:safeher_app/features/reports/domain/reports_repository.dart';
 import 'package:safeher_app/features/search/presentation/search_screen.dart';
 import 'package:safeher_app/shared/models/threat_level.dart';
 
+import '../../../test_utils/offline_test_overrides.dart';
+
 class _FakeReportsRepository implements ReportsRepository {
   _FakeReportsRepository({this.shouldFail = false});
   final bool shouldFail;
@@ -106,6 +108,7 @@ Widget _harness({Brightness brightness = Brightness.dark, ReportsRepository? rep
       reportsRepositoryProvider.overrideWithValue(reportsRepo ?? _FakeReportsRepository()),
       contactsRepositoryProvider.overrideWithValue(_FakeContactsRepository()),
       deviceRepositoryProvider.overrideWithValue(_FakeDeviceRepository()),
+      ...offlineTestOverrides(),
     ],
     child: MaterialApp.router(
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,

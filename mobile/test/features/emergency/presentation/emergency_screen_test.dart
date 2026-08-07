@@ -10,6 +10,8 @@ import 'package:safeher_app/features/contacts/domain/models/contact.dart';
 import 'package:safeher_app/features/emergency/presentation/emergency_screen.dart';
 import 'package:safeher_app/shared/components/buttons/sa_sos_button.dart';
 
+import '../../../test_utils/offline_test_overrides.dart';
+
 List<Contact> _sampleContacts() => const [
   Contact(id: '1', name: 'Anika Sharma', relationship: 'Sister', priority: 1, confirmed: true),
   Contact(id: '2', name: 'Rahul Verma', relationship: 'Partner', priority: 2, confirmed: true),
@@ -48,7 +50,10 @@ GoRouter _buildTestRouter() {
 
 Widget _harness({Brightness brightness = Brightness.dark, ContactsRepository? repo}) {
   return ProviderScope(
-    overrides: [contactsRepositoryProvider.overrideWithValue(repo ?? _FakeContactsRepository())],
+    overrides: [
+      contactsRepositoryProvider.overrideWithValue(repo ?? _FakeContactsRepository()),
+      ...offlineTestOverrides(),
+    ],
     child: MaterialApp.router(
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
       routerConfig: _buildTestRouter(),

@@ -1,6 +1,8 @@
 import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
+import '../offline/offline_queue_box.dart';
+
 final getIt = GetIt.instance;
 
 const prefsBoxName = 'safeher_prefs';
@@ -12,6 +14,9 @@ Future<void> configureDependencies() async {
   await Hive.initFlutter();
   final prefsBox = await Hive.openBox(prefsBoxName);
   getIt.registerSingleton<Box>(prefsBox, instanceName: prefsBoxName);
+
+  final offlineQueueHiveBox = await Hive.openBox<Map>(offlineQueueBoxName);
+  getIt.registerSingleton<OfflineQueueBox>(OfflineQueueBox(offlineQueueHiveBox));
 }
 
 Box get prefsBox => getIt<Box>(instanceName: prefsBoxName);

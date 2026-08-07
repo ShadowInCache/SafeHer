@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/config/app_config.dart';
 import 'core/di/injection.dart';
+import 'core/offline/offline_queue_providers.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
@@ -26,6 +27,9 @@ class SafeHerApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(appRouterProvider);
+    // Keeps the queue drainer alive for the app's whole lifetime; it has
+    // no UI, it just listens for connectivity to come back.
+    ref.watch(offlineQueueDrainerProvider);
     return MaterialApp.router(
       title: 'SafeHer',
       debugShowCheckedModeBanner: false,

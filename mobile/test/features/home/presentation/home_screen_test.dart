@@ -21,6 +21,8 @@ import 'package:safeher_app/features/reports/domain/reports_repository.dart';
 import 'package:safeher_app/shared/components/cards/sa_stat_card.dart';
 import 'package:safeher_app/shared/models/threat_level.dart';
 
+import '../../../test_utils/offline_test_overrides.dart';
+
 HomeSummary _sampleSummary() {
   return HomeSummary(
     hasUnreadAlerts: true,
@@ -127,13 +129,14 @@ GoRouter _buildTestRouter() {
   );
 }
 
-Widget _harness({Brightness brightness = Brightness.dark, HomeRepository? repo}) {
+Widget _harness({Brightness brightness = Brightness.dark, HomeRepository? repo, bool offline = false}) {
   return ProviderScope(
     overrides: [
       homeRepositoryProvider.overrideWithValue(repo ?? _FakeHomeRepository()),
       profileRepositoryProvider.overrideWithValue(_FakeProfileRepository()),
       deviceRepositoryProvider.overrideWithValue(_FakeDeviceRepository()),
       reportsRepositoryProvider.overrideWithValue(_FakeReportsRepository()),
+      ...offlineTestOverrides(offline: offline),
     ],
     child: MaterialApp.router(
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
@@ -273,6 +276,27 @@ void main() {
       await tester.tap(find.bySemanticsLabel('Search'));
       await tester.pumpAndSettle();
       expect(find.text('search-stub'), findsOneWidget);
+    });
+
+    testWidgets('slides the offline banner into view when connectivity is down', (tester) async {
+      await tester.pumpWidget(_harness(offline: true));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining("You're offline"), findsOneWidget);
+
+      final slide = tester.widget<AnimatedSlide>(find.byKey(const ValueKey('offline-banner-slide')));
+      expect(slide.offset, Offset.zero);
+    });
+
+    testWidgets('slides the offline banner out of view when connectivity is up', (tester) async {
+      await tester.pumpWidget(_harness());
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(tester.takeException(), isNull);
+
+      final slide = tester.widget<AnimatedSlide>(find.byKey(const ValueKey('offline-banner-slide')));
+      expect(slide.offset, isNot(Offset.zero));
     });
 
     testGoldens('golden - light', (tester) async {

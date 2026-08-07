@@ -15,6 +15,8 @@ import 'package:safeher_app/features/profile/domain/models/user_profile.dart';
 import 'package:safeher_app/features/profile/domain/profile_repository.dart';
 import 'package:safeher_app/features/profile/presentation/profile_screen.dart';
 
+import '../../../test_utils/offline_test_overrides.dart';
+
 UserProfile _sampleProfile() => const UserProfile(
   name: 'Priya Patel',
   email: 'priya.patel@example.com',
@@ -107,6 +109,7 @@ Widget _harness({Brightness brightness = Brightness.dark, ProfileRepository? rep
       profileRepositoryProvider.overrideWithValue(repo ?? _FakeProfileRepository()),
       contactsRepositoryProvider.overrideWithValue(_FakeContactsRepository()),
       deviceRepositoryProvider.overrideWithValue(_FakeDeviceRepository()),
+      ...offlineTestOverrides(),
     ],
     child: MaterialApp.router(
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,

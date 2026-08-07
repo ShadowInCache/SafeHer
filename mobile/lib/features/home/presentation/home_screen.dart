@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/connectivity/connectivity_notifier.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -103,6 +105,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   scrollOffset: _scrollOffset,
                 ),
           _BlurAppBar(scrollOffset: _scrollOffset),
+          const Positioned(top: 0, left: 0, right: 0, child: SafeArea(bottom: false, child: _OfflineBanner())),
           Positioned(
             left: 0,
             right: 0,
@@ -114,6 +117,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Slides in below the status bar whenever [connectivityNotifierProvider]
+/// reports no network — mutations made while it's visible (e.g. adding an
+/// emergency contact) are queued locally and replay automatically once
+/// it disappears. Absent entirely while online or while connectivity
+/// state hasn't resolved yet, so this never flashes on a normal launch.
+class _OfflineBanner extends ConsumerWidget {
+  const _OfflineBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isOffline = ref.watch(connectivityNotifierProvider).valueOrNull == false;
+    return AnimatedSlide(
+      key: const ValueKey('offline-banner-slide'),
+      duration: const Duration(milliseconds: 200),
+      offset: isOffline ? Offset.zero : const Offset(0, -1.2),
+      curve: Curves.easeOut,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space4, vertical: AppSpacing.space2),
+        color: AppColors.warning500,
+        child: Text(
+          "You're offline — changes will sync when you're back online.",
+          style: AppTypography.labelM.copyWith(color: Colors.black),
+          textAlign: TextAlign.center,
+        ),
       ),
     );
   }
