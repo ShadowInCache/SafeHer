@@ -3,19 +3,19 @@ name: SafeHer Mobile CI
 on:
   push:
     paths:
-      - "SafeHer/mobile/**"
-      - "SafeHer/.github/workflows/mobile-ci.yml"
+      - "mobile/**"
+      - ".github/workflows/mobile-ci.yml"
   pull_request:
     paths:
-      - "SafeHer/mobile/**"
-      - "SafeHer/.github/workflows/mobile-ci.yml"
+      - "mobile/**"
+      - ".github/workflows/mobile-ci.yml"
 
 jobs:
   flutter-checks:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: SafeHer/mobile
+        working-directory: mobile
 
     steps:
       - name: Checkout
@@ -31,7 +31,7 @@ jobs:
         run: flutter pub get
 
       - name: Analyze
-        run: flutter analyze lib/main.dart lib/app
+        run: flutter analyze
 
       - name: Run tests
         run: flutter test --reporter expanded
