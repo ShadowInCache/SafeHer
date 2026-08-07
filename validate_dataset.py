@@ -125,7 +125,7 @@ class DatasetValidator:
         print("\n📋 Checking Trained Models")
         print("=" * 60)
         
-        model_dir = Path("src/models/motion_detection")
+        model_dir = Path("ml_training/motion_detection")
         
         files = {
             'xgboost_motion_model.json': 'XGBoost Model',

@@ -33,10 +33,10 @@ class VoiceAnalysisFunction:
         try:
             # Try multiple paths for model files
             possible_paths = [
-                Path('../../src/models/voice_detection/voice_model.pkl'),
-                Path('../../../src/models/voice_detection/voice_model.pkl'),
-                Path('./src/models/voice_detection/voice_model.pkl'),
-                Path('/app/src/models/voice_detection/voice_model.pkl'),
+                Path('../../ml_training/voice_detection/voice_model.pkl'),
+                Path('../../../ml_training/voice_detection/voice_model.pkl'),
+                Path('./ml_training/voice_detection/voice_model.pkl'),
+                Path('/app/ml_training/voice_detection/voice_model.pkl'),
             ]
             
             model_path = None
