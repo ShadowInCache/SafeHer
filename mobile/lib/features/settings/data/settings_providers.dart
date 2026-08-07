@@ -1,15 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../core/config/app_config.dart';
 import '../domain/models/app_settings.dart';
 import '../domain/settings_repository.dart';
 import 'settings_repository_mock.dart';
+import 'settings_repository_remote.dart';
 
 part 'settings_providers.g.dart';
 
 @riverpod
 SettingsRepository settingsRepository(Ref ref) {
-  return SettingsRepositoryMock();
+  if (AppConfig.useMockApi) return SettingsRepositoryMock();
+  return SettingsRepositoryRemote();
 }
 
 @riverpod

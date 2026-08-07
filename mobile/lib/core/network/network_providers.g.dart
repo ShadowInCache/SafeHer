@@ -1,44 +1,44 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'device_providers.dart';
+part of 'network_providers.dart';
 
 // **************************************************************************
 // RiverpodGenerator
 // **************************************************************************
 
-String _$deviceRepositoryHash() => r'42e201a2af350426d7ed3f578b4a0082fbe3c095';
+String _$authTokenStoreHash() => r'4466302cd24ab452e9e32738efbab777f27ce8bc';
 
-/// See also [deviceRepository].
-@ProviderFor(deviceRepository)
-final deviceRepositoryProvider = AutoDisposeProvider<DeviceRepository>.internal(
-  deviceRepository,
-  name: r'deviceRepositoryProvider',
+/// See also [authTokenStore].
+@ProviderFor(authTokenStore)
+final authTokenStoreProvider = Provider<AuthTokenStore>.internal(
+  authTokenStore,
+  name: r'authTokenStoreProvider',
   debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
       ? null
-      : _$deviceRepositoryHash,
+      : _$authTokenStoreHash,
   dependencies: null,
   allTransitiveDependencies: null,
 );
 
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
-typedef DeviceRepositoryRef = AutoDisposeProviderRef<DeviceRepository>;
-String _$devicesHash() => r'177fe56e20fdef5608366d9d6919478330b1e13e';
+typedef AuthTokenStoreRef = ProviderRef<AuthTokenStore>;
+String _$apiClientHash() => r'95bfd1fa791aa4d959a0abb642553151d981cf34';
 
-/// See also [devices].
-@ProviderFor(devices)
-final devicesProvider = AutoDisposeFutureProvider<List<DeviceDetail>>.internal(
-  devices,
-  name: r'devicesProvider',
+/// See also [apiClient].
+@ProviderFor(apiClient)
+final apiClientProvider = Provider<ApiClient>.internal(
+  apiClient,
+  name: r'apiClientProvider',
   debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
       ? null
-      : _$devicesHash,
+      : _$apiClientHash,
   dependencies: null,
   allTransitiveDependencies: null,
 );
 
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
-typedef DevicesRef = AutoDisposeFutureProviderRef<List<DeviceDetail>>;
+typedef ApiClientRef = ProviderRef<ApiClient>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

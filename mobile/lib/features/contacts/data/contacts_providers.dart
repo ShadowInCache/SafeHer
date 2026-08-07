@@ -1,15 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../core/config/app_config.dart';
 import '../domain/contacts_repository.dart';
 import '../domain/models/contact.dart';
 import 'contacts_repository_mock.dart';
+import 'contacts_repository_remote.dart';
 
 part 'contacts_providers.g.dart';
 
 @riverpod
 ContactsRepository contactsRepository(Ref ref) {
-  return ContactsRepositoryMock();
+  if (AppConfig.useMockApi) return ContactsRepositoryMock();
+  return ContactsRepositoryRemote();
 }
 
 /// The single source of truth for the app's emergency contacts — Settings,
