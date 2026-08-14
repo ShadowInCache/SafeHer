@@ -7,7 +7,7 @@ part of 'settings_providers.dart';
 // **************************************************************************
 
 String _$settingsRepositoryHash() =>
-    r'6dde71f999fe44fc554a36ed8c10874d2fad107d';
+    r'd1597c9a620022bb6f9e2cd0b731541fab90c813';
 
 /// See also [settingsRepository].
 @ProviderFor(settingsRepository)
@@ -26,7 +26,7 @@ final settingsRepositoryProvider =
 // ignore: unused_element
 typedef SettingsRepositoryRef = AutoDisposeProviderRef<SettingsRepository>;
 String _$appSettingsNotifierHash() =>
-    r'87b8af129e25a9aa2575c335c09732a536bbf03c';
+    r'3edd114c30fd235edf255315f5d4597265d39d1d';
 
 /// See also [AppSettingsNotifier].
 @ProviderFor(AppSettingsNotifier)

@@ -8,7 +8,21 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from fastapi_app.config import get_settings
 from fastapi_app.db import init_db
-from fastapi_app.routers import alerts, auth, devices, health, incidents, media, notifications, users, ws
+from fastapi_app.workers.deletion_purge import deletion_purge_worker
+from fastapi_app.routers import (
+    alerts,
+    auth,
+    dashboard,
+    devices,
+    health,
+    incidents,
+    journeys,
+    media,
+    notifications,
+    safety,
+    users,
+    ws,
+)
 from fastapi_app.mqtt_service import mqtt_worker
 
 
@@ -57,7 +71,14 @@ async def request_logging_middleware(request: Request, call_next):
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(_: Request, exc: HTTPException):
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    # `exc.headers` must be forwarded: it carries `Retry-After` on rate-limit
+    # and lockout responses, and `WWW-Authenticate` on 401s. Dropping it makes
+    # those responses unactionable for clients.
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=exc.headers,
+    )
 
 
 @app.exception_handler(Exception)
@@ -74,6 +95,9 @@ app.include_router(devices.router)
 app.include_router(ws.router)
 app.include_router(notifications.router)
 app.include_router(alerts.router)
+app.include_router(dashboard.router)
+app.include_router(safety.router)
+app.include_router(journeys.router)
 
 
 @app.on_event("startup")
@@ -86,16 +110,20 @@ async def on_startup() -> None:
         app.state.mqtt_task = None
         logger.info("MQTT worker disabled by configuration")
 
+    app.state.deletion_purge_task = asyncio.create_task(deletion_purge_worker())
+    logger.info("Account deletion purge worker launched")
+
 
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
-    task = getattr(app.state, "mqtt_task", None)
-    if task:
-        task.cancel()
-        try:
-            await task
-        except Exception:
-            pass
+    for attr in ("mqtt_task", "deletion_purge_task"):
+        task = getattr(app.state, attr, None)
+        if task:
+            task.cancel()
+            try:
+                await task
+            except Exception:
+                pass
 
 
 @app.get("/")

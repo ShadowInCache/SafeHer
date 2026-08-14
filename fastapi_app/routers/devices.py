@@ -47,5 +47,11 @@ async def update_device_heartbeat(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
 
     device.last_seen = datetime.utcnow()
+    if payload.battery_level is not None:
+        device.battery_level = payload.battery_level
+    if payload.signal_strength is not None:
+        device.signal_strength = payload.signal_strength
+    if payload.firmware_version is not None:
+        device.firmware_version = payload.firmware_version
     await session.commit()
     return None

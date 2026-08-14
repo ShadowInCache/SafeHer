@@ -18,14 +18,13 @@ This repo holds three things that share history but not a runtime:
 1. **A current backend** (`fastapi_app/`) — FastAPI, JWT + Firebase auth, Postgres/SQLite
    via SQLAlchemy + Alembic, MQTT ingestion from devices, WebSocket + FCM push for alerts.
 2. **A mobile app** (`mobile/`) — Flutter, Riverpod, GoRouter, Clean Architecture per
-   feature, currently mock-backed while its real-API integration is finished screen by
-   screen.
+   feature. Every screen now talks to the real backend by default (auth, contacts,
+   emergency dispatch, devices, dashboard, reports, live monitoring over WebSocket, BLE
+   pairing, settings); a fixture-data mock flavor remains available via
+   `--dart-define=USE_MOCK_API=true` for UI-only exploration without a backend running.
 3. **Supporting systems** — ESP32 firmware for two physical devices (`hardware/`), an
    offline ML training pipeline (`ml_training/`), serverless inference functions
    (`cloud_functions/`), and a Docker Compose deployment (`deployment/`).
-
-A fourth piece, `legacy_flask_gateway/`, is the backend `fastapi_app/` replaced. It's kept
-for reference, not run by anything — see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Features
 
@@ -43,6 +42,18 @@ for reference, not run by anything — see [ARCHITECTURE.md](ARCHITECTURE.md).
 - **Evidence capture**: signed direct-to-Cloudinary uploads for incident media.
 - **Hybrid auth**: email/password or Firebase sign-in, both resolving to the same JWT
   session.
+- **Safe Journey**: start a trip with a destination, a deadline, and chosen contacts.
+  Real GPS breadcrumbs post to the backend while it runs; missing the deadline records
+  an incident and notifies — `POST /api/v1/journeys`.
+- **Nearby Safety**: real police stations, hospitals, pharmacies, transit stops and
+  shelters around the user's actual position, with true distances, from OpenStreetMap
+  via `GET /api/v1/safety/nearby`.
+- **Emergency Cancel PIN**: a hashed, server-side PIN that must be entered to stand a
+  triggered SOS down. Never stored on the device.
+- **Opt-in phone triggers**: shake-to-SOS (three deliberate shakes, debounced, opens the
+  normal countdown) and an on-device voice-command layer over a fixed command list.
+- **Safety toolkit**: Fake Call, published emergency helplines, and short original
+  safety/self-defence guides.
 
 ## Tech stack
 
@@ -145,9 +156,11 @@ pytest tests/
 cd mobile && flutter test
 ```
 
-Not every backend test file is current — `test_fastapi_contracts.py` runs in-process
-against the real `fastapi_app` and is the most reliable; `test_authentication.py` and
-`test_microservices.py` predate the current architecture. Details:
+The in-process suites are the reliable ones and need no running server:
+`test_fastapi_contracts.py`, `test_safety_contracts.py`, `test_auth_security.py`,
+`test_auth_provisioning.py` and `test_firebase_token_verification.py` (67 tests).
+`test_api_gateway.py` and `test_integration.py` drive a **live** server over HTTP, so
+start the backend first or they will fail on connection. Details:
 [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md#tests-backend-pytest).
 
 ## Deployment
@@ -184,12 +197,14 @@ each screen is finalized — `mobile/lib/features/*/presentation/`._
 - The ML training pipeline can't be re-run from a clean clone — the raw dataset isn't
   committed (`ml_training/motion_detection/`, `validate_dataset.py`).
 - No firmware exists yet for the "smart ring" or "pendant" devices shown in the mobile UI.
-- Most `mobile/` screens are still mock-backed; real API wiring is in progress.
+- BLE pairing is implemented against the real `flutter_blue_plus` API (real permissions,
+  real scan, real connect) but unverified end-to-end — there's no Bluetooth radio in the
+  dev/CI environment and no physical SafeHer peripheral to pair with.
 - No backend CI exists yet — only `mobile-ci.yml` runs (Flutter analyze + test).
 
 ## Future improvements
 
-- Finish wiring `mobile/`'s repositories to `fastapi_app` (Phase 4 of the mobile build).
+- Verify BLE pairing against real Smart Glove / Smart Glasses hardware once available.
 - Move `/alerts/live` scoring into Redis or the database so it survives restarts and
   scales across replicas.
 - Add a backend CI workflow (pytest, at minimum against `test_fastapi_contracts.py`).
@@ -214,3 +229,11 @@ SafeHer Team (see `git log` for current contributors).
 Built on FastAPI, Flutter/Riverpod, SQLAlchemy, XGBoost, and Supabase. Historical
 project reports and an earlier architecture snapshot are preserved in
 [docs/archive/](docs/archive/) for context on how this codebase evolved.
+
+Several phone-side safety features — Safe Journey, Nearby Safety, the Emergency Cancel
+PIN, shake-to-trigger, voice commands, Fake Call, and the helplines directory — were
+inspired by [GoSecure](https://github.com/Divijkatyal0406/GoSecure) (MIT licensed).
+They were **reimplemented from scratch** against SafeHer's own architecture rather than
+ported: no GoSecure source, assets, or dependencies are vendored into this repo. See
+[ARCHITECTURE.md](ARCHITECTURE.md#adapted-from-gosecure) for what was adopted, what was
+rebuilt differently, and what was deliberately rejected.

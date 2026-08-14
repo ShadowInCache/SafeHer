@@ -1,76 +1,76 @@
 import 'dart:async';
-import 'dart:math';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../shared/components/charts/sa_motion_chart.dart';
-import '../domain/models/monitoring_snapshot.dart';
+import '../../../core/network/network_providers.dart';
+import '../../../core/network/realtime_client.dart';
+import '../domain/models/realtime_alert_event.dart';
 
 part 'monitoring_providers.g.dart';
 
-const _emotions = ['calm', 'neutral', 'stressed'];
+enum MonitoringConnectionStatus { connecting, connected, disconnected }
 
-/// Synthesizes a live-updating [MonitoringSnapshot] on a 100ms tick — the
-/// same shape a real WebSocket/MQTT-backed provider will produce in Phase
-/// 4, so panels won't need to change when the mock is swapped out.
-class _MonitoringStreamMock {
-  final _random = Random();
-  final _waveform = List<double>.filled(64, 0.1);
-  final _motionWindow = <MotionSample>[];
-  final _eventPins = <MotionEventPin>[];
-  var _tick = 0;
+class LiveMonitoringState {
+  const LiveMonitoringState({required this.status, required this.events});
 
-  Stream<MonitoringSnapshot> stream() async* {
-    final controller = StreamController<MonitoringSnapshot>();
-    final timer = Timer.periodic(const Duration(milliseconds: 100), (_) {
-      controller.add(_nextSnapshot());
-    });
-    controller.onCancel = timer.cancel;
-    yield* controller.stream;
-  }
+  final MonitoringConnectionStatus status;
 
-  MonitoringSnapshot _nextSnapshot() {
-    _tick++;
-    _waveform.removeAt(0);
-    _waveform.add((0.15 + _random.nextDouble() * 0.35).clamp(0.0, 1.0));
+  /// Most recent first, bounded — every entry is a real event this session
+  /// actually received over the WebSocket, never synthesized.
+  final List<RealtimeAlertEvent> events;
 
-    final sample = MotionSample(
-      x: sin(_tick / 8) + _random.nextDouble() * 0.1,
-      y: cos(_tick / 6) + _random.nextDouble() * 0.1,
-      z: sin(_tick / 10) * 0.5 + _random.nextDouble() * 0.1,
-    );
-    _motionWindow.add(sample);
-    if (_motionWindow.length > 60) _motionWindow.removeAt(0);
-
-    if (_tick % 45 == 0) {
-      _eventPins.add(MotionEventPin(
-        sampleIndex: _motionWindow.length - 1,
-        label: 'Motion spike',
-        timestamp: _formatTimestamp(DateTime.now()),
-      ));
-      if (_eventPins.length > 5) _eventPins.removeAt(0);
-    }
-
-    final avgAmplitude = _waveform.reduce((a, b) => a + b) / _waveform.length;
-
-    return MonitoringSnapshot(
-      threatScore: (0.2 + avgAmplitude * 0.3).clamp(0.0, 1.0),
-      waveform: List.unmodifiable(_waveform),
-      dbLevel: 30 + avgAmplitude * 50,
-      detectedEmotion: _emotions[(_tick ~/ 30) % _emotions.length],
-      motionWindow: List.unmodifiable(_motionWindow),
-      eventPins: List.unmodifiable(_eventPins),
-      glassesConnected: false,
-    );
+  LiveMonitoringState copyWith({MonitoringConnectionStatus? status, List<RealtimeAlertEvent>? events}) {
+    return LiveMonitoringState(status: status ?? this.status, events: events ?? this.events);
   }
 }
 
-String _formatTimestamp(DateTime dt) =>
-    '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}';
+const _maxRecentEvents = 20;
 
-@riverpod
-Stream<MonitoringSnapshot> monitoringStream(Ref ref) {
-  final mock = _MonitoringStreamMock();
-  return mock.stream();
+/// Drives Live Monitoring off the real `/api/v1/ws/alerts/{user_id}` feed
+/// (see `fastapi_app/routers/ws.py`) — no synthetic sensor data, ever.
+/// There's nothing flavor-specific to branch on here: without a signed-in
+/// backend session (the mock flavor never obtains one — see
+/// `AppConfig.useMockApi`) the client simply can't connect and this
+/// honestly settles on "disconnected" rather than fabricating a feed.
+@Riverpod(keepAlive: true)
+class LiveMonitoringController extends _$LiveMonitoringController {
+  RealtimeAlertsClient? _client;
+  StreamSubscription<RealtimeConnectionStatus>? _statusSub;
+  StreamSubscription<Map<String, dynamic>>? _eventSub;
+
+  @override
+  LiveMonitoringState build() {
+    final client = RealtimeAlertsClient(
+      apiClient: ref.read(apiClientProvider),
+      tokenStore: ref.read(authTokenStoreProvider),
+    );
+    _client = client;
+    _statusSub = client.status.listen((status) {
+      state = state.copyWith(
+        status: switch (status) {
+          RealtimeConnectionStatus.connecting => MonitoringConnectionStatus.connecting,
+          RealtimeConnectionStatus.connected => MonitoringConnectionStatus.connected,
+          RealtimeConnectionStatus.disconnected => MonitoringConnectionStatus.disconnected,
+        },
+      );
+    });
+    _eventSub = client.events.listen((json) {
+      final event = RealtimeAlertEvent.fromJson(json);
+      if (event == null) return;
+      state = state.copyWith(events: [event, ...state.events].take(_maxRecentEvents).toList());
+    });
+
+    ref.onDispose(() {
+      _statusSub?.cancel();
+      _eventSub?.cancel();
+      _client?.dispose();
+    });
+
+    client.connect();
+    return const LiveMonitoringState(status: MonitoringConnectionStatus.connecting, events: []);
+  }
+
+  void retry() {
+    _client?.connect();
+  }
 }

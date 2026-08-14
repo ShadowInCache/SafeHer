@@ -1,9 +1,20 @@
 from __future__ import annotations
 
+import logging
+
 from dataclasses import dataclass
 from typing import Any, Optional
 
 from fastapi import HTTPException, status
+
+
+logger = logging.getLogger(__name__)
+
+# Firebase mints tokens against Google's clock. A client or server running even
+# a second behind will otherwise see a freshly-issued token rejected as "used
+# too early", which shows up as intermittent, unreproducible sign-in failures.
+# Google's own client libraries allow the same kind of leeway.
+CLOCK_SKEW_TOLERANCE_SECONDS = 30
 
 
 @dataclass
@@ -14,9 +25,15 @@ class FirebaseIdentity:
     raw_claims: dict[str, Any]
 
 
-def verify_firebase_id_token(*, id_token: str, project_id: Optional[str]) -> FirebaseIdentity:
-    """Verify Firebase ID token and return normalized identity claims."""
+def _verify_with_google(
+    *, id_token: str, project_id: Optional[str], clock_skew_in_seconds: int
+) -> Any:
+    """Call Google's verifier.
 
+    Split out from [verify_firebase_id_token] so the surrounding policy --
+    skew tolerance, logging, synthetic addresses -- is testable without a
+    network round-trip to Google's certificate endpoint.
+    """
     try:
         from google.auth.transport import requests as google_requests
         from google.oauth2 import id_token as google_id_token
@@ -26,14 +43,30 @@ def verify_firebase_id_token(*, id_token: str, project_id: Optional[str]) -> Fir
             detail="google-auth is required for Firebase token verification",
         ) from exc
 
+    return google_id_token.verify_firebase_token(
+        id_token,
+        google_requests.Request(),
+        audience=project_id,
+        clock_skew_in_seconds=clock_skew_in_seconds,
+    )
+
+
+def verify_firebase_id_token(*, id_token: str, project_id: Optional[str]) -> FirebaseIdentity:
+    """Verify Firebase ID token and return normalized identity claims."""
+
     try:
-        request_adapter = google_requests.Request()
-        claims = google_id_token.verify_firebase_token(
-            id_token,
-            request_adapter,
-            audience=project_id,
+        claims = _verify_with_google(
+            id_token=id_token,
+            project_id=project_id,
+            clock_skew_in_seconds=CLOCK_SKEW_TOLERANCE_SECONDS,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
+        # The reason is logged but never returned: it can distinguish an expired
+        # token from a wrong-audience one, which is useful to an attacker
+        # probing the endpoint and useless to a legitimate client.
+        logger.warning("Firebase ID token rejected: %s: %s", type(exc).__name__, exc)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid Firebase ID token",
@@ -56,8 +89,20 @@ def verify_firebase_id_token(*, id_token: str, project_id: Optional[str]) -> Fir
         )
 
     if not email:
-        # Phone-auth users may not have an email claim; derive a stable identity.
-        email = f"{uid}@phone.safeherapp.com"
+        # Phone and anonymous sign-ins carry no email claim, but the backend
+        # keys accounts by address. Derive a stable synthetic one from the
+        # Firebase uid, tagged with the provider so these accounts are
+        # recognisable in the database rather than all looking like phone users.
+        provider = str(
+            claims.get("firebase", {}).get("sign_in_provider")
+            or claims.get("provider_id")
+            or "unknown"
+        ).strip().lower()
+        domain = {
+            "phone": "phone.safeherapp.com",
+            "anonymous": "anonymous.safeherapp.com",
+        }.get(provider, "firebase.safeherapp.com")
+        email = f"{uid}@{domain}"
 
     return FirebaseIdentity(
         uid=uid,

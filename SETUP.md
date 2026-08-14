@@ -17,7 +17,7 @@ pip install -r requirements.txt
 ```
 
 `requirements.txt` covers three concerns in one file: the current FastAPI backend, the
-archived Flask gateway (`legacy_flask_gateway/`), and the ML training pipeline
+and the ML training pipeline
 (`ml_training/`). You don't need the ML stack (`torch`, `ultralytics`, `librosa`, ...)
 just to run the backend — see [DEPENDENCIES.md](DEPENDENCIES.md) if you want to trim
 your local install.
@@ -60,10 +60,37 @@ python app.py
 This talks to whatever `DATABASE_URL` points at (SQLite by default) and warns —
 without failing — if Redis or the event processor aren't reachable.
 
-Apply database migrations if you're not starting from a fresh SQLite file:
+### Database schema
+
+Migrations are the single source of truth and run automatically on startup, so
+there is normally nothing to do. To drive them by hand:
+
 ```bash
-alembic upgrade head
+python -m alembic upgrade head    # note: `python -m`, not bare `alembic`
+python -m alembic current
 ```
+
+Use `python -m alembic` rather than the `alembic` console script -- the script
+may resolve to a different interpreter than the one running the backend, and
+will then fail on unrelated dependency versions.
+
+A database created before migrations existed (schema built by `create_all`, no
+`alembic_version` table) is adopted automatically: startup stamps it at head and
+continues, leaving existing rows untouched.
+
+### Pointing at Supabase Postgres
+
+Set `DATABASE_URL` to the Supabase connection string and migrations plus the app
+follow it:
+
+```bash
+DATABASE_URL=postgresql://postgres:<db-password>@db.<project-ref>.supabase.co:5432/postgres?sslmode=require
+```
+
+The password is the **database** password from Supabase → Project Settings →
+Database, which is not the same as `SUPABASE_SECRET_KEY` (an API key, which
+cannot open a Postgres connection). `sslmode=require` is translated to the
+argument asyncpg expects, so the libpq-style URL Supabase gives you works as-is.
 
 Verify it's up:
 ```bash
@@ -80,9 +107,202 @@ flutter run -d chrome           # or run in a browser
 flutter run -d web-server --web-port=8765   # headless web server, for automated screenshots
 ```
 
-The mobile app defaults to mock repositories (`AppFlavor.isMock`) — it does not
-require the backend to be running to explore the UI. See [ARCHITECTURE.md](ARCHITECTURE.md)
-for which parts are wired to `fastapi_app/` already.
+The mobile app defaults to the real `fastapi_app` backend (`AppConfig.useMockApi` in
+`mobile/lib/core/config/app_config.dart`) — every feature (auth, contacts, emergency,
+devices, dashboard, reports, live monitoring, BLE pairing, settings) has a real backend
+path now, so start the backend first (step 3 above) or `flutter run` will show
+connection-error states. To explore the UI on fixture data without a backend running,
+pass `--dart-define=USE_MOCK_API=true`.
+
+## 4a. Accounts and sign-in
+
+Firebase Authentication **is enabled** on the `safeher-2a1f2` project, with the
+Google, Phone and Anonymous providers plus Email/Password turned on. So the app
+defaults to the Firebase path (`AppConfig.useFirebaseAuth`, default `true`).
+Firebase collects the credential; `fastapi_app` still owns the account, because
+every successful sign-in is exchanged for a backend JWT at
+`POST /api/v1/auth/firebase/exchange`.
+
+Verify the providers yourself at any time:
+
+```bash
+KEY=<web-api-key from mobile/lib/firebase_options.dart>
+# Email/Password
+curl -s -X POST "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$KEY"   -H 'Content-Type: application/json'   -d '{"email":"probe@example.com","password":"TestPass123!","returnSecureToken":true}'
+# Anonymous
+curl -s -X POST "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$KEY"   -H 'Content-Type: application/json' -d '{"returnSecureToken":true}'
+```
+
+`CONFIGURATION_NOT_FOUND` would mean Authentication is switched off for the
+project entirely; `OPERATION_NOT_ALLOWED` means that one provider is disabled.
+
+### Fallback: backend-native auth
+
+```bash
+flutter run --dart-define=USE_FIREBASE_AUTH=false
+```
+
+Email/password is then served directly by `fastapi_app` with no console
+dependency. Google, Apple and guest sign-in are unavailable on that path, since
+they need a real identity provider. The backend implements SRS section 4.1
+either way: FR-AUTH-01 (emailed OTP), FR-AUTH-04 (15-minute access / 30-day
+refresh), FR-AUTH-06 (password change revokes other sessions), FR-AUTH-07
+(5 failures lock for 15 minutes), FR-AUTH-08 (30-day deletion grace).
+
+### Guest mode
+
+The Anonymous provider backs "Continue as guest" on the login screen: it reaches
+the SOS button without an account, which matters when help is needed now. The
+backend still provisions a real account keyed to the Firebase uid, with a
+synthetic address (`<uid>@anonymous.safeherapp.com`), so contacts and incidents
+persist. An anonymous account **cannot be recovered on another device**, which is
+why guest mode is the last option on the screen rather than the headline one.
+
+### Clock skew
+
+Firebase mints tokens against Google's clock. A machine running even a second
+behind sees freshly-issued tokens rejected as "Token used too early", which
+presents as intermittent, unreproducible sign-in failures. The backend allows
+`CLOCK_SKEW_TOLERANCE_SECONDS` (30s) of leeway in
+`fastapi_app/services/firebase_auth.py`.
+
+### Email verification is enforced only when it can be delivered
+
+`REQUIRE_EMAIL_VERIFICATION` is unset by default, so verification is enforced
+exactly when SMTP is configured. Without a mail server, forcing it on would
+create accounts that can never sign in.
+
+- **No SMTP** -- sign-up completes and signs the user straight in.
+- **SMTP configured** (`SMTP_HOST` + `SMTP_FROM_EMAIL`) -- verification turns on
+  automatically; `POST /auth/verify-email` completes it.
+- **Development without SMTP** -- the register response carries `debug_code` so
+  the flow can be finished locally. Only when `ENVIRONMENT=development` *and*
+  SMTP is absent.
+
+Forgot-password uses the same mechanism (`/auth/password-reset/request` and
+`/confirm`). Reset codes and verification codes carry distinct purposes, so
+neither is redeemable as the other.
+
+## 4b. Firebase sign-in (optional -- needed for Google and Apple)
+
+This section applies only when you build with
+`--dart-define=USE_FIREBASE_AUTH=true`. Firebase *collects* the credential and
+`fastapi_app` still *owns* the account: every successful Firebase sign-in is
+exchanged for a backend JWT at `POST /api/v1/auth/firebase/exchange`, which
+auto-provisions the user on first sign-in. Both halves have to be configured or
+sign-in fails.
+
+Enabling Authentication in the console is the prerequisite for everything below
+-- see section 4a for how to confirm whether it is enabled.
+
+The repo already contains a real Firebase project (`safeher-2a1f2`):
+`mobile/lib/firebase_options.dart` and `mobile/android/app/google-services.json`.
+What is **not** configured — and cannot be, from code alone — is the console side.
+
+### Backend
+
+Set the project id so ID tokens are validated against the right audience.
+Without it, tokens are accepted with no audience check, meaning a token minted by
+*any* Firebase project would be honoured:
+
+```bash
+# .env at the repo root
+FIREBASE_PROJECT_ID=safeher-2a1f2
+```
+
+### Enable the sign-in providers
+
+Firebase console → **Authentication → Sign-in method**, enable:
+
+| Provider | Needed for |
+|---|---|
+| Email/Password | Sign-up and email login |
+| Google | "Continue with Google" |
+| Phone | The OTP step after sign-up (optional — see below) |
+
+If a provider is disabled, Firebase returns `operation-not-allowed` and the app
+surfaces "This sign-in method isn't enabled for this app yet."
+
+### Register the Android SHA-1 (this is what breaks Google sign-in)
+
+`mobile/android/app/google-services.json` currently has:
+
+```json
+"oauth_client": []
+```
+
+An empty `oauth_client` array means **no OAuth client exists for this Android
+app**, and Google sign-in on Android fails with
+`PlatformException(sign_in_failed, 10:)` no matter what the app code does.
+Enabling the Google provider in the console is necessary but *not* sufficient:
+that array is populated only once the app's signing-certificate fingerprint is
+registered and the file is re-downloaded.
+
+This does not affect web (`flutter run -d chrome`), which uses Firebase's
+`signInWithPopup` and needs no OAuth client in `google-services.json` -- so
+Chrome is the quickest way to test Google sign-in today.
+
+1. Get the debug SHA-1 (the keystore is created by your first Android build, so
+   run `flutter run` once if the file doesn't exist yet):
+
+   ```bash
+   keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android
+   ```
+
+   On Windows the keystore lives at `%USERPROFILE%\.android\debug.keystore`.
+   Copy the `SHA1:` line. For a release build, run the same command against your
+   release keystore and register that fingerprint too.
+
+2. Firebase console → **Project settings → Your apps → Android app
+   (`com.example.safeher_app`) → Add fingerprint**, paste the SHA-1, save.
+
+3. **Re-download `google-services.json`** and replace
+   `mobile/android/app/google-services.json`. Confirm `oauth_client` is no longer
+   empty — that is the check that tells you it worked.
+
+4. Rebuild (`flutter clean && flutter run`). A Gradle-cached
+   `google-services.json` will otherwise keep the old, empty one.
+
+### iOS
+
+`mobile/ios/Runner/GoogleService-Info.plist` is **missing**, so Firebase does not
+initialise on iOS at all. Add the iOS app in the Firebase console, download the
+plist into `mobile/ios/Runner/`, and add its `REVERSED_CLIENT_ID` as a URL scheme
+in `Info.plist` (required by `google_sign_in`). Note the bundle id in
+`firebase_options.dart` is `com.example.safeherApp` — it must match whatever you
+register.
+
+### Web (`flutter run -d chrome`)
+
+Web takes a different Google path: `AuthRepositoryRemote` uses Firebase's own
+`signInWithPopup` there, so the SHA-1 and `google-services.json` above are
+irrelevant on web, and no `google-signin-client_id` meta tag is needed in
+`web/index.html`. What web does need:
+
+- **Google enabled** under Authentication → Sign-in method (same as mobile).
+- **Authorized domains** must include the host you're serving from. Firebase
+  includes `localhost` by default, which covers `flutter run -d chrome`.
+
+The backend must also be running, since the app talks to
+`http://127.0.0.1:5000/api/v1` by default:
+
+```bash
+python -m uvicorn fastapi_app.main:app --host 127.0.0.1 --port 5000
+```
+
+CORS is already open in development (`ENVIRONMENT=development` sets
+`allow_origins=["*"]`), so the browser's preflight succeeds. A
+`DioException [connection error] … XMLHttpRequest onError` in the Chrome console
+means the backend isn't reachable — that error is what a refused TCP connection
+looks like from the browser, not a CORS or auth problem.
+
+### Phone OTP is optional by design
+
+Phone verification needs the Phone provider enabled, a registered SHA-1, and SMS
+quota (billing, past the free tier). If it can't start, **sign-up still succeeds** —
+the account is created and the backend session provisioned, and the OTP screen says
+so and offers "Continue to SafeHer" rather than waiting on a code that will never
+arrive. Linking a phone credential is an enhancement, not a precondition.
 
 ## 5. Run the ML training pipeline (optional)
 

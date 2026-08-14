@@ -27,6 +27,11 @@ enum SaIconGlyph {
   refresh,
   plus,
   glasses,
+  play,
+  download,
+  link,
+  bluetooth,
+  bluetoothOff,
 }
 
 /// Renders a [SaIconGlyph] via [CustomPainter] — a hand-drawn vector icon,
@@ -121,6 +126,33 @@ class _SaIconPainter extends CustomPainter {
         _paintPlus(canvas, size, stroke);
       case SaIconGlyph.glasses:
         _paintGlasses(canvas, size, stroke);
+      case SaIconGlyph.play:
+        _paintPlay(canvas, size, fill);
+      case SaIconGlyph.download:
+        _paintDownload(canvas, size, stroke);
+      case SaIconGlyph.link:
+        _paintLink(canvas, size, stroke);
+      case SaIconGlyph.bluetooth:
+        _paintBluetooth(canvas, size, stroke);
+      case SaIconGlyph.bluetoothOff:
+        _paintBluetooth(canvas, size, stroke, struckThrough: true);
+    }
+  }
+
+  /// The Bluetooth rune: the vertical stem with two bowties crossing it.
+  /// [struckThrough] adds the diagonal slash used for the disabled state.
+  void _paintBluetooth(Canvas canvas, Size size, Paint stroke, {bool struckThrough = false}) {
+    final w = size.width, h = size.height;
+    final path = Path()
+      ..moveTo(w * 0.28, h * 0.32)
+      ..lineTo(w * 0.72, h * 0.68)
+      ..lineTo(w * 0.5, h * 0.86)
+      ..lineTo(w * 0.5, h * 0.14)
+      ..lineTo(w * 0.72, h * 0.32)
+      ..lineTo(w * 0.28, h * 0.68);
+    canvas.drawPath(path, stroke);
+    if (struckThrough) {
+      canvas.drawLine(Offset(w * 0.16, h * 0.84), Offset(w * 0.84, h * 0.16), stroke);
     }
   }
 
@@ -187,6 +219,35 @@ class _SaIconPainter extends CustomPainter {
       ..lineTo(w * 0.42, h * 0.72)
       ..lineTo(w * 0.8, h * 0.28);
     canvas.drawPath(path, stroke);
+  }
+
+  void _paintPlay(Canvas canvas, Size size, Paint fill) {
+    final w = size.width, h = size.height;
+    final path = Path()
+      ..moveTo(w * 0.32, h * 0.22)
+      ..lineTo(w * 0.32, h * 0.78)
+      ..lineTo(w * 0.82, h * 0.5)
+      ..close();
+    canvas.drawPath(path, fill);
+  }
+
+  void _paintDownload(Canvas canvas, Size size, Paint stroke) {
+    final w = size.width, h = size.height;
+    canvas.drawLine(Offset(w * 0.5, h * 0.18), Offset(w * 0.5, h * 0.62), stroke);
+    final arrow = Path()
+      ..moveTo(w * 0.3, h * 0.44)
+      ..lineTo(w * 0.5, h * 0.64)
+      ..lineTo(w * 0.7, h * 0.44);
+    canvas.drawPath(arrow, stroke);
+    canvas.drawLine(Offset(w * 0.2, h * 0.82), Offset(w * 0.8, h * 0.82), stroke);
+  }
+
+  void _paintLink(Canvas canvas, Size size, Paint stroke) {
+    final w = size.width, h = size.height;
+    final rrect1 = RRect.fromRectAndRadius(Rect.fromLTWH(w * 0.12, h * 0.34, w * 0.42, h * 0.32), Radius.circular(h * 0.16));
+    final rrect2 = RRect.fromRectAndRadius(Rect.fromLTWH(w * 0.46, h * 0.34, w * 0.42, h * 0.32), Radius.circular(h * 0.16));
+    canvas.drawRRect(rrect1, stroke);
+    canvas.drawRRect(rrect2, stroke);
   }
 
   void _paintSearch(Canvas canvas, Size size, Paint stroke) {

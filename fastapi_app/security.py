@@ -34,9 +34,11 @@ def create_access_token(*, subject: str, role: str, settings: Settings, expires_
     if expires_delta is None:
         expires_delta = timedelta(minutes=settings.access_token_expire_minutes)
 
-    expire = datetime.now(timezone.utc) + expires_delta
+    now = datetime.now(timezone.utc)
+    expire = now + expires_delta
     to_encode = {
         "exp": expire,
+        "iat": now,
         "sub": subject,
         "role": role,
         "iss": settings.jwt_issuer,
@@ -49,9 +51,11 @@ def create_access_token(*, subject: str, role: str, settings: Settings, expires_
 
 
 def create_refresh_token(*, subject: str, role: str, settings: Settings) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(days=settings.refresh_token_expire_days)
     to_encode = {
         "exp": expire,
+        "iat": now,
         "sub": subject,
         "role": role,
         "iss": settings.jwt_issuer,
@@ -67,9 +71,35 @@ def decode_token(token: str, settings: Settings, expected_type: str = "access") 
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=["HS256"], audience=settings.jwt_audience, issuer=settings.jwt_issuer)
         if payload.get("type") != expected_type:
             raise JWTError("Invalid token type")
-        return TokenPayload(sub=payload["sub"], role=payload.get("role", "user"), exp=payload["exp"], type=payload.get("type", "access"))
+        return TokenPayload(
+            sub=payload["sub"],
+            role=payload.get("role", "user"),
+            exp=payload["exp"],
+            iat=payload.get("iat"),
+            type=payload.get("type", "access"),
+        )
     except JWTError as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials") from e
+
+
+def ensure_token_not_revoked(payload: TokenPayload, user) -> None:
+    """Reject tokens minted before the user's last credential change.
+
+    Tokens issued at exactly `tokens_valid_from` are kept: the token a password
+    change hands back is stamped in the same second as the revocation cutoff,
+    and rounding it out would log the user out of the device they just used to
+    change their password.
+    """
+    valid_from = getattr(user, "tokens_valid_from", None)
+    if valid_from is None or payload.iat is None:
+        return
+
+    issued_at = datetime.fromtimestamp(payload.iat, tz=timezone.utc).replace(tzinfo=None)
+    if issued_at < valid_from.replace(microsecond=0):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired, please sign in again",
+        )
 
 
 async def get_current_user(
@@ -83,6 +113,8 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     if not getattr(user, "is_active", True):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
+
+    ensure_token_not_revoked(payload, user)
 
     return UserPublic.model_validate(user)
 

@@ -4,6 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
+import 'package:safeher_app/features/dashboard/data/dashboard_providers.dart';
+import 'package:safeher_app/features/dashboard/domain/dashboard_repository.dart';
+import 'package:safeher_app/features/dashboard/domain/models/dashboard_summary.dart';
 import 'package:safeher_app/features/devices/data/device_providers.dart';
 import 'package:safeher_app/features/devices/domain/device_repository.dart';
 import 'package:safeher_app/features/devices/domain/models/device_detail.dart';
@@ -11,6 +14,7 @@ import 'package:safeher_app/features/home/data/home_providers.dart';
 import 'package:safeher_app/features/home/domain/home_repository.dart';
 import 'package:safeher_app/features/home/domain/models/home_summary.dart';
 import 'package:safeher_app/features/home/presentation/home_screen.dart';
+import 'package:safeher_app/features/monitoring/data/monitoring_providers.dart';
 import 'package:safeher_app/features/profile/data/profile_providers.dart';
 import 'package:safeher_app/features/profile/domain/models/user_profile.dart';
 import 'package:safeher_app/features/profile/domain/profile_repository.dart';
@@ -18,14 +22,15 @@ import 'package:safeher_app/features/reports/data/reports_providers.dart';
 import 'package:safeher_app/features/reports/domain/models/report_detail.dart';
 import 'package:safeher_app/features/reports/domain/models/report_summary.dart';
 import 'package:safeher_app/features/reports/domain/reports_repository.dart';
-import 'package:safeher_app/shared/components/cards/sa_stat_card.dart';
+import 'package:safeher_app/shared/components/charts/sa_bar_chart.dart';
+import 'package:safeher_app/shared/components/navigation/sa_bottom_nav_bar.dart';
 import 'package:safeher_app/shared/models/threat_level.dart';
 
 import '../../../test_utils/offline_test_overrides.dart';
+import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
 HomeSummary _sampleSummary() {
   return HomeSummary(
-    hasUnreadAlerts: true,
     threat: ThreatSnapshot(
       score: 0.28,
       motionScore: 0.2,
@@ -33,9 +38,6 @@ HomeSummary _sampleSummary() {
       visionScore: 0.35,
       lastUpdated: DateTime.now().subtract(const Duration(minutes: 2)),
     ),
-    waveformPreview: List.generate(32, (i) => (i % 6) / 8),
-    motionPreview: List.generate(30, (i) => 0.4 + 0.1 * i),
-    safetyScore: const SafetyScoreSummary(score: 87, streakDays: 12, trend: SaTrendDirection.up),
   );
 }
 
@@ -64,13 +66,16 @@ class _FakeProfileRepository implements ProfileRepository {
       streakDays: 12,
     );
   }
+
+  @override
+  Future<UserProfile> updateProfile({String? name, String? phone}) => throw UnimplementedError();
 }
 
 class _FakeDeviceRepository implements DeviceRepository {
   @override
   Future<List<DeviceDetail>> getDevices() async {
     await Future.delayed(const Duration(milliseconds: 50));
-    return const [
+    return [
       DeviceDetail(
         id: 'ring',
         name: 'Smart Ring',
@@ -81,7 +86,8 @@ class _FakeDeviceRepository implements DeviceRepository {
         signalStrength: 3,
         firmwareVersion: 'v2.4.1',
         updateAvailable: false,
-        sensors: SensorReading(accelG: 1.02, gyroDps: 4.3, flexPercent: 0),
+        sensors: const SensorReading(accelG: 1.02, gyroDps: 4.3, flexPercent: 0),
+        lastSeen: DateTime.now().subtract(const Duration(seconds: 30)),
       ),
     ];
   }
@@ -106,13 +112,32 @@ class _FakeReportsRepository implements ReportsRepository {
   Future<ReportDetail> getReportDetail(String id) => throw UnimplementedError();
 }
 
+class _FakeDashboardRepository implements DashboardRepository {
+  @override
+  Future<DashboardSummary> getDashboardSummary() async {
+    await Future.delayed(const Duration(milliseconds: 50));
+    return const DashboardSummary(
+      weeklyThreatTrend: [
+        SaBarChartDatum(label: 'Mon', value: 0, level: ThreatLevel.safe),
+        SaBarChartDatum(label: 'Tue', value: 1, level: ThreatLevel.caution),
+      ],
+      eventBreakdown: [],
+    );
+  }
+}
+
+class _FakeLiveMonitoringController extends LiveMonitoringController {
+  @override
+  LiveMonitoringState build() => const LiveMonitoringState(status: MonitoringConnectionStatus.connected, events: []);
+}
+
 GoRouter _buildTestRouter() {
   return GoRouter(
     initialLocation: '/home',
     routes: [
       GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
       GoRoute(path: '/monitor', builder: (context, state) => const Scaffold(body: Text('monitor-stub'))),
-      GoRoute(path: '/dashboard', builder: (context, state) => const Scaffold(body: Text('dashboard-stub'))),
+      GoRoute(path: '/devices', builder: (context, state) => const Scaffold(body: Text('devices-stub'))),
       GoRoute(path: '/profile', builder: (context, state) => const Scaffold(body: Text('profile-stub'))),
       GoRoute(path: '/emergency', builder: (context, state) => const Scaffold(body: Text('emergency-stub'))),
       GoRoute(path: '/search', builder: (context, state) => const Scaffold(body: Text('search-stub'))),
@@ -136,9 +161,15 @@ Widget _harness({Brightness brightness = Brightness.dark, HomeRepository? repo, 
       profileRepositoryProvider.overrideWithValue(_FakeProfileRepository()),
       deviceRepositoryProvider.overrideWithValue(_FakeDeviceRepository()),
       reportsRepositoryProvider.overrideWithValue(_FakeReportsRepository()),
+      dashboardRepositoryProvider.overrideWithValue(_FakeDashboardRepository()),
+      liveMonitoringControllerProvider.overrideWith(() => _FakeLiveMonitoringController()),
       ...offlineTestOverrides(offline: offline),
     ],
     child: MaterialApp.router(
+    // Mirrors main.dart's shell so screens render over the same ambient
+    // field users see; the scaffold background is transparent by design.
+    builder: (context, child) =>
+        SaAmbientBackground(child: child ?? const SizedBox.shrink()),
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
       routerConfig: _buildTestRouter(),
     ),
@@ -163,16 +194,40 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       expect(tester.takeException(), isNull);
       expect(find.textContaining('Priya'), findsOneWidget);
+      expect(find.text("You're Safe"), findsOneWidget);
       expect(find.text('Smart Ring'), findsOneWidget);
+
+      await tester.scrollUntilVisible(find.text('This Week'), 200, scrollable: find.byType(Scrollable).first);
+      expect(find.text('This Week'), findsOneWidget);
 
       await tester.scrollUntilVisible(find.text('Recent Alerts'), 200, scrollable: find.byType(Scrollable).first);
       expect(find.text('Recent Alerts'), findsOneWidget);
-
-      await tester.scrollUntilVisible(find.text('Daily Safety Score'), 200, scrollable: find.byType(Scrollable).first);
-      expect(find.text('Daily Safety Score'), findsOneWidget);
     });
 
-    testWidgets('renders_empty_state (error + retry)', (tester) async {
+    testWidgets('renders_empty_state (no devices shows connect prompt, not fake data)', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            homeRepositoryProvider.overrideWithValue(_FakeHomeRepository()),
+            profileRepositoryProvider.overrideWithValue(_FakeProfileRepository()),
+            deviceRepositoryProvider.overrideWithValue(_EmptyDeviceRepository()),
+            reportsRepositoryProvider.overrideWithValue(_FakeReportsRepository()),
+            dashboardRepositoryProvider.overrideWithValue(_FakeDashboardRepository()),
+            liveMonitoringControllerProvider.overrideWith(() => _FakeLiveMonitoringController()),
+            ...offlineTestOverrides(),
+          ],
+          child: MaterialApp.router(theme: AppTheme.dark, routerConfig: _buildTestRouter()),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.takeException(), isNull);
+      expect(find.text('No Wearable Connected'), findsOneWidget);
+      expect(find.text('Connect Device'), findsOneWidget);
+    });
+
+    testWidgets('renders_error_state (error + retry)', (tester) async {
       await tester.pumpWidget(_harness(repo: _FakeHomeRepository(shouldFail: true)));
       await tester.pump(const Duration(milliseconds: 100));
       expect(tester.takeException(), isNull);
@@ -192,7 +247,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('navigation_actions_work: device card navigates to device detail', (tester) async {
+    testWidgets('navigation_actions_work: device row navigates to device detail', (tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 844));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(_harness());
@@ -257,16 +312,21 @@ void main() {
       expect(find.text('report-1-stub'), findsOneWidget);
     });
 
-    testWidgets('navigation_actions_work: bottom nav tabs switch routes', (tester) async {
+    testWidgets('navigation_actions_work: bottom nav Devices tab switches routes', (tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 844));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(_harness());
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 400));
 
-      await tester.tap(find.bySemanticsLabel('Dashboard'));
+      // `find.bySemanticsLabel('Devices')` alone is ambiguous here: the
+      // "Devices" section heading in the scrolled content produces the
+      // same implicit text-semantics label as the nav bar's "Devices" tab.
+      await tester.tap(
+        find.descendant(of: find.byType(SaBottomNavBar), matching: find.bySemanticsLabel('Devices')),
+      );
       await tester.pumpAndSettle();
-      expect(find.text('dashboard-stub'), findsOneWidget);
+      expect(find.text('devices-stub'), findsOneWidget);
     });
 
     testWidgets('navigation_actions_work: search button navigates to search', (tester) async {
@@ -319,4 +379,12 @@ void main() {
       );
     });
   });
+}
+
+class _EmptyDeviceRepository implements DeviceRepository {
+  @override
+  Future<List<DeviceDetail>> getDevices() async {
+    await Future.delayed(const Duration(milliseconds: 50));
+    return const [];
+  }
 }

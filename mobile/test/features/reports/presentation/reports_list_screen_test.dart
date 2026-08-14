@@ -10,6 +10,7 @@ import 'package:safeher_app/features/reports/domain/models/report_summary.dart';
 import 'package:safeher_app/features/reports/domain/reports_repository.dart';
 import 'package:safeher_app/features/reports/presentation/reports_list_screen.dart';
 import 'package:safeher_app/shared/models/threat_level.dart';
+import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
 List<ReportSummary> _sampleReports() => const [
   ReportSummary(
@@ -62,6 +63,10 @@ Widget _harness({Brightness brightness = Brightness.dark, ReportsRepository? rep
   return ProviderScope(
     overrides: [reportsRepositoryProvider.overrideWithValue(repo ?? _FakeReportsRepository())],
     child: MaterialApp.router(
+    // Mirrors main.dart's shell so screens render over the same ambient
+    // field users see; the scaffold background is transparent by design.
+    builder: (context, child) =>
+        SaAmbientBackground(child: child ?? const SizedBox.shrink()),
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
       routerConfig: _buildTestRouter(),
     ),

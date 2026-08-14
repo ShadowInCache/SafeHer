@@ -7,6 +7,59 @@ until the first tagged release.
 
 ## [Unreleased]
 
+### 2026-08-15 — Firebase auth, design system, repo cleanup
+
+#### Added
+- Guest sign-in (Firebase Anonymous) — "Continue as guest" reaches the SOS button
+  without an account. The backend still provisions a real account keyed to the
+  Firebase uid.
+- `AuthRepositoryNative` — email/password auth served directly by `fastapi_app`,
+  selectable with `--dart-define=USE_FIREBASE_AUTH=false`. Needs no Firebase console
+  configuration.
+- SRS section 4.1 auth: emailed OTP verification (FR-AUTH-01), password change with
+  cross-device session revocation (FR-AUTH-06), 5-failure/15-minute lockout
+  (FR-AUTH-07), 30-day deletion grace with an hourly purge worker (FR-AUTH-08),
+  and password reset by OTP.
+- `SaAmbientBackground` — a global aurora layer giving the glassmorphism in SRS
+  section 1 something to refract.
+- 51 new tests: `test_auth_security.py` (27), `test_firebase_token_verification.py`
+  (8), `auth_repository_native_test.dart` (16).
+
+#### Fixed
+- **Alembic could never run.** `alembic/env.py` drove an async URL with a sync
+  engine (`MissingGreenlet`), and `alembic/script.py.mako` was missing so no
+  migration could be generated. The dev database had been built by `create_all`
+  with no `alembic_version` row and six unapplied migrations.
+- **Firebase tokens rejected on clock skew.** A machine a second behind Google saw
+  fresh tokens fail as "Token used too early" — intermittent, unreproducible
+  sign-in failures. Now tolerates 30s.
+- **Response headers were silently dropped.** The global `HTTPException` handler
+  discarded `exc.headers`, killing `Retry-After` on lockouts and
+  `WWW-Authenticate` on 401s across every endpoint.
+- Phone and anonymous accounts were all filed under `@phone.safeherapp.com`; the
+  synthetic address is now provider-aware.
+- Token lifetimes corrected to 15 minutes / 30 days per FR-AUTH-04 (were 30 min / 7 days).
+- Light mode: login and forgot-password forced a dark background and used hardcoded
+  white text, failing the 4.5:1 contrast floor in SRS 5.4. Shadows were neutral
+  black where SRS section 2.4 specifies violet.
+
+#### Removed
+- `legacy_flask_gateway/` — the superseded Flask backend. Nothing outside itself
+  imported it. `flask`, `flask-cors` and `paho-mqtt` were **kept** because
+  `deployment/docker/safeher_event_processor.py` imports them; `flask-sock` was
+  dropped as genuinely unused.
+- `mobile/deprecated/legacy_flutter_tree/` (134 files) — an older Flutter tree,
+  unreferenced by `mobile/lib` or `mobile/test`.
+- `mobile/.chrome_fresh_profile/` (3,152 files, ~400 MB) — a committed Chrome
+  profile. The 2026-08-08 entry below claims this was untracked, but `git ls-files`
+  still listed every file, so that cleanup never actually landed.
+- `tests/test_microservices.py` (8/8 skipped; targets ports 8001-8004 that no longer
+  exist) and `tests/test_authentication.py` (undefined `token` fixture).
+- Empty root `lib/` and `test/` directory skeletons; all tracked `__pycache__` and
+  `*.db` files (`safeher.db` and `test_safeher.db` kept on disk as live dev data).
+- Working tree: 389 MB → 103 MB.
+
+
 ### Added
 - Full documentation set: `README.md`, `ARCHITECTURE.md`, `API.md`, `SETUP.md`,
   `CONTRIBUTING.md`, `DEPENDENCIES.md`, `PROJECT_STRUCTURE.md`, `SECURITY.md`,
@@ -37,6 +90,8 @@ until the first tagged release.
   the repo's first commit and must be treated as compromised regardless of the
   untrack. See [SECURITY.md](SECURITY.md).
 - Untracked `mobile/.chrome_fresh_profile/` (an accidentally-committed Chrome browser
+  <!-- NOTE 2026-08-15: this untracking never landed; the files were still in the
+  index and were removed for real on 2026-08-15. -->
   profile, ~3,150 files), all `__pycache__/` directories, and the four root-level
   `.db` files (`safeher.db`, `safeher.runtime.db`, `safeher_app.db`,
   `test_safeher.db`) — none of these should be version-controlled. `.gitignore`

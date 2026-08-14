@@ -5,6 +5,7 @@ import 'package:safeher_app/core/theme/app_theme.dart';
 import 'package:safeher_app/shared/components/overlays/sa_dialog.dart';
 
 import '../../../test_utils/widget_test_helpers.dart';
+import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
 void main() {
   group('SaDialog', () {
@@ -47,6 +48,10 @@ void main() {
     testWidgets('showSaDialog presents and dismisses', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+    // Mirrors main.dart's shell so screens render over the same ambient
+    // field users see; the scaffold background is transparent by design.
+    builder: (context, child) =>
+        SaAmbientBackground(child: child ?? const SizedBox.shrink()),
           theme: AppTheme.dark,
           home: Builder(
             builder: (context) => ElevatedButton(

@@ -3,11 +3,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_app.db import get_session
 from fastapi_app.repositories import emergency_contacts as emergency_repo
+from fastapi_app.repositories import users as user_repo
 from fastapi_app.schemas import (
     EmergencyContactCreate,
     EmergencyContactPublic,
     EmergencyContactUpdate,
     UserPublic,
+    UserUpdate,
 )
 from fastapi_app.security import get_current_user
 
@@ -17,6 +19,41 @@ router = APIRouter(prefix="/api/v1/users", tags=["users"])
 @router.get("/me", response_model=UserPublic)
 async def get_me(current_user: UserPublic = Depends(get_current_user)):
     return current_user
+
+
+@router.patch("/me", response_model=UserPublic)
+async def update_me(
+    payload: UserUpdate,
+    current_user: UserPublic = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    user = await user_repo.get_by_id(session, current_user.id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    updated = await user_repo.update(
+        session,
+        user=user,
+        full_name=payload.full_name,
+        phone=payload.phone,
+        avatar_url=payload.avatar_url,
+        push_notifications=payload.push_notifications,
+        sms_notifications=payload.sms_notifications,
+        email_notifications=payload.email_notifications,
+        location_sharing=payload.location_sharing,
+    )
+    return UserPublic.model_validate(updated)
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_me(
+    current_user: UserPublic = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    user = await user_repo.get_by_id(session, current_user.id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    await user_repo.delete_cascade(session, user=user)
+    return None
 
 
 @router.get("/me/emergency-contacts", response_model=list[EmergencyContactPublic])

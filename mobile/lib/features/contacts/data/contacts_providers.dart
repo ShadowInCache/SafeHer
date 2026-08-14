@@ -3,6 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/connectivity/connectivity_notifier.dart';
+import '../../../core/network/network_providers.dart';
 import '../../../core/offline/offline_queue_providers.dart';
 import '../domain/contacts_repository.dart';
 import '../domain/models/contact.dart';
@@ -14,7 +15,7 @@ part 'contacts_providers.g.dart';
 @riverpod
 ContactsRepository contactsRepository(Ref ref) {
   if (AppConfig.useMockApi) return ContactsRepositoryMock();
-  return ContactsRepositoryRemote();
+  return ContactsRepositoryRemote(apiClient: ref.watch(apiClientProvider));
 }
 
 /// The single source of truth for the app's emergency contacts — Settings,
@@ -37,7 +38,11 @@ class ContactsNotifier extends _$ContactsNotifier {
     final queue = ref.read(offlineQueueServiceProvider);
     queue.registerHandler('contacts.add', (payload) async {
       final repo = ref.read(contactsRepositoryProvider);
-      final updated = await repo.addContact(payload['name'] as String, payload['relationship'] as String);
+      final updated = await repo.addContact(
+        payload['name'] as String,
+        payload['phone'] as String,
+        payload['relationship'] as String,
+      );
       state = AsyncData(updated);
     });
     queue.registerHandler('contacts.remove', (payload) async {
@@ -49,21 +54,24 @@ class ContactsNotifier extends _$ContactsNotifier {
 
   bool get _isOffline => ref.read(connectivityNotifierProvider).valueOrNull == false;
 
-  Future<void> addContact(String name, String relationship) async {
+  Future<void> addContact(String name, String phone, String relationship) async {
     final current = state.valueOrNull ?? const [];
     if (_isOffline) {
       final optimistic = Contact(
         id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
         name: name,
+        phone: phone,
         relationship: relationship,
         priority: current.length + 1,
         confirmed: false,
       );
       state = AsyncData([...current, optimistic]);
-      await ref.read(offlineQueueServiceProvider).enqueue('contacts.add', {'name': name, 'relationship': relationship});
+      await ref
+          .read(offlineQueueServiceProvider)
+          .enqueue('contacts.add', {'name': name, 'phone': phone, 'relationship': relationship});
       return;
     }
-    state = AsyncData(await ref.read(contactsRepositoryProvider).addContact(name, relationship));
+    state = AsyncData(await ref.read(contactsRepositoryProvider).addContact(name, phone, relationship));
   }
 
   Future<void> removeContact(String id) async {

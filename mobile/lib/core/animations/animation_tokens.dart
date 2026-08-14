@@ -19,6 +19,12 @@ abstract final class AnimationTokens {
   static const Curve comfortableCurve = Curves.easeInOutCubic;
   static const Curve dramaticCurve = Curves.elasticOut;
 
+  /// Decelerate curve for entrances (content settling into place).
+  static const Curve decelerateCurve = Curves.easeOut;
+
+  /// Accelerate curve for exits (content leaving the screen).
+  static const Curve accelerateCurve = Curves.easeIn;
+
   /// Curve approximation of [expressiveSpring] for implicit animations
   /// (AnimatedContainer, flutter_animate, etc.) that accept a [Curve] but
   /// not a physics simulation.

@@ -13,11 +13,75 @@ import '../../../shared/components/cards/sa_stat_card.dart';
 import '../../../shared/components/feedback/sa_empty_state.dart';
 import '../../../shared/components/feedback/sa_loading_shimmer.dart';
 import '../../../shared/components/icons/sa_icon.dart';
+import '../../../shared/components/inputs/sa_text_field.dart';
 import '../../../shared/components/navigation/sa_bottom_nav_bar.dart';
+import '../../../shared/components/overlays/sa_bottom_sheet.dart';
+import '../../../shared/components/overlays/sa_toast.dart';
+import '../../auth/data/auth_providers.dart';
 import '../../contacts/data/contacts_providers.dart';
 import '../../devices/data/device_providers.dart';
 import '../data/profile_providers.dart';
 import '../domain/models/user_profile.dart';
+import 'widgets/profile_data_privacy_section.dart';
+import 'widgets/profile_preferences_section.dart';
+import 'widgets/profile_security_section.dart';
+
+Future<void> _editName(BuildContext context, WidgetRef ref, String currentName) async {
+  final newName = await showSaBottomSheet<String>(context, builder: (context) => _EditNameSheet(initialName: currentName));
+  if (newName == null || newName.trim().isEmpty || !context.mounted) return;
+  try {
+    await ref.read(profileRepositoryProvider).updateProfile(name: newName.trim());
+    ref.invalidate(userProfileProvider);
+  } catch (_) {
+    if (context.mounted) {
+      showSaToast(context, message: "Couldn't update your name. Check your connection and try again.", type: SaToastType.error);
+    }
+  }
+}
+
+class _EditNameSheet extends StatefulWidget {
+  const _EditNameSheet({required this.initialName});
+
+  final String initialName;
+
+  @override
+  State<_EditNameSheet> createState() => _EditNameSheetState();
+}
+
+class _EditNameSheetState extends State<_EditNameSheet> {
+  late final _controller = TextEditingController(text: widget.initialName);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Edit Name', style: AppTypography.headingM.copyWith(color: onSurface)),
+          const SizedBox(height: AppSpacing.space4),
+          SaTextField(label: 'Name', controller: _controller, semanticsLabel: 'Name', onChanged: (_) => setState(() {})),
+          const SizedBox(height: AppSpacing.space5),
+          SaButton(
+            label: 'Save',
+            fullWidth: true,
+            onPressed: _controller.text.trim().isEmpty
+                ? null
+                : () => Navigator.of(context).pop(_controller.text.trim()),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// Account overview — identity, headline stats, emergency contacts
 /// preview, and entry points into Settings and sign-out.
@@ -30,8 +94,8 @@ class ProfileScreen extends ConsumerWidget {
         context.go('/home');
       case SaNavTab.monitor:
         context.go('/monitor');
-      case SaNavTab.dashboard:
-        context.go('/dashboard');
+      case SaNavTab.devices:
+        context.go('/devices');
       case SaNavTab.profile:
         return;
     }
@@ -105,7 +169,21 @@ class _ProfileContent extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.space3),
-                Text(profile.name, style: AppTypography.headingL.copyWith(color: onSurface)),
+                Semantics(
+                  button: true,
+                  label: 'Edit name',
+                  child: GestureDetector(
+                    onTap: () => _editName(context, ref, profile.name),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(profile.name, style: AppTypography.headingL.copyWith(color: onSurface)),
+                        const SizedBox(width: AppSpacing.space2),
+                        SaIcon(SaIconGlyph.chevronRight, size: 16, color: onSurface.withValues(alpha: 0.4)),
+                      ],
+                    ),
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.space1),
                 Text(profile.email, style: AppTypography.bodyM.copyWith(color: onSurface.withValues(alpha: 0.6))),
                 const SizedBox(height: AppSpacing.space1),
@@ -127,8 +205,8 @@ class _ProfileContent extends ConsumerWidget {
               childAspectRatio: 0.75,
             ),
             delegate: SliverChildListDelegate([
-              SaStatCard(value: '${profile.safetyScore}', label: 'Safety Score'),
-              SaStatCard(value: '${profile.streakDays}d', label: 'Safe Streak'),
+              SaStatCard(value: profile.safetyScore != null ? '${profile.safetyScore}' : '—', label: 'Safety Score'),
+              SaStatCard(value: profile.streakDays != null ? '${profile.streakDays}d' : '—', label: 'Safe Streak'),
               SaStatCard(value: deviceCount != null ? '$deviceCount' : '—', label: 'Devices'),
             ]),
           ),
@@ -189,6 +267,28 @@ class _ProfileContent extends ConsumerWidget {
         SliverToBoxAdapter(child: const SizedBox(height: AppSpacing.space2)),
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenMarginPhone),
+          sliver: SliverToBoxAdapter(child: ProfileSecuritySection(email: profile.email)),
+        ),
+        SliverToBoxAdapter(child: const SizedBox(height: AppSpacing.space5)),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenMarginPhone),
+          sliver: const SliverToBoxAdapter(child: ProfilePreferencesSection()),
+        ),
+        SliverToBoxAdapter(child: const SizedBox(height: AppSpacing.space5)),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenMarginPhone),
+          sliver: SliverToBoxAdapter(
+            child: ProfileDataPrivacySection(
+              userDataSummary:
+                  '${profile.name} · ${profile.email}\n'
+                  '${deviceCount ?? 0} paired device(s) · ${contactsPreview.length} emergency contact(s) shown\n'
+                  'Member since ${profile.memberSince}.',
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(child: const SizedBox(height: AppSpacing.space5)),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenMarginPhone),
           sliver: SliverToBoxAdapter(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,7 +315,15 @@ class _ProfileContent extends ConsumerWidget {
                   variant: SaButtonVariant.danger,
                   confirmRequired: true,
                   fullWidth: true,
-                  onPressed: () => context.go('/auth/login'),
+                  onPressed: () async {
+                    try {
+                      await ref.read(authRepositoryProvider).signOut();
+                    } catch (_) {
+                      // Sign-out proceeds regardless — a failed server-side
+                      // sign-out shouldn't trap the user in the app.
+                    }
+                    if (context.mounted) context.go('/auth/login');
+                  },
                 ),
               ],
             ),

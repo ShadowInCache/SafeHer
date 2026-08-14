@@ -17,11 +17,28 @@ _REQUIRED_USER_COLUMNS = {
     "email",
     "password_hash",
     "full_name",
+    "phone",
+    "avatar_url",
+    "push_notifications",
+    "sms_notifications",
+    "email_notifications",
+    "location_sharing",
     "role",
     "is_active",
     "created_at",
     "updated_at",
 }
+
+
+def sync_database_url(raw_url: str) -> str:
+    """The URL with any async driver suffix stripped.
+
+    Alembic's offline mode and psycopg-based tooling both want the plain
+    dialect name, while the app engine wants the async one.
+    """
+    url = make_url(raw_url)
+    base = url.drivername.split("+", 1)[0]
+    return str(url.set(drivername=base))
 
 
 def _build_async_database_url(raw_url: str) -> str:
@@ -32,6 +49,20 @@ def _build_async_database_url(raw_url: str) -> str:
         url = url.set(drivername="postgresql+asyncpg")
     elif drivername.startswith("sqlite") and not drivername.endswith("+aiosqlite"):
         url = url.set(drivername="sqlite+aiosqlite")
+
+    if url.drivername.startswith("postgresql"):
+        # Supabase hands out `...?sslmode=require`, but that is a libpq spelling.
+        # asyncpg rejects it as an unexpected keyword, so translate it into the
+        # `ssl` argument asyncpg actually understands. Dropping it silently is
+        # not an option: Supabase refuses unencrypted connections.
+        query = dict(url.query)
+        sslmode = query.pop("sslmode", None)
+        if sslmode is not None:
+            if sslmode in {"disable", "allow"}:
+                query.pop("ssl", None)
+            else:
+                query["ssl"] = "require"
+            url = url.set(query=query)
 
     # Ensure SQLite file directory exists for relative paths
     if url.drivername.startswith("sqlite") and url.database and url.database != ":memory":
@@ -123,9 +154,54 @@ async def get_session() -> AsyncSession:
         yield session
 
 
+def _alembic_config() -> "Config":
+    from alembic.config import Config
+
+    cfg = Config(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
+    cfg.set_main_option("script_location", str(Path(__file__).resolve().parent.parent / "alembic"))
+    # Escape Alembic's interpolation character; Supabase passwords may contain `%`.
+    cfg.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
+    return cfg
+
+
+def _sync_schema(connection) -> None:
+    """Bring the schema to head, adopting a pre-existing create_all database.
+
+    Historically the schema was built by ``Base.metadata.create_all``, which
+    leaves no ``alembic_version`` row. Such a database is already structurally
+    at head but Alembic does not know it, so upgrading would replay 0001 and
+    fail on tables that already exist. Stamping first records the truth, then
+    the upgrade is a no-op; future migrations apply normally.
+    """
+    from alembic import command
+    from alembic.migration import MigrationContext
+    from sqlalchemy import inspect
+
+    cfg = _alembic_config()
+    cfg.attributes["connection"] = connection
+
+    inspector = inspect(connection)
+    tables = set(inspector.get_table_names())
+    current = MigrationContext.configure(connection).get_current_revision()
+
+    if current is None and "users" in tables:
+        logger.warning(
+            "Database has tables but no alembic_version; stamping at head to "
+            "adopt the pre-migration schema."
+        )
+        command.stamp(cfg, "head")
+
+    command.upgrade(cfg, "head")
+
+
 async def init_db() -> None:
-    # Import models here to ensure metadata is populated before create_all
+    """Apply migrations. Migrations are the single source of schema truth.
+
+    ``create_all`` is deliberately not used: it silently diverges from the
+    migration chain, which is how this database ended up with no
+    ``alembic_version`` and six migrations that had never run.
+    """
     import fastapi_app.models  # noqa: F401
 
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_sync_schema)

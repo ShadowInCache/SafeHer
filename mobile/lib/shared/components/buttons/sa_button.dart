@@ -148,53 +148,55 @@ class _SaButtonState extends State<SaButton> with SingleTickerProviderStateMixin
         onTapCancel: _onTapCancel,
         onTapUp: _onTapUp,
         onTap: _handleTap,
-        child: AnimatedBuilder(
-          animation: scale,
-          builder: (context, child) => Transform.scale(scale: scale.value, child: child),
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 150),
-            opacity: _disabled && !widget.isLoading ? 0.4 : 1.0,
-            child: Container(
-              height: widget.size.height,
-              width: widget.fullWidth ? double.infinity : null,
-              padding: EdgeInsets.symmetric(horizontal: widget.size.horizontalPadding),
-              constraints: const BoxConstraints(minWidth: AppSpacing.minTouchTarget),
-              decoration: BoxDecoration(
-                gradient: colors.gradient,
-                color: colors.gradient == null ? colors.background : null,
-                borderRadius: AppRadius.mdRadius,
-                border: colors.border != null ? Border.all(color: colors.border!, width: 1.5) : null,
-              ),
-              alignment: Alignment.center,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 150),
-                child: widget.isLoading
-                    ? SizedBox(
-                        key: const ValueKey('loading'),
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2.5, color: colors.foreground),
-                      )
-                    : Row(
-                        key: const ValueKey('label'),
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (widget.icon != null) ...[
-                            IconTheme(
-                              data: IconThemeData(color: colors.foreground, size: 18),
-                              child: widget.icon!,
+        child: RepaintBoundary(
+          child: AnimatedBuilder(
+            animation: scale,
+            builder: (context, child) => Transform.scale(scale: scale.value, child: child),
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 150),
+              opacity: _disabled && !widget.isLoading ? 0.4 : 1.0,
+              child: Container(
+                height: widget.size.height,
+                width: widget.fullWidth ? double.infinity : null,
+                padding: EdgeInsets.symmetric(horizontal: widget.size.horizontalPadding),
+                constraints: const BoxConstraints(minWidth: AppSpacing.minTouchTarget),
+                decoration: BoxDecoration(
+                  gradient: colors.gradient,
+                  color: colors.gradient == null ? colors.background : null,
+                  borderRadius: AppRadius.mdRadius,
+                  border: colors.border != null ? Border.all(color: colors.border!, width: 1.5) : null,
+                ),
+                alignment: Alignment.center,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 150),
+                  child: widget.isLoading
+                      ? SizedBox(
+                          key: const ValueKey('loading'),
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2.5, color: colors.foreground),
+                        )
+                      : Row(
+                          key: const ValueKey('label'),
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (widget.icon != null) ...[
+                              IconTheme(
+                                data: IconThemeData(color: colors.foreground, size: 18),
+                                child: widget.icon!,
+                              ),
+                              const SizedBox(width: AppSpacing.space2),
+                            ],
+                            Flexible(
+                              child: Text(
+                                label,
+                                style: widget.size.labelStyle.copyWith(color: colors.foreground),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                            const SizedBox(width: AppSpacing.space2),
                           ],
-                          Flexible(
-                            child: Text(
-                              label,
-                              style: widget.size.labelStyle.copyWith(color: colors.foreground),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                ),
               ),
             ),
           ),

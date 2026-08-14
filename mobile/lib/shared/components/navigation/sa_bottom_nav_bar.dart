@@ -9,20 +9,26 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_typography.dart';
 import '../icons/sa_icon.dart';
 
-enum SaNavTab { home, monitor, dashboard, profile }
+/// [home] is labelled "Dashboard" in the UI — it's SafeHer's single
+/// command-center screen (safety status, device status, live-monitoring
+/// summary, quick actions). The Dart identifier stays `home` to avoid
+/// churning every route/import that predates the rename; only the visible
+/// label and this tab's meaning changed. There is deliberately no separate
+/// analytics-only "Dashboard" tab anymore — it duplicated this one.
+enum SaNavTab { home, monitor, devices, profile }
 
 extension on SaNavTab {
   SaIconGlyph get glyph => switch (this) {
-    SaNavTab.home => SaIconGlyph.home,
+    SaNavTab.home => SaIconGlyph.dashboard,
     SaNavTab.monitor => SaIconGlyph.monitorPulse,
-    SaNavTab.dashboard => SaIconGlyph.dashboard,
+    SaNavTab.devices => SaIconGlyph.bluetooth,
     SaNavTab.profile => SaIconGlyph.profile,
   };
 
   String get label => switch (this) {
-    SaNavTab.home => 'Home',
+    SaNavTab.home => 'Dashboard',
     SaNavTab.monitor => 'Monitor',
-    SaNavTab.dashboard => 'Dashboard',
+    SaNavTab.devices => 'Devices',
     SaNavTab.profile => 'Profile',
   };
 }
@@ -50,7 +56,7 @@ class SaBottomNavBar extends StatelessWidget {
   final bool visible;
 
   static const _leftTabs = [SaNavTab.home, SaNavTab.monitor];
-  static const _rightTabs = [SaNavTab.dashboard, SaNavTab.profile];
+  static const _rightTabs = [SaNavTab.devices, SaNavTab.profile];
 
   @override
   Widget build(BuildContext context) {

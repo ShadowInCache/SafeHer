@@ -3,7 +3,7 @@
 SafeHer is a monorepo with three independent parts that share a git history but not a
 runtime: a **current backend** (`fastapi_app/`), a **mobile frontend** (`mobile/`), and
 a set of **supporting systems** (ML training, device firmware, cloud functions,
-deployment). A **legacy backend** (`legacy_flask_gateway/`) is kept for reference only.
+deployment).
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how these pieces actually talk to each
 other at runtime.
 
@@ -11,7 +11,6 @@ other at runtime.
 SafeHer/
 ├── fastapi_app/          Current backend — FastAPI, the only backend fastapi/mobile talk to
 ├── mobile/                Flutter frontend (Riverpod + GoRouter), all UI screens
-├── legacy_flask_gateway/  Superseded Flask backend, kept for reference — not deployed
 ├── ml_training/           Offline model-training scripts + trained artifacts (XGBoost, voice, weapon)
 ├── hardware/               ESP32 firmware for the two physical devices (glove, glasses)
 ├── cloud_functions/       Multi-cloud serverless functions (motion/voice/weapon/fusion)
@@ -82,28 +81,9 @@ Each `features/<name>/` follows Clean Architecture: `data/` (repositories, mock 
 `domain/` (entities, use cases), `presentation/` (screens, widgets, Riverpod
 controllers). See `mobile/test/` for the mirrored test tree.
 
-## `legacy_flask_gateway/` — superseded backend, reference only
-
-Originally `src/`, renamed and relocated during the 2026-08-08 audit for clarity. This
-is the Flask-based backend that `fastapi_app/` replaced. Nothing in `fastapi_app/`,
-`mobile/`, `tests/`, or `deployment/`'s active compose file imports or runs it anymore
-— `legacy_flask_gateway/services/database/db_service.py` even raises on
-instantiation with a comment pointing at the new SQLAlchemy models. Kept rather than
-deleted because it documents real, previously-working business logic (its own
-WebSocket manager, orchestrator, and Supabase-archive endpoints) that hasn't been
-fully re-verified as present in `fastapi_app/`.
-
-```text
-legacy_flask_gateway/
-├── core/            Flask app (api_gateway.py), orchestrator, websocket_manager
-├── services/         Raw-sqlite db_service (deprecated/raises), its own MQTT service
-└── utils/             Flask-era auth, config, logger, validators
-```
-
 ## `ml_training/` — offline model training (originally `src/models/`)
 
-Independent of both backends — no imports from `fastapi_app/` or
-`legacy_flask_gateway/` in either direction.
+Independent of the backend — no imports from `fastapi_app/` in either direction.
 
 ```text
 ml_training/
@@ -153,11 +133,22 @@ deployment/
 
 ## `tests/` (backend, pytest)
 
-`test_fastapi_contracts.py` and parts of `test_api_gateway.py`/`test_integration.py`
-exercise the live `fastapi_app` routes. `test_authentication.py` and
-`test_microservices.py` predate the current architecture (interactive script; ports
-for standalone services that no longer exist) — see AUDIT_REPORT.md for details before
-relying on them. Mobile tests live under `mobile/test/`, mirroring `mobile/lib/`.
+Two classes of test live here.
+
+**In-process (no server needed)** — the reliable set, 67 tests total:
+`test_fastapi_contracts.py`, `test_safety_contracts.py`, `test_auth_security.py`
+(SRS section 4.1 auth behaviour), `test_auth_provisioning.py` and
+`test_firebase_token_verification.py`. These drive the ASGI app directly via
+`httpx.ASGITransport`.
+
+**Live-server (HTTP)** — `test_api_gateway.py` and `test_integration.py` hit a running
+backend over `requests`; start it first or they fail on connection.
+
+`test_authentication.py` (broken `token` fixture) and `test_microservices.py` (targeted
+standalone services on ports 8001-8004 that no longer exist, so all 8 tests skipped
+unconditionally) were deleted on 2026-08-15.
+
+Mobile tests live under `mobile/test/`, mirroring `mobile/lib/`.
 
 ## `docs/`
 

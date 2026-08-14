@@ -10,10 +10,11 @@ import 'package:safeher_app/features/contacts/domain/models/contact.dart';
 import 'package:safeher_app/features/settings/presentation/emergency_contacts_screen.dart';
 
 import '../../../test_utils/offline_test_overrides.dart';
+import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
 List<Contact> _sampleContacts() => [
-  const Contact(id: '1', name: 'Anika Sharma', relationship: 'Sister', priority: 1, confirmed: true),
-  const Contact(id: '2', name: 'Rahul Verma', relationship: 'Partner', priority: 2, confirmed: true),
+  const Contact(id: '1', name: 'Anika Sharma', phone: '+15550101001', relationship: 'Sister', priority: 1, confirmed: true),
+  const Contact(id: '2', name: 'Rahul Verma', phone: '+15550101002', relationship: 'Partner', priority: 2, confirmed: true),
 ];
 
 class _FakeContactsRepository implements ContactsRepository {
@@ -31,10 +32,17 @@ class _FakeContactsRepository implements ContactsRepository {
   }
 
   @override
-  Future<List<Contact>> addContact(String name, String relationship) async {
+  Future<List<Contact>> addContact(String name, String phone, String relationship) async {
     await Future.delayed(const Duration(milliseconds: 50));
     _contacts.add(
-      Contact(id: '${_nextId++}', name: name, relationship: relationship, priority: _contacts.length + 1, confirmed: false),
+      Contact(
+        id: '${_nextId++}',
+        name: name,
+        phone: phone,
+        relationship: relationship,
+        priority: _contacts.length + 1,
+        confirmed: false,
+      ),
     );
     return List.unmodifiable(_contacts);
   }
@@ -73,6 +81,10 @@ Widget _harness({Brightness brightness = Brightness.dark, ContactsRepository? re
       ...offlineTestOverrides(),
     ],
     child: MaterialApp.router(
+    // Mirrors main.dart's shell so screens render over the same ambient
+    // field users see; the scaffold background is transparent by design.
+    builder: (context, child) =>
+        SaAmbientBackground(child: child ?? const SizedBox.shrink()),
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
       routerConfig: _buildTestRouter(),
     ),
@@ -156,7 +168,8 @@ void main() {
 
       final fields = find.byType(TextField);
       await tester.enterText(fields.at(0), 'Kabir Rao');
-      await tester.enterText(fields.at(1), 'Neighbor');
+      await tester.enterText(fields.at(1), '+15550101099');
+      await tester.enterText(fields.at(2), 'Neighbor');
       await tester.pump();
 
       await tester.tap(find.text('Add Contact'), warnIfMissed: false);

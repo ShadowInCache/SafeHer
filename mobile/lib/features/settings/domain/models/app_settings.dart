@@ -1,19 +1,27 @@
 class AppSettings {
   const AppSettings({
     required this.pushNotifications,
+    required this.smsNotifications,
+    required this.emailNotifications,
     required this.locationSharing,
-    required this.biometricLock,
   });
 
   final bool pushNotifications;
+  final bool smsNotifications;
+  final bool emailNotifications;
   final bool locationSharing;
-  final bool biometricLock;
 
-  AppSettings copyWith({bool? pushNotifications, bool? locationSharing, bool? biometricLock}) {
+  AppSettings copyWith({
+    bool? pushNotifications,
+    bool? smsNotifications,
+    bool? emailNotifications,
+    bool? locationSharing,
+  }) {
     return AppSettings(
       pushNotifications: pushNotifications ?? this.pushNotifications,
+      smsNotifications: smsNotifications ?? this.smsNotifications,
+      emailNotifications: emailNotifications ?? this.emailNotifications,
       locationSharing: locationSharing ?? this.locationSharing,
-      biometricLock: biometricLock ?? this.biometricLock,
     );
   }
 }

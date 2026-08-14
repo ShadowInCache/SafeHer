@@ -83,11 +83,17 @@ class _SaConfirmDialogState extends State<SaConfirmDialog> {
                 onPressed: () => Navigator.of(context).pop(false),
               ),
               const SizedBox(width: AppSpacing.space2),
-              SaButton(
-                label: widget.confirmLabel,
-                size: SaButtonSize.sm,
-                variant: SaButtonVariant.danger,
-                onPressed: _matches ? () => Navigator.of(context).pop(true) : null,
+              // Flexible so long custom confirmLabels (e.g. "Delete my
+              // account") shrink to fit narrow dialogs instead of
+              // overflowing the row — SaButton's own label already
+              // ellipsizes once constrained.
+              Flexible(
+                child: SaButton(
+                  label: widget.confirmLabel,
+                  size: SaButtonSize.sm,
+                  variant: SaButtonVariant.danger,
+                  onPressed: _matches ? () => Navigator.of(context).pop(true) : null,
+                ),
               ),
             ],
           ),

@@ -20,6 +20,7 @@ class DeviceDetail {
     required this.firmwareVersion,
     required this.updateAvailable,
     required this.sensors,
+    this.lastSeen,
   });
 
   final String id;
@@ -32,4 +33,9 @@ class DeviceDetail {
   final String firmwareVersion;
   final bool updateAvailable;
   final SensorReading sensors;
+
+  /// When the backend last heard from this device (`last_seen` in
+  /// `fastapi_app/schemas.py`'s `DevicePublic`) — null if it's never sent
+  /// a heartbeat.
+  final DateTime? lastSeen;
 }

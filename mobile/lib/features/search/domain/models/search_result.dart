@@ -1,1 +1,1 @@
-enum SearchCategory { all, incidents, contacts, devices }
+enum SearchCategory { all, incidents, contacts, devices, settings }

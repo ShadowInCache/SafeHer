@@ -68,16 +68,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final loginState = ref.watch(loginControllerProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.dark900,
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment.topCenter,
-            radius: 1.0,
-            colors: [AppColors.violet950, AppColors.dark900],
-          ),
-        ),
-        child: SafeArea(
+      backgroundColor: Colors.transparent,
+      // Background comes from the global `SaAmbientBackground`. A per-screen
+      // gradient only covered its own child -- leaving a hard seam below the
+      // fold -- and hardcoded dark colours onto light mode.
+      body: SafeArea(
           child: SingleChildScrollView(
             padding: EdgeInsets.fromLTRB(
               AppSpacing.screenMarginPhone,
@@ -95,9 +90,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const SaIcon(SaIconGlyph.shield, size: 48, color: Colors.white),
+                      SaIcon(SaIconGlyph.shield, size: 48, color: onSurface),
                       const SizedBox(width: AppSpacing.space2),
-                      Text('SAFEHER', style: AppTypography.headingL.copyWith(color: Colors.white, letterSpacing: 1.5)),
+                      Text(
+                        'SAFEHER',
+                        style: AppTypography.headingL.copyWith(color: onSurface, letterSpacing: 1.5),
+                      ),
                     ],
                   ),
                 ),
@@ -107,12 +105,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   duration: const Duration(milliseconds: 350),
                   curve: Curves.easeOutCubic,
                   builder: (context, offsetY, child) => Transform.translate(offset: Offset(0, offsetY), child: child),
-                  child: Text('Welcome back', style: AppTypography.displayM.copyWith(color: Colors.white)),
+                  child: Text('Welcome back', style: AppTypography.displayM.copyWith(color: onSurface)),
                 ),
                 const SizedBox(height: AppSpacing.space2),
                 Text(
                   'Sign in to your safe space',
-                  style: AppTypography.bodyL.copyWith(color: Colors.white.withValues(alpha: 0.7)),
+                  style: AppTypography.bodyL.copyWith(color: onSurface.withValues(alpha: 0.7)),
                 ),
                 const SizedBox(height: AppSpacing.space8),
                 SaTextField(
@@ -160,7 +158,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 _SocialSignInButton(
                   label: 'Continue with Google',
                   glyph: SaIconGlyph.shield,
-                  onPressed: () {},
+                  isLoading: loginState.isLoading,
+                  onPressed: () => ref.read(loginControllerProvider.notifier).signInWithGoogle(),
                 ),
                 if (defaultTargetPlatform == TargetPlatform.iOS) ...[
                   const SizedBox(height: AppSpacing.space3),
@@ -169,14 +168,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     variant: SaButtonVariant.secondary,
                     size: SaButtonSize.lg,
                     fullWidth: true,
-                    onPressed: () {},
+                    isLoading: loginState.isLoading,
+                    onPressed: () => ref.read(loginControllerProvider.notifier).signInWithApple(),
                   ),
                 ],
-                const SizedBox(height: AppSpacing.space8),
+                const SizedBox(height: AppSpacing.space5),
+                // Guest mode. Deliberately the last option and styled as a
+                // text button: it is a genuine escape hatch for someone who
+                // needs the SOS button now, not the path we steer people to,
+                // because an anonymous account cannot be recovered on a new
+                // device.
+                Center(
+                  child: TextButton(
+                    onPressed: loginState.isLoading
+                        ? null
+                        : () => ref.read(loginControllerProvider.notifier).signInAsGuest(),
+                    child: Text(
+                      'Continue as guest',
+                      style: AppTypography.labelL.copyWith(
+                        color: onSurface.withValues(alpha: 0.75),
+                        decoration: TextDecoration.underline,
+                        decorationColor: onSurface.withValues(alpha: 0.35),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.space5),
                 Center(
                   child: Wrap(
                     children: [
-                      Text('New here? ', style: AppTypography.bodyM.copyWith(color: Colors.white.withValues(alpha: 0.7))),
+                      Text(
+                        'New here? ',
+                        style: AppTypography.bodyM.copyWith(color: onSurface.withValues(alpha: 0.7)),
+                      ),
                       GestureDetector(
                         onTap: () => context.go('/auth/signup'),
                         child: Text(
@@ -191,17 +215,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
           ),
         ),
-      ),
     );
   }
 }
 
 class _SocialSignInButton extends StatelessWidget {
-  const _SocialSignInButton({required this.label, required this.glyph, required this.onPressed});
+  const _SocialSignInButton({
+    required this.label,
+    required this.glyph,
+    required this.onPressed,
+    this.isLoading = false,
+  });
 
   final String label;
   final SaIconGlyph glyph;
   final VoidCallback onPressed;
+
+  /// Disables the button while any sign-in is in flight, so a second provider
+  /// cannot be started on top of the first.
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -213,7 +245,7 @@ class _SocialSignInButton extends StatelessWidget {
         borderRadius: AppRadius.mdRadius,
         child: InkWell(
           borderRadius: AppRadius.mdRadius,
-          onTap: onPressed,
+          onTap: isLoading ? null : onPressed,
           child: SizedBox(
             height: 54,
             child: Row(

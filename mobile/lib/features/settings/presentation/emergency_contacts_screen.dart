@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/platform/external_actions.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/theme/theme_extensions.dart';
+import '../../../shared/components/buttons/sa_button.dart';
 import '../../../shared/components/cards/sa_contact_card.dart';
 import '../../../shared/components/feedback/sa_empty_state.dart';
 import '../../../shared/components/feedback/sa_loading_shimmer.dart';
 import '../../../shared/components/icons/sa_icon.dart';
 import '../../../shared/components/overlays/sa_bottom_sheet.dart';
+import '../../../shared/components/overlays/sa_toast.dart';
 import '../../contacts/data/contacts_providers.dart';
 import '../../contacts/domain/models/contact.dart';
 import 'widgets/add_contact_sheet.dart';
@@ -21,9 +24,12 @@ class EmergencyContactsScreen extends ConsumerWidget {
   const EmergencyContactsScreen({super.key});
 
   Future<void> _handleAdd(BuildContext context, WidgetRef ref) async {
-    final result = await showSaBottomSheet<(String, String)>(context, builder: (context) => const AddContactSheet());
+    final result = await showSaBottomSheet<(String, String, String)>(
+      context,
+      builder: (context) => const AddContactSheet(),
+    );
     if (result == null) return;
-    await ref.read(contactsNotifierProvider.notifier).addContact(result.$1, result.$2);
+    await ref.read(contactsNotifierProvider.notifier).addContact(result.$1, result.$2, result.$3);
   }
 
   @override
@@ -101,6 +107,9 @@ class _ContactsList extends ConsumerWidget {
         AppSpacing.space8,
       ),
       itemCount: contacts.length,
+      // ignore: deprecated_member_use -- onReorderItem isn't available on
+      // the Flutter SDK version pinned for local dev yet; onReorder still
+      // works identically, just needs the oldIndex/newIndex adjustment below.
       onReorder: (oldIndex, newIndex) {
         final reordered = List<Contact>.of(contacts);
         if (newIndex > oldIndex) newIndex -= 1;
@@ -118,16 +127,76 @@ class _ContactsList extends ConsumerWidget {
             direction: DismissDirection.endToStart,
             background: _DeleteBackground(),
             onDismissed: (_) => ref.read(contactsNotifierProvider.notifier).removeContact(contact.id),
-            child: SaContactCard(
-              name: contact.name,
-              relationship: contact.relationship,
-              priority: index + 1,
-              confirmed: contact.confirmed,
-              dragHandle: const SaIcon(SaIconGlyph.refresh, size: 18),
+            child: Column(
+              children: [
+                SaContactCard(
+                  name: contact.name,
+                  relationship: contact.relationship,
+                  priority: index + 1,
+                  confirmed: contact.confirmed,
+                  dragHandle: const SaIcon(SaIconGlyph.refresh, size: 18),
+                ),
+                _ContactActions(contact: contact),
+              ],
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// Call / message shortcuts for a saved contact. Both hand off to the device's
+/// own dialler and messaging app — SafeHer never places the call itself, and
+/// says so plainly if the device has no app to handle it.
+class _ContactActions extends StatelessWidget {
+  const _ContactActions({required this.contact});
+
+  final Contact contact;
+
+  static const _actions = ExternalActions();
+
+  Future<void> _call(BuildContext context) async {
+    if (await _actions.dial(contact.phone)) return;
+    if (context.mounted) {
+      showSaToast(context, message: 'No dialler available on this device', type: SaToastType.error);
+    }
+  }
+
+  Future<void> _message(BuildContext context) async {
+    if (await _actions.sendSms(contact.phone)) return;
+    if (context.mounted) {
+      showSaToast(context, message: 'No messaging app available', type: SaToastType.error);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.space2),
+      child: Row(
+        children: [
+          Expanded(
+            child: SaButton(
+              label: 'Call',
+              onPressed: () => _call(context),
+              variant: SaButtonVariant.secondary,
+              size: SaButtonSize.sm,
+              semanticsLabel: 'Call ${contact.name}',
+            ),
+          ),
+          const SizedBox(width: AppSpacing.space2),
+          Expanded(
+            child: SaButton(
+              label: 'Message',
+              onPressed: () => _message(context),
+              variant: SaButtonVariant.secondary,
+              size: SaButtonSize.sm,
+              semanticsLabel: 'Message ${contact.name}',
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

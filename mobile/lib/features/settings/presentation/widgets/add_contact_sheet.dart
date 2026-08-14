@@ -6,7 +6,9 @@ import '../../../../shared/components/buttons/sa_button.dart';
 import '../../../../shared/components/inputs/sa_text_field.dart';
 
 /// Bottom sheet form for adding a new emergency contact. Pops with a
-/// `(name, relationship)` record, or null if cancelled.
+/// `(name, phone, relationship)` record, or null if cancelled. Phone is
+/// required — it's how the contact actually gets notified (SMS/call), and
+/// the backend rejects a contact without one.
 class AddContactSheet extends StatefulWidget {
   const AddContactSheet({super.key});
 
@@ -16,20 +18,27 @@ class AddContactSheet extends StatefulWidget {
 
 class _AddContactSheetState extends State<AddContactSheet> {
   final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _relationshipController = TextEditingController();
 
   @override
   void dispose() {
     _nameController.dispose();
+    _phoneController.dispose();
     _relationshipController.dispose();
     super.dispose();
   }
 
-  bool get _canSave => _nameController.text.trim().isNotEmpty && _relationshipController.text.trim().isNotEmpty;
+  bool get _canSave =>
+      _nameController.text.trim().isNotEmpty &&
+      _phoneController.text.trim().replaceAll(RegExp(r'\s'), '').length >= 5 &&
+      _relationshipController.text.trim().isNotEmpty;
 
   void _submit() {
     if (!_canSave) return;
-    Navigator.of(context).pop((_nameController.text.trim(), _relationshipController.text.trim()));
+    Navigator.of(
+      context,
+    ).pop((_nameController.text.trim(), _phoneController.text.trim(), _relationshipController.text.trim()));
   }
 
   @override
@@ -44,6 +53,14 @@ class _AddContactSheetState extends State<AddContactSheet> {
           Text('Add Emergency Contact', style: AppTypography.headingM.copyWith(color: onSurface)),
           const SizedBox(height: AppSpacing.space4),
           SaTextField(label: 'Name', controller: _nameController, onChanged: (_) => setState(() {})),
+          const SizedBox(height: AppSpacing.space4),
+          SaTextField(
+            label: 'Phone number',
+            controller: _phoneController,
+            keyboardType: TextInputType.phone,
+            semanticsLabel: 'Phone number',
+            onChanged: (_) => setState(() {}),
+          ),
           const SizedBox(height: AppSpacing.space4),
           SaTextField(
             label: 'Relationship',

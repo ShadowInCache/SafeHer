@@ -12,6 +12,10 @@ class UserProfile {
   final String email;
   final String phone;
   final String memberSince;
-  final int safetyScore;
-  final int streakDays;
+
+  /// Null when the backend has no safety-score/streak concept for this
+  /// user yet (it doesn't exist as a backend feature today) — shown as
+  /// "—" rather than a fabricated number.
+  final int? safetyScore;
+  final int? streakDays;
 }

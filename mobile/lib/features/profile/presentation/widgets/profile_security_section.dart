@@ -1,0 +1,117 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../../core/biometrics/biometric_providers.dart';
+import '../../../../core/local/app_preferences.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/theme/app_typography.dart';
+import '../../../../shared/components/cards/sa_card.dart';
+import '../../../../shared/components/icons/sa_icon.dart';
+import '../../../../shared/components/overlays/sa_toast.dart';
+import '../../../auth/data/auth_providers.dart';
+
+/// Profile > Security — password reset and the real biometric-unlock
+/// toggle (backed by `local_auth`, not a decorative switch).
+class ProfileSecuritySection extends ConsumerWidget {
+  const ProfileSecuritySection({required this.email, super.key});
+
+  final String email;
+
+  Future<void> _sendPasswordReset(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref.read(authRepositoryProvider).sendPasswordResetEmail(email);
+      if (context.mounted) showSaToast(context, message: 'Password reset link sent to $email.');
+    } catch (_) {
+      if (context.mounted) {
+        showSaToast(context, message: "Couldn't send reset link. Try again.", type: SaToastType.error);
+      }
+    }
+  }
+
+  Future<void> _toggleBiometric(BuildContext context, WidgetRef ref, bool enable) async {
+    final biometrics = ref.read(biometricServiceProvider);
+    final prefs = ref.read(appPreferencesProvider);
+
+    if (!enable) {
+      await prefs.setBiometricEnabled(false);
+      ref.invalidate(appPreferencesProvider);
+      return;
+    }
+
+    if (!await biometrics.isAvailable) {
+      if (context.mounted) {
+        showSaToast(
+          context,
+          message: 'No ${biometrics.platformLabel} enrolled on this device.',
+          type: SaToastType.error,
+        );
+      }
+      return;
+    }
+
+    final authenticated = await biometrics.authenticate(reason: 'Enable ${biometrics.platformLabel} unlock for SafeHer');
+    if (authenticated) {
+      await prefs.setBiometricEnabled(true);
+      ref.invalidate(appPreferencesProvider);
+      if (context.mounted) showSaToast(context, message: '${biometrics.platformLabel} unlock enabled.');
+    } else if (context.mounted) {
+      showSaToast(context, message: 'Authentication failed or was cancelled.', type: SaToastType.error);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final prefs = ref.watch(appPreferencesProvider);
+    final biometrics = ref.read(biometricServiceProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Security', style: AppTypography.headingM.copyWith(color: onSurface)),
+        const SizedBox(height: AppSpacing.space3),
+        SaCard(
+          semanticsLabel: 'Change password',
+          onTap: () => _sendPasswordReset(context, ref),
+          child: Row(
+            children: [
+              const SaIcon(SaIconGlyph.check, size: 20, color: AppColors.violet500),
+              const SizedBox(width: AppSpacing.space3),
+              Expanded(child: Text('Change Password', style: AppTypography.bodyL.copyWith(color: onSurface))),
+              SaIcon(SaIconGlyph.chevronRight, size: 18, color: onSurface.withValues(alpha: 0.4)),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.space3),
+        SaCard(
+          semanticsLabel: '${biometrics.platformLabel} unlock, ${prefs.biometricEnabled ? "on" : "off"}',
+          child: Row(
+            children: [
+              const SaIcon(SaIconGlyph.shield, size: 20, color: AppColors.violet500),
+              const SizedBox(width: AppSpacing.space3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Biometric Unlock', style: AppTypography.bodyL.copyWith(color: onSurface)),
+                    Text(
+                      biometrics.platformLabel,
+                      style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.5)),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: prefs.biometricEnabled,
+                onChanged: (value) => _toggleBiometric(context, ref, value),
+                activeTrackColor: AppColors.violet500,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}

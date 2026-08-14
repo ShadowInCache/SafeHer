@@ -10,7 +10,6 @@
   committed alongside the `models.py` change — don't hand-edit the schema.
 - New settings go in `fastapi_app/config.py`'s `Settings` class with a sane default,
   and get documented in [SETUP.md](SETUP.md#2-environment-variables).
-- Don't add code to `legacy_flask_gateway/`. It's archived, not maintained.
 
 **Mobile (`mobile/`)** — this codebase follows a stricter set of rules than most
 Flutter projects, established from its original build spec:
@@ -77,7 +76,6 @@ Phase 5: offline queue (Hive-backed retry queue + ConnectivityNotifier)
 - New ML model → new folder under `ml_training/<model_name>/`, corresponding inference
   function under `cloud_functions/<model_name>/` if it needs to run standalone.
 - New firmware → new folder under `hardware/<device_name>/`.
-- Don't add new files to `legacy_flask_gateway/`.
 
 ## Security-sensitive changes
 

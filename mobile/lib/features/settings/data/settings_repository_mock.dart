@@ -2,7 +2,12 @@ import '../domain/models/app_settings.dart';
 import '../domain/settings_repository.dart';
 
 class SettingsRepositoryMock implements SettingsRepository {
-  AppSettings _settings = const AppSettings(pushNotifications: true, locationSharing: true, biometricLock: false);
+  AppSettings _settings = const AppSettings(
+    pushNotifications: true,
+    smsNotifications: false,
+    emailNotifications: true,
+    locationSharing: true,
+  );
 
   @override
   Future<AppSettings> getSettings() async {

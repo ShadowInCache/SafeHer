@@ -53,9 +53,12 @@ class SafeHerColors extends ThemeExtension<SafeHerColors> {
   static const dark = SafeHerColors(
     glassFill: AppColors.glassFillDark,
     glassBorder: AppColors.glassBorderDark,
-    surfaceBase: AppColors.dark900,
-    surfaceElevated: AppColors.dark800,
-    surfaceHighest: AppColors.dark700,
+    // Translucent rather than opaque: a card over the aurora should be lit by
+    // it, which is what makes the glass in the SRS read as glass. Alpha stays
+    // high enough that body text keeps its WCAG AA contrast (SRS 5.4).
+    surfaceBase: Color(0xD90A0A0F),
+    surfaceElevated: Color(0xD112121A),
+    surfaceHighest: Color(0xDB1C1C28),
     threatSafe: AppColors.threatSafe,
     threatSafeGlow: AppColors.threatSafeGlow,
     threatCaution: AppColors.threatCaution,
@@ -74,9 +77,12 @@ class SafeHerColors extends ThemeExtension<SafeHerColors> {
   static const light = SafeHerColors(
     glassFill: AppColors.glassFillLight,
     glassBorder: AppColors.glassBorderLight,
-    surfaceBase: AppColors.light50,
-    surfaceElevated: Color(0xFFFFFFFF),
-    surfaceHighest: AppColors.light100,
+    // Light mode was flat grey-on-white with no brand presence at all. These
+    // are translucent whites, so the violet/rose wash behind them warms every
+    // card instead of leaving the page neutral.
+    surfaceBase: Color(0xCCFFFFFF),
+    surfaceElevated: Color(0xDBFFFFFF),
+    surfaceHighest: Color(0xF2FFFFFF),
     threatSafe: AppColors.threatSafe,
     threatSafeGlow: AppColors.threatSafeGlow,
     threatCaution: AppColors.threatCaution,

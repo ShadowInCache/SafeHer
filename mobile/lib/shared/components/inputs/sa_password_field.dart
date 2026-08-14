@@ -49,11 +49,16 @@ class _SaPasswordFieldState extends State<SaPasswordField> {
   bool _obscured = true;
   int _strength = 0;
 
+  // Spec: 1 red segment (weak) -> 2 orange (fair) -> 3 yellow (good) ->
+  // 4 green + checkmark (strong) — four visually distinct tiers, not two
+  // pairs of the same color.
+  static const _yellow500 = Color(0xFFEAB308);
+
   static const _strengthColors = [
     AppColors.neutral500,
     AppColors.danger500,
-    AppColors.warning500,
-    AppColors.warning500,
+    AppColors.threatElevated,
+    _yellow500,
     AppColors.success500,
   ];
 

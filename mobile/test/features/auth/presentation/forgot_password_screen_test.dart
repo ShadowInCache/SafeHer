@@ -7,13 +7,26 @@ import 'package:safeher_app/core/theme/app_theme.dart';
 import 'package:safeher_app/features/auth/data/auth_providers.dart';
 import 'package:safeher_app/features/auth/domain/auth_repository.dart';
 import 'package:safeher_app/features/auth/presentation/forgot_password_screen.dart';
+import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
 class _FakeAuthRepository implements AuthRepository {
+  @override
+  bool get phoneVerificationUnavailable => false;
+
   @override
   Future<bool> hasActiveSession() async => false;
 
   @override
   Future<void> signInWithEmail({required String email, required String password}) async {}
+
+  @override
+  Future<void> signInAsGuest() async {}
+
+  @override
+  Future<void> signInWithGoogle() async {}
+
+  @override
+  Future<void> signInWithApple() async {}
 
   @override
   Future<void> signUp({
@@ -34,6 +47,12 @@ class _FakeAuthRepository implements AuthRepository {
   Future<void> sendPasswordResetEmail(String email) async {
     await Future.delayed(const Duration(milliseconds: 50));
   }
+
+  @override
+  Future<void> signOut() async {}
+
+  @override
+  Future<void> deleteAccount() async {}
 }
 
 GoRouter _buildTestRouter() {
@@ -50,6 +69,10 @@ Widget _harness({Brightness brightness = Brightness.dark}) {
   return ProviderScope(
     overrides: [authRepositoryProvider.overrideWithValue(_FakeAuthRepository())],
     child: MaterialApp.router(
+    // Mirrors main.dart's shell so screens render over the same ambient
+    // field users see; the scaffold background is transparent by design.
+    builder: (context, child) =>
+        SaAmbientBackground(child: child ?? const SizedBox.shrink()),
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
       routerConfig: _buildTestRouter(),
     ),

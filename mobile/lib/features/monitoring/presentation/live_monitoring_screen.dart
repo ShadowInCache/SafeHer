@@ -3,26 +3,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/components/cards/sa_threat_gauge_card.dart';
 import '../../../shared/components/feedback/sa_empty_state.dart';
-import '../../../shared/components/feedback/sa_loading_shimmer.dart';
 import '../../../shared/components/feedback/sa_status_dot.dart';
 import '../../../shared/components/icons/sa_icon.dart';
 import '../../../shared/components/navigation/sa_bottom_nav_bar.dart';
+import '../../devices/data/device_providers.dart';
+import '../../devices/domain/models/device_detail.dart';
 import '../data/monitoring_providers.dart';
-import '../domain/models/monitoring_snapshot.dart';
-import 'widgets/audio_waveform_panel.dart';
+import '../domain/models/realtime_alert_event.dart';
 import 'widgets/camera_feed_panel.dart';
-import 'widgets/motion_timeline_panel.dart';
-import 'widgets/threat_gauge_panel.dart';
 
-const _tabletBreakpoint = 600.0;
-
-/// Live Monitoring — a full-screen, non-scrolling composition of the four
-/// real-time panels (threat gauge, audio, motion, camera). 1 column on
-/// phones with the gauge filling the top 40%; 2x2 grid on tablets.
+/// Live Monitoring — driven entirely by the real
+/// `/api/v1/ws/alerts/{user_id}` feed (see `monitoring_providers.dart`).
+/// There is no continuous sensor stream to show: the backend only
+/// broadcasts discrete `threat_alert`/`emergency_alert` events, so this
+/// screen shows real connection state plus a real, event-sourced list —
+/// never a fabricated waveform or motion chart.
 class LiveMonitoringScreen extends ConsumerWidget {
   const LiveMonitoringScreen({super.key});
 
@@ -32,8 +31,8 @@ class LiveMonitoringScreen extends ConsumerWidget {
         context.go('/home');
       case SaNavTab.monitor:
         return;
-      case SaNavTab.dashboard:
-        context.go('/dashboard');
+      case SaNavTab.devices:
+        context.go('/devices');
       case SaNavTab.profile:
         context.go('/profile');
     }
@@ -41,7 +40,10 @@ class LiveMonitoringScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final snapshotAsync = ref.watch(monitoringStreamProvider);
+    final monitoring = ref.watch(liveMonitoringControllerProvider);
+    final devicesAsync = ref.watch(devicesProvider);
+    final glassesOnline = devicesAsync.valueOrNull?.any((d) => d.type == DeviceType.glasses && d.isOnline) ?? false;
+    final latestEvent = monitoring.events.isNotEmpty ? monitoring.events.first : null;
 
     return Scaffold(
       body: Stack(
@@ -49,7 +51,7 @@ class LiveMonitoringScreen extends ConsumerWidget {
           SafeArea(
             child: Column(
               children: [
-                _MonitoringHeader(isLive: snapshotAsync.hasValue),
+                _MonitoringHeader(status: monitoring.status),
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(
@@ -58,15 +60,12 @@ class LiveMonitoringScreen extends ConsumerWidget {
                       AppSpacing.screenMarginPhone,
                       AppSpacing.space16 + AppSpacing.space8,
                     ),
-                    child: snapshotAsync.when(
-                      data: (snapshot) => _MonitoringPanels(snapshot: snapshot),
-                      loading: () => const _MonitoringLoading(),
-                      error: (error, stackTrace) => SaEmptyState(
-                        title: "Couldn't start live monitoring",
-                        body: 'Check your connection and try again.',
-                        ctaLabel: 'Retry',
-                        onCtaTap: () => ref.invalidate(monitoringStreamProvider),
-                      ),
+                    child: _MonitoringBody(
+                      status: monitoring.status,
+                      events: monitoring.events,
+                      latestEvent: latestEvent,
+                      glassesOnline: glassesOnline,
+                      onRetry: () => ref.read(liveMonitoringControllerProvider.notifier).retry(),
                     ),
                   ),
                 ),
@@ -90,13 +89,19 @@ class LiveMonitoringScreen extends ConsumerWidget {
 }
 
 class _MonitoringHeader extends StatelessWidget {
-  const _MonitoringHeader({required this.isLive});
+  const _MonitoringHeader({required this.status});
 
-  final bool isLive;
+  final MonitoringConnectionStatus status;
 
   @override
   Widget build(BuildContext context) {
     final onSurface = Theme.of(context).colorScheme.onSurface;
+    final isLive = status == MonitoringConnectionStatus.connected;
+    final label = switch (status) {
+      MonitoringConnectionStatus.connected => 'LIVE',
+      MonitoringConnectionStatus.connecting => 'CONNECTING',
+      MonitoringConnectionStatus.disconnected => 'OFFLINE',
+    };
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.space2, AppSpacing.space2, AppSpacing.screenMarginPhone, 0),
       child: Row(
@@ -117,104 +122,121 @@ class _MonitoringHeader extends StatelessWidget {
           SaStatusDot(
             color: isLive ? AppColors.success500 : AppColors.neutral400,
             live: isLive,
-            semanticsLabel: isLive ? 'Monitoring live' : 'Monitoring connecting',
+            semanticsLabel: 'Monitoring $label',
           ),
           const SizedBox(width: AppSpacing.space2),
-          Text(
-            isLive ? 'LIVE' : 'CONNECTING',
-            style: AppTypography.labelM.copyWith(color: onSurface.withValues(alpha: 0.6)),
-          ),
+          Text(label, style: AppTypography.labelM.copyWith(color: onSurface.withValues(alpha: 0.6))),
         ],
       ),
     );
   }
 }
 
-class _MonitoringPanels extends StatelessWidget {
-  const _MonitoringPanels({required this.snapshot});
+class _MonitoringBody extends StatelessWidget {
+  const _MonitoringBody({
+    required this.status,
+    required this.events,
+    required this.latestEvent,
+    required this.glassesOnline,
+    required this.onRetry,
+  });
 
-  final MonitoringSnapshot snapshot;
+  final MonitoringConnectionStatus status;
+  final List<RealtimeAlertEvent> events;
+  final RealtimeAlertEvent? latestEvent;
+  final bool glassesOnline;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isTablet = constraints.maxWidth >= _tabletBreakpoint;
-        final gauge = ThreatGaugePanel(score: snapshot.threatScore);
-        final audio = AudioWaveformPanel(
-          waveform: snapshot.waveform,
-          dbLevel: snapshot.dbLevel,
-          emotion: snapshot.detectedEmotion,
-        );
-        final motion = MotionTimelinePanel(samples: snapshot.motionWindow, events: snapshot.eventPins);
-        final camera = CameraFeedPanel(glassesConnected: snapshot.glassesConnected);
-
-        if (isTablet) {
-          return Column(
-            children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    Expanded(child: gauge),
-                    const SizedBox(width: AppSpacing.space4),
-                    Expanded(child: audio),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.space4),
-              Expanded(
-                child: Row(
-                  children: [
-                    Expanded(child: motion),
-                    const SizedBox(width: AppSpacing.space4),
-                    Expanded(child: camera),
-                  ],
-                ),
-              ),
-            ],
-          );
-        }
-
-        return Column(
-          children: [
-            Expanded(flex: 4, child: gauge),
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    return ListView(
+      children: [
+        SaThreatGaugeCard(
+          score: latestEvent?.gaugeScore,
+          componentScores: const [],
+          lastUpdated: latestEvent != null ? _formatRelative(latestEvent!.timestamp) : null,
+          gaugeSize: 120,
+        ),
+        const SizedBox(height: AppSpacing.space4),
+        SizedBox(height: 220, child: CameraFeedPanel(glassesConnected: glassesOnline)),
+        const SizedBox(height: AppSpacing.space4),
+        Text('Recent Events', style: AppTypography.headingS.copyWith(color: onSurface)),
+        const SizedBox(height: AppSpacing.space3),
+        if (events.isEmpty)
+          SaEmptyState(
+            title: status == MonitoringConnectionStatus.disconnected
+                ? 'No live device data available'
+                : 'No live events yet',
+            body: status == MonitoringConnectionStatus.disconnected
+                ? 'Connect your Smart Glove or Smart Glasses to begin monitoring.'
+                : "You're connected — real alerts will appear here as they happen.",
+            ctaLabel: status == MonitoringConnectionStatus.disconnected ? 'Retry Connection' : null,
+            onCtaTap: status == MonitoringConnectionStatus.disconnected ? onRetry : null,
+          )
+        else
+          for (final event in events) ...[
+            _EventTile(event: event),
             const SizedBox(height: AppSpacing.space3),
-            Expanded(flex: 2, child: audio),
-            const SizedBox(height: AppSpacing.space3),
-            Expanded(flex: 2, child: motion),
-            const SizedBox(height: AppSpacing.space3),
-            Expanded(flex: 2, child: camera),
           ],
-        );
-      },
+      ],
     );
+  }
+
+  static String _formatRelative(DateTime time) {
+    final diff = DateTime.now().difference(time);
+    if (diff.inSeconds < 60) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 }
 
-class _MonitoringLoading extends StatelessWidget {
-  const _MonitoringLoading();
+class _EventTile extends StatelessWidget {
+  const _EventTile({required this.event});
+
+  final RealtimeAlertEvent event;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Expanded(
-          flex: 4,
-          child: SaLoadingShimmer(
-            child: Container(decoration: BoxDecoration(color: Colors.white, borderRadius: AppRadius.xl2Radius)),
-          ),
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final isEmergency = event.kind == RealtimeAlertKind.emergency;
+    final accent = isEmergency ? AppColors.coral500 : AppColors.violet500;
+    return Semantics(
+      label:
+          '${isEmergency ? "Emergency alert" : "Threat alert"}: ${event.summary}'
+          '${event.threatLevel != null ? ", ${event.threatLevel} severity" : ""}',
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.space4),
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: accent.withValues(alpha: 0.3)),
         ),
-        const SizedBox(height: AppSpacing.space3),
-        for (var i = 0; i < 3; i++) ...[
-          Expanded(
-            flex: 2,
-            child: SaLoadingShimmer(
-              child: Container(decoration: BoxDecoration(color: Colors.white, borderRadius: AppRadius.xl2Radius)),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SaIcon(isEmergency ? SaIconGlyph.shield : SaIconGlyph.monitorPulse, size: 20, color: accent),
+            const SizedBox(width: AppSpacing.space3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(event.summary, style: AppTypography.bodyL.copyWith(color: onSurface)),
+                  const SizedBox(height: 2),
+                  Text(
+                    [
+                      if (event.threatLevel != null) event.threatLevel!.toUpperCase(),
+                      _MonitoringBody._formatRelative(event.timestamp),
+                    ].join(' · '),
+                    style: AppTypography.labelM.copyWith(color: onSurface.withValues(alpha: 0.5)),
+                  ),
+                ],
+              ),
             ),
-          ),
-          if (i < 2) const SizedBox(height: AppSpacing.space3),
-        ],
-      ],
+          ],
+        ),
+      ),
     );
   }
 }

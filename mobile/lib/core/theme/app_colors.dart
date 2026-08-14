@@ -1,10 +1,12 @@
 import 'package:flutter/painting.dart';
 
-/// SafeHer brand color tokens. See design system spec §COLOUR TOKENS.
+/// SafeHer brand color tokens. See design system spec Â§COLOUR TOKENS.
 abstract final class AppColors {
-  // Primary — Deep Violet Scale
+  // Primary â€” Deep Violet Scale
   static const violet50 = Color(0xFFF5F3FF);
   static const violet100 = Color(0xFFEDE9FE);
+  static const violet200 = Color(0xFFDDD6FE);
+  static const violet400 = Color(0xFFA78BFA);
   static const violet500 = Color(0xFF8B5CF6);
   static const violet600 = Color(0xFF7C3AED);
   static const violet700 = Color(0xFF6D28D9);
@@ -16,19 +18,23 @@ abstract final class AppColors {
   // the primary brand scale, used only for the Onboarding gradient per spec.
   static const indigo900 = Color(0xFF312E81);
 
-  // Accent — Soft Coral Scale
+  // Accent â€” Soft Coral Scale
   static const coral400 = Color(0xFFFF8A80);
   static const coral500 = Color(0xFFFF6B6B);
   static const coral600 = Color(0xFFE53935);
+  static const coral700 = Color(0xFFC62828);
 
   /// Onboarding page-3 background accent (deep coral), used only for the
-  /// Onboarding gradient per spec — not part of the interactive coral scale.
+  /// Onboarding gradient per spec â€” not part of the interactive coral scale.
   static const coral900 = Color(0xFF7F1D1D);
 
   // Semantic
   static const success500 = Color(0xFF10B981);
+  static const success900 = Color(0xFF064E3B);
   static const warning500 = Color(0xFFF59E0B);
+  static const warning900 = Color(0xFF78350F);
   static const danger500 = Color(0xFFEF4444);
+  static const info500 = Color(0xFF3B82F6);
 
   // Backgrounds
   static const dark900 = Color(0xFF0A0A0F);
@@ -53,6 +59,22 @@ abstract final class AppColors {
   static const glassBorderDark = Color(0x1AFFFFFF); // white 10%
   static const glassFillLight = Color(0xB3FFFFFF); // white 70%
   static const glassBorderLight = Color(0xE6FFFFFF); // white 90%
+
+  // ---------------------------------------------------------------------
+  // Ambient (decorative only)
+  //
+  // The aurora field painted behind every screen by `SaAmbientBackground`.
+  // These are the SRS's "warm violet glows" (Frontend section 1) rendered as
+  // an actual light source rather than a flat fill.
+  //
+  // Deliberately NOT part of the semantic or interactive palette: nothing is
+  // ever tinted with these to convey state. `auroraRose` in particular is a
+  // pink, chosen because it reads warm and feminine-forward without colliding
+  // with `coral500` -- coral means SOS and danger, and a decorative wash in the
+  // same hue would blunt that signal.
+  static const auroraViolet = Color(0xFF7C3AED);
+  static const auroraRose = Color(0xFFF472B6);
+  static const auroraDeep = Color(0xFF2E1065);
 
   // Neutral text helpers (dark mode primary surface content)
   static const neutral50 = Color(0xFFFAFAFA);

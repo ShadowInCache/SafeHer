@@ -9,6 +9,7 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/theme/theme_extensions.dart';
+import '../../../shared/components/cards/sa_card.dart';
 import '../../../shared/components/cards/sa_contact_card.dart';
 import '../../../shared/components/cards/sa_device_card.dart';
 import '../../../shared/components/cards/sa_incident_card.dart';
@@ -16,6 +17,7 @@ import '../../../shared/components/feedback/sa_empty_state.dart';
 import '../../../shared/components/feedback/sa_loading_shimmer.dart';
 import '../../../shared/components/icons/sa_icon.dart';
 import '../../../shared/components/inputs/sa_search_bar.dart';
+import '../../../shared/components/overlays/sa_toast.dart';
 import '../../contacts/data/contacts_providers.dart';
 import '../../contacts/domain/models/contact.dart';
 import '../../devices/data/device_providers.dart';
@@ -23,12 +25,13 @@ import '../../devices/domain/models/device_detail.dart';
 import '../../reports/data/reports_providers.dart';
 import '../../reports/domain/models/report_summary.dart';
 import '../domain/models/search_result.dart';
+import '../domain/models/searchable_setting.dart';
 
-/// Unified search across incidents, contacts, and devices. Reads straight
-/// from each feature's own shared provider (the same one Reports, Settings,
-/// and Devices use) rather than a separate copy of the data, so results
-/// here always match what those screens show. Filters client-side as the
-/// user types, debounced by 250ms.
+/// Unified search across incidents, contacts, devices, and settings. Reads
+/// straight from each feature's own shared provider (the same one Reports,
+/// Settings, and Devices use) rather than a separate copy of the data, so
+/// results here always match what those screens show. Filters client-side
+/// as the user types, debounced by 250ms.
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
 
@@ -42,6 +45,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   String _query = '';
   SearchCategory _category = SearchCategory.all;
 
+  /// Session-only — there's no persisted search-history store yet,  so this
+  /// intentionally doesn't survive an app restart rather than pretending to
+  /// with a fake always-empty "history".
+  final List<String> _recentSearches = [];
+
   @override
   void dispose() {
     _debounce?.cancel();
@@ -52,8 +60,34 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   void _handleQueryChanged(String value) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 250), () {
-      if (mounted) setState(() => _query = value.trim());
+      if (!mounted) return;
+      final trimmed = value.trim();
+      setState(() => _query = trimmed);
+      // Recorded once the query settles (debounce fired), not on every
+      // keystroke — this also sidesteps needing a real IME "submit" event
+      // to fire, so it works identically for a tap-to-select recent term.
+      if (trimmed.isNotEmpty) _commitSearch(trimmed);
     });
+  }
+
+  void _commitSearch(String trimmed) {
+    setState(() {
+      _recentSearches.remove(trimmed);
+      _recentSearches.insert(0, trimmed);
+      if (_recentSearches.length > 5) _recentSearches.removeLast();
+    });
+  }
+
+  void _selectRecent(String value) {
+    _controller.text = value;
+    setState(() => _query = value);
+  }
+
+  void _handleMicTap() {
+    // No speech-recognition engine is wired up in this build — flagging
+    // that honestly rather than showing a full "Listening..." overlay
+    // that can't actually transcribe anything.
+    showSaToast(context, message: "Voice search isn't available in this build yet.");
   }
 
   @override
@@ -89,6 +123,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       autofocus: true,
                       hintText: 'Search incidents, contacts, devices',
                       onChanged: _handleQueryChanged,
+                      onMicTap: _handleMicTap,
                     ),
                   ),
                 ],
@@ -132,6 +167,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       devices: devicesAsync.requireValue,
                       query: _query,
                       category: _category,
+                      recentSearches: _recentSearches,
+                      onRecentTap: _selectRecent,
                     ),
             ),
           ],
@@ -147,6 +184,7 @@ extension on SearchCategory {
     SearchCategory.incidents => 'Incidents',
     SearchCategory.contacts => 'Contacts',
     SearchCategory.devices => 'Devices',
+    SearchCategory.settings => 'Settings',
   };
 }
 
@@ -192,6 +230,8 @@ class _SearchResults extends StatelessWidget {
     required this.devices,
     required this.query,
     required this.category,
+    required this.recentSearches,
+    required this.onRecentTap,
   });
 
   final List<ReportSummary> incidents;
@@ -199,6 +239,8 @@ class _SearchResults extends StatelessWidget {
   final List<DeviceDetail> devices;
   final String query;
   final SearchCategory category;
+  final List<String> recentSearches;
+  final ValueChanged<String> onRecentTap;
 
   bool _matches(String haystack) => query.isEmpty || haystack.toLowerCase().contains(query.toLowerCase());
 
@@ -206,14 +248,8 @@ class _SearchResults extends StatelessWidget {
   Widget build(BuildContext context) {
     final onSurface = Theme.of(context).colorScheme.onSurface;
 
-    // With no query and no category filter, prompt rather than dumping the
-    // entire index — picking a specific category is still a valid way to
-    // browse it with an empty query.
     if (query.isEmpty && category == SearchCategory.all) {
-      return const SaEmptyState(
-        title: 'Search SafeHer',
-        body: 'Find past incidents, emergency contacts, and paired devices.',
-      );
+      return _SearchEmptyState(recentSearches: recentSearches, onRecentTap: onRecentTap);
     }
 
     final matchedIncidents = category == SearchCategory.all || category == SearchCategory.incidents
@@ -225,8 +261,11 @@ class _SearchResults extends StatelessWidget {
     final matchedDevices = category == SearchCategory.all || category == SearchCategory.devices
         ? devices.where((d) => _matches(d.name)).toList()
         : <DeviceDetail>[];
+    final matchedSettings = category == SearchCategory.all || category == SearchCategory.settings
+        ? searchableSettings.where((s) => _matches('${s.label} ${s.description}')).toList()
+        : <SearchableSetting>[];
 
-    if (matchedIncidents.isEmpty && matchedContacts.isEmpty && matchedDevices.isEmpty) {
+    if (matchedIncidents.isEmpty && matchedContacts.isEmpty && matchedDevices.isEmpty && matchedSettings.isEmpty) {
       return SaEmptyState(
         title: 'No results',
         body: query.isEmpty ? 'Nothing in this category yet.' : 'Nothing matched "$query". Try a different term.',
@@ -288,8 +327,148 @@ class _SearchResults extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.space3),
           ],
+          const SizedBox(height: AppSpacing.space3),
+        ],
+        if (matchedSettings.isNotEmpty) ...[
+          Text('Settings', style: AppTypography.headingS.copyWith(color: onSurface)),
+          const SizedBox(height: AppSpacing.space2),
+          for (final setting in matchedSettings) ...[
+            SaCard(
+              semanticsLabel: setting.label,
+              onTap: () => context.go(setting.route),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(setting.label, style: AppTypography.bodyL.copyWith(color: onSurface)),
+                        Text(
+                          setting.description,
+                          style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.5)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SaIcon(SaIconGlyph.chevronRight, size: 18, color: onSurface.withValues(alpha: 0.4)),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.space3),
+          ],
         ],
       ],
+    );
+  }
+}
+
+class _SearchEmptyState extends StatelessWidget {
+  const _SearchEmptyState({required this.recentSearches, required this.onRecentTap});
+
+  final List<String> recentSearches;
+  final ValueChanged<String> onRecentTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenMarginPhone, vertical: AppSpacing.space4),
+      children: [
+        if (recentSearches.isNotEmpty) ...[
+          Text('Recent Searches', style: AppTypography.headingS.copyWith(color: onSurface)),
+          const SizedBox(height: AppSpacing.space3),
+          Wrap(
+            spacing: AppSpacing.space2,
+            runSpacing: AppSpacing.space2,
+            children: [
+              for (final term in recentSearches) _RecentSearchChip(term: term, onTap: () => onRecentTap(term)),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.space6),
+        ],
+        Text('Quick Access', style: AppTypography.headingS.copyWith(color: onSurface)),
+        const SizedBox(height: AppSpacing.space3),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2,
+          mainAxisSpacing: AppSpacing.space3,
+          crossAxisSpacing: AppSpacing.space3,
+          childAspectRatio: 1.6,
+          children: [
+            _QuickAccessCard(
+              icon: SaIconGlyph.monitorPulse,
+              label: 'Reports',
+              onTap: () => context.go('/reports'),
+            ),
+            _QuickAccessCard(
+              icon: SaIconGlyph.profile,
+              label: 'Contacts',
+              onTap: () => context.go('/settings/contacts'),
+            ),
+            _QuickAccessCard(icon: SaIconGlyph.ring, label: 'Devices', onTap: () => context.go('/devices')),
+            _QuickAccessCard(icon: SaIconGlyph.shield, label: 'Settings', onTap: () => context.go('/settings')),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _RecentSearchChip extends StatelessWidget {
+  const _RecentSearchChip({required this.term, required this.onTap});
+
+  final String term;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final saColors = context.saColors;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    return Semantics(
+      button: true,
+      label: 'Recent search: $term',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space3, vertical: AppSpacing.space2),
+          decoration: BoxDecoration(
+            color: saColors.surfaceElevated,
+            borderRadius: AppRadius.fullRadius,
+            border: Border.all(color: saColors.glassBorder),
+          ),
+          child: Text(term, style: AppTypography.labelM.copyWith(color: onSurface.withValues(alpha: 0.8))),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickAccessCard extends StatelessWidget {
+  const _QuickAccessCard({required this.icon, required this.label, required this.onTap});
+
+  final SaIconGlyph icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    return SaCard(
+      onTap: onTap,
+      semanticsLabel: label,
+      useBlur: false,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SaIcon(icon, size: 24, color: AppColors.violet500),
+          const SizedBox(height: AppSpacing.space2),
+          Text(label, style: AppTypography.bodyL.copyWith(color: onSurface)),
+        ],
+      ),
     );
   }
 }
