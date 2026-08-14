@@ -1,9 +1,12 @@
 import '../domain/auth_repository.dart';
 
-/// Fixture-backed auth repository used while [AppFlavor.isMock] is true.
+/// Fixture-backed auth repository used while [AppConfig.useMockApi] is true.
 /// No session is ever persisted here — real sign-in state arrives with the
 /// Firebase-backed implementation in Phase 4.
 class AuthRepositoryMock implements AuthRepository {
+  @override
+  bool get phoneVerificationUnavailable => false;
+
   @override
   Future<bool> hasActiveSession() async {
     await Future.delayed(const Duration(milliseconds: 150));
@@ -19,6 +22,21 @@ class AuthRepositoryMock implements AuthRepository {
     if (password.length < 6) {
       throw const AuthException('Incorrect email or password.');
     }
+  }
+
+  @override
+  Future<void> signInAsGuest() async {
+    await Future.delayed(const Duration(milliseconds: 400));
+  }
+
+  @override
+  Future<void> signInWithGoogle() async {
+    await Future.delayed(const Duration(milliseconds: 400));
+  }
+
+  @override
+  Future<void> signInWithApple() async {
+    await Future.delayed(const Duration(milliseconds: 400));
   }
 
   @override
@@ -56,5 +74,15 @@ class AuthRepositoryMock implements AuthRepository {
     await Future.delayed(const Duration(milliseconds: 400));
     // Deliberately doesn't reject unknown emails — real implementations
     // shouldn't reveal whether an address has an account either.
+  }
+
+  @override
+  Future<void> signOut() async {
+    await Future.delayed(const Duration(milliseconds: 150));
+  }
+
+  @override
+  Future<void> deleteAccount() async {
+    await Future.delayed(const Duration(milliseconds: 400));
   }
 }

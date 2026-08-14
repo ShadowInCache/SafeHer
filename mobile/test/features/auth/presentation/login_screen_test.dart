@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,8 +8,12 @@ import 'package:safeher_app/core/theme/app_theme.dart';
 import 'package:safeher_app/features/auth/data/auth_providers.dart';
 import 'package:safeher_app/features/auth/domain/auth_repository.dart';
 import 'package:safeher_app/features/auth/presentation/login_screen.dart';
+import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
 class _FakeAuthRepository implements AuthRepository {
+  @override
+  bool get phoneVerificationUnavailable => false;
+
   _FakeAuthRepository({this.shouldFail = false});
   final bool shouldFail;
 
@@ -19,6 +24,33 @@ class _FakeAuthRepository implements AuthRepository {
   Future<void> signInWithEmail({required String email, required String password}) async {
     await Future.delayed(const Duration(milliseconds: 50));
     if (shouldFail) throw const AuthException('Incorrect email or password.');
+  }
+
+  int googleSignInCallCount = 0;
+
+  int guestSignInCallCount = 0;
+
+  @override
+  Future<void> signInAsGuest() async {
+    guestSignInCallCount++;
+    await Future.delayed(const Duration(milliseconds: 50));
+    if (shouldFail) throw const AuthException('Guest sign-in is unavailable.');
+  }
+
+  @override
+  Future<void> signInWithGoogle() async {
+    googleSignInCallCount++;
+    await Future.delayed(const Duration(milliseconds: 50));
+    if (shouldFail) throw const AuthException('Sign-in was cancelled.');
+  }
+
+  int appleSignInCallCount = 0;
+
+  @override
+  Future<void> signInWithApple() async {
+    appleSignInCallCount++;
+    await Future.delayed(const Duration(milliseconds: 50));
+    if (shouldFail) throw const AuthException('Sign-in was cancelled.');
   }
 
   @override
@@ -38,6 +70,12 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<void> sendPasswordResetEmail(String email) async {}
+
+  @override
+  Future<void> signOut() async {}
+
+  @override
+  Future<void> deleteAccount() async {}
 }
 
 GoRouter _buildTestRouter() {
@@ -52,10 +90,14 @@ GoRouter _buildTestRouter() {
   );
 }
 
-Widget _harness({Brightness brightness = Brightness.dark, bool shouldFail = false}) {
+Widget _harness({Brightness brightness = Brightness.dark, bool shouldFail = false, _FakeAuthRepository? repo}) {
   return ProviderScope(
-    overrides: [authRepositoryProvider.overrideWithValue(_FakeAuthRepository(shouldFail: shouldFail))],
+    overrides: [authRepositoryProvider.overrideWithValue(repo ?? _FakeAuthRepository(shouldFail: shouldFail))],
     child: MaterialApp.router(
+    // Mirrors main.dart's shell so screens render over the same ambient
+    // field users see; the scaffold background is transparent by design.
+    builder: (context, child) =>
+        SaAmbientBackground(child: child ?? const SizedBox.shrink()),
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
       routerConfig: _buildTestRouter(),
     ),
@@ -130,6 +172,80 @@ void main() {
       // GoRouter needs one more frame after context.go() to rebuild.
       await tester.pump();
       expect(find.text('home-stub'), findsOneWidget);
+    });
+
+    testWidgets('Continue as guest signs in and navigates home', (tester) async {
+      await useRealisticSurface(tester);
+      final repo = _FakeAuthRepository();
+      await tester.pumpWidget(_harness(repo: repo));
+      await tester.pump();
+
+      await tester.tap(find.text('Continue as guest'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump();
+
+      expect(repo.guestSignInCallCount, 1);
+      expect(
+        find.text('home-stub'),
+        findsOneWidget,
+        reason: 'guest mode must reach the app, not stall on the login screen',
+      );
+    });
+
+    testWidgets('guest sign-in failure surfaces a message instead of navigating', (tester) async {
+      await useRealisticSurface(tester);
+      await tester.pumpWidget(_harness(shouldFail: true));
+      await tester.pump();
+
+      await tester.tap(find.text('Continue as guest'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Guest sign-in is unavailable.'), findsOneWidget);
+      expect(find.text('Welcome back'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('Continue with Google signs in and navigates home', (tester) async {
+      await useRealisticSurface(tester);
+      final repo = _FakeAuthRepository();
+      await tester.pumpWidget(_harness(repo: repo));
+      await tester.pump();
+      await tester.tap(find.text('Continue with Google'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump();
+      expect(repo.googleSignInCallCount, 1);
+      expect(find.text('home-stub'), findsOneWidget);
+    });
+
+    testWidgets('Continue with Google failure shows a toast, not navigation', (tester) async {
+      await useRealisticSurface(tester);
+      final repo = _FakeAuthRepository(shouldFail: true);
+      await tester.pumpWidget(_harness(repo: repo));
+      await tester.pump();
+      await tester.tap(find.text('Continue with Google'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Sign-in was cancelled.'), findsOneWidget);
+      expect(find.text('Welcome back'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('Continue with Apple (iOS) signs in and navigates home', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      await useRealisticSurface(tester);
+      final repo = _FakeAuthRepository();
+      await tester.pumpWidget(_harness(repo: repo));
+      await tester.pump();
+      await tester.tap(find.text('Continue with Apple'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump();
+      expect(repo.appleSignInCallCount, 1);
+      expect(find.text('home-stub'), findsOneWidget);
+      debugDefaultTargetPlatformOverride = null;
     });
 
     testWidgets('handles tap on Create account link', (tester) async {

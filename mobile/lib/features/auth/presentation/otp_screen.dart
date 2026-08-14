@@ -7,8 +7,10 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/components/buttons/sa_button.dart';
 import '../../../shared/components/inputs/sa_otp_field.dart';
 import '../../../shared/components/overlays/sa_toast.dart';
+import '../data/auth_providers.dart';
 import 'otp_controller.dart';
 
 /// Verifies the 6-digit code sent after signup. Expects the contact string
@@ -88,6 +90,8 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     });
 
     final otpState = ref.watch(otpControllerProvider);
+    final phoneVerificationUnavailable =
+        ref.watch(authRepositoryProvider).phoneVerificationUnavailable;
 
     return Scaffold(
       body: SafeArea(
@@ -103,6 +107,44 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                 contact != null ? 'Enter the 6-digit code sent to $contact' : 'Enter the 6-digit code we sent you',
                 style: AppTypography.bodyL.copyWith(color: onSurface.withValues(alpha: 0.7)),
               ),
+              // Sign-up succeeded but no code could be sent. Say so, and offer
+              // the way forward — the account is already usable, so stranding
+              // the user on a code that will never arrive would be the worst
+              // possible outcome here.
+              if (phoneVerificationUnavailable) ...[
+                const SizedBox(height: AppSpacing.space4),
+                Container(
+                  padding: const EdgeInsets.all(AppSpacing.space4),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning500.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "We couldn't send a code",
+                        style: AppTypography.labelL.copyWith(color: onSurface),
+                      ),
+                      const SizedBox(height: AppSpacing.space1),
+                      Text(
+                        'Phone verification is unavailable for this build. Your account '
+                        'is already active, so you can continue without it.',
+                        style: AppTypography.bodyS.copyWith(
+                          color: onSurface.withValues(alpha: 0.75),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.space3),
+                      SaButton(
+                        label: 'Continue to SafeHer',
+                        onPressed: () => context.go('/home'),
+                        size: SaButtonSize.sm,
+                        fullWidth: true,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: AppSpacing.space8),
               SaOTPField(status: _status, onCompleted: _handleCompleted),
               const SizedBox(height: AppSpacing.space6),

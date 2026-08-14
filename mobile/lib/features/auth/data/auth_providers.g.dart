@@ -6,10 +6,10 @@ part of 'auth_providers.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$authRepositoryHash() => r'0c9c2baaa184c106ead6334e785b698f7b439413';
+String _$authRepositoryHash() => r'bb9a90dde528613faf8e8f72391b1d268078dbab';
 
-/// Switches between the mock and Firebase-backed [AuthRepository] based on
-/// [AppConfig.useMockApi].
+/// Switches between the mock and Firebase+fastapi_app-backed
+/// [AuthRepository] based on [AppConfig.useMockApi].
 ///
 /// Copied from [authRepository].
 @ProviderFor(authRepository)

@@ -1,11 +1,15 @@
+import 'dart:async';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../data/auth_providers.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/components/buttons/sa_button.dart';
+import '../../../shared/components/icons/sa_icon.dart';
 import '../../../shared/components/inputs/sa_password_field.dart';
 import '../../../shared/components/inputs/sa_phone_field.dart';
 import '../../../shared/components/inputs/sa_text_field.dart';
@@ -28,6 +32,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  late final _termsTapRecognizer = TapGestureRecognizer()
+    ..onTap = () => showSaToast(context, message: 'Terms of Service — coming soon.');
+  late final _privacyTapRecognizer = TapGestureRecognizer()
+    ..onTap = () => showSaToast(context, message: 'Privacy Policy — coming soon.');
 
   String? _firstNameError;
   String? _lastNameError;
@@ -47,6 +55,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _termsTapRecognizer.dispose();
+    _privacyTapRecognizer.dispose();
     super.dispose();
   }
 
@@ -103,6 +113,16 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     );
   }
 
+  Future<void> _routeAfterSignUp() async {
+    final signedIn = await ref.read(authRepositoryProvider).hasActiveSession();
+    if (!mounted) return;
+    if (signedIn) {
+      context.go('/home');
+    } else {
+      context.go('/auth/otp', extra: toE164(_countryCode, _phoneController.text));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final onSurface = Theme.of(context).colorScheme.onSurface;
@@ -113,7 +133,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       }
       final wasLoading = previous?.isLoading ?? false;
       if (wasLoading && !next.isLoading && !next.hasError) {
-        context.go('/auth/otp', extra: toE164(_countryCode, _phoneController.text));
+        // Sign-up either establishes a session outright or leaves the account
+        // pending a verification code. Routing to the OTP screen in the first
+        // case would strand the user waiting for a code that is never sent, so
+        // the presence of a session decides where to go.
+        unawaited(_routeAfterSignUp());
       }
     });
 
@@ -188,6 +212,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 errorText: _confirmPasswordError,
                 isValid: _confirmPasswordController.text.isNotEmpty &&
                     _confirmPasswordController.text == _passwordController.text,
+                // Live mismatch indicator (red X) while the user is still
+                // typing, distinct from the full errorText treatment which
+                // only appears after a submit attempt.
+                suffixIcon: _confirmPasswordController.text.isNotEmpty &&
+                        _confirmPasswordController.text != _passwordController.text &&
+                        _confirmPasswordError == null
+                    ? const SaIcon(SaIconGlyph.close, size: 18, color: AppColors.coral500)
+                    : null,
                 semanticsLabel: 'Confirm password',
                 onChanged: (_) => setState(() {}),
               ),
@@ -201,6 +233,30 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   fullWidth: true,
                   isLoading: signupState.isLoading,
                   onPressed: _submit,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.space4),
+              Center(
+                child: Text.rich(
+                  TextSpan(
+                    style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.6)),
+                    children: [
+                      const TextSpan(text: 'By continuing you agree to our '),
+                      TextSpan(
+                        text: 'Terms of Service',
+                        style: AppTypography.bodyS.copyWith(color: AppColors.violet500, fontWeight: FontWeight.w600),
+                        recognizer: _termsTapRecognizer,
+                      ),
+                      const TextSpan(text: ' and '),
+                      TextSpan(
+                        text: 'Privacy Policy',
+                        style: AppTypography.bodyS.copyWith(color: AppColors.violet500, fontWeight: FontWeight.w600),
+                        recognizer: _privacyTapRecognizer,
+                      ),
+                      const TextSpan(text: '.'),
+                    ],
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ),
               const SizedBox(height: AppSpacing.space4),

@@ -7,6 +7,7 @@ import 'package:safeher_app/core/local/local_key_value_store.dart';
 import 'package:safeher_app/core/local/onboarding_prefs.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
 import 'package:safeher_app/features/auth/presentation/onboarding_screen.dart';
+import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
 class _FakeKeyValueStore implements LocalKeyValueStore {
   bool hasSeenOnboarding = false;
@@ -16,6 +17,18 @@ class _FakeKeyValueStore implements LocalKeyValueStore {
 
   @override
   Future<void> setBool(String key, bool value) async => hasSeenOnboarding = value;
+
+  @override
+  double getDouble(String key, {double defaultValue = 0}) => defaultValue;
+
+  @override
+  Future<void> setDouble(String key, double value) async {}
+
+  @override
+  int getInt(String key, {int defaultValue = 0}) => defaultValue;
+
+  @override
+  Future<void> setInt(String key, int value) async {}
 }
 
 GoRouter _buildTestRouter() {
@@ -34,6 +47,10 @@ Widget _harness({Brightness brightness = Brightness.dark, _FakeKeyValueStore? st
       localKeyValueStoreProvider.overrideWithValue(store ?? _FakeKeyValueStore()),
     ],
     child: MaterialApp.router(
+    // Mirrors main.dart's shell so screens render over the same ambient
+    // field users see; the scaffold background is transparent by design.
+    builder: (context, child) =>
+        SaAmbientBackground(child: child ?? const SizedBox.shrink()),
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
       routerConfig: _buildTestRouter(),
     ),

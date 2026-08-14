@@ -9,8 +9,12 @@ import 'package:safeher_app/core/theme/app_theme.dart';
 import 'package:safeher_app/features/auth/data/auth_providers.dart';
 import 'package:safeher_app/features/auth/domain/auth_repository.dart';
 import 'package:safeher_app/features/auth/presentation/splash_screen.dart';
+import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
 class _FakeAuthRepository implements AuthRepository {
+  @override
+  bool get phoneVerificationUnavailable => false;
+
   _FakeAuthRepository({this.hasSession = false});
   final bool hasSession;
 
@@ -19,6 +23,15 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<void> signInWithEmail({required String email, required String password}) async {}
+
+  @override
+  Future<void> signInAsGuest() async {}
+
+  @override
+  Future<void> signInWithGoogle() async {}
+
+  @override
+  Future<void> signInWithApple() async {}
 
   @override
   Future<void> signUp({
@@ -37,6 +50,12 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<void> sendPasswordResetEmail(String email) async {}
+
+  @override
+  Future<void> signOut() async {}
+
+  @override
+  Future<void> deleteAccount() async {}
 }
 
 class _FakeKeyValueStore implements LocalKeyValueStore {
@@ -48,6 +67,18 @@ class _FakeKeyValueStore implements LocalKeyValueStore {
 
   @override
   Future<void> setBool(String key, bool value) async => hasSeenOnboarding = value;
+
+  @override
+  double getDouble(String key, {double defaultValue = 0}) => defaultValue;
+
+  @override
+  Future<void> setDouble(String key, double value) async {}
+
+  @override
+  int getInt(String key, {int defaultValue = 0}) => defaultValue;
+
+  @override
+  Future<void> setInt(String key, int value) async {}
 }
 
 GoRouter _buildTestRouter() {
@@ -73,6 +104,10 @@ Widget _harness({
       localKeyValueStoreProvider.overrideWithValue(_FakeKeyValueStore(hasSeenOnboarding: hasSeenOnboarding)),
     ],
     child: MaterialApp.router(
+    // Mirrors main.dart's shell so screens render over the same ambient
+    // field users see; the scaffold background is transparent by design.
+    builder: (context, child) =>
+        SaAmbientBackground(child: child ?? const SizedBox.shrink()),
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
       routerConfig: _buildTestRouter(),
     ),

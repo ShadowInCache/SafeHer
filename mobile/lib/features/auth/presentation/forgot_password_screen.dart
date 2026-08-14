@@ -57,11 +57,11 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     final state = ref.watch(forgotPasswordControllerProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.dark900,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         leading: IconButton(
-          icon: const SaIcon(SaIconGlyph.chevronLeft, color: Colors.white),
+          icon: SaIcon(SaIconGlyph.chevronLeft, color: Theme.of(context).colorScheme.onSurface),
           onPressed: () => context.go('/auth/login'),
           tooltip: 'Back',
         ),
@@ -80,11 +80,16 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text('Reset your password', style: AppTypography.displayM.copyWith(color: Colors.white)),
+        Text(
+          'Reset your password',
+          style: AppTypography.displayM.copyWith(color: Theme.of(context).colorScheme.onSurface),
+        ),
         const SizedBox(height: AppSpacing.space2),
         Text(
           "Enter your email and we'll send you a link to reset your password.",
-          style: AppTypography.bodyL.copyWith(color: Colors.white.withValues(alpha: 0.7)),
+          style: AppTypography.bodyL.copyWith(
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+          ),
         ),
         const SizedBox(height: AppSpacing.space8),
         SaTextField(
@@ -120,12 +125,18 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
           child: const SaIcon(SaIconGlyph.check, size: 32, color: Colors.white),
         ),
         const SizedBox(height: AppSpacing.space6),
-        Text('Check your email', style: AppTypography.displayM.copyWith(color: Colors.white), textAlign: TextAlign.center),
+        Text(
+          'Check your email',
+          style: AppTypography.displayM.copyWith(color: Theme.of(context).colorScheme.onSurface),
+          textAlign: TextAlign.center,
+        ),
         const SizedBox(height: AppSpacing.space2),
         Text(
           "We've sent a password reset link to ${_emailController.text.trim()}.",
           textAlign: TextAlign.center,
-          style: AppTypography.bodyL.copyWith(color: Colors.white.withValues(alpha: 0.7)),
+          style: AppTypography.bodyL.copyWith(
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+          ),
         ),
         const SizedBox(height: AppSpacing.space8),
         SaButton(
