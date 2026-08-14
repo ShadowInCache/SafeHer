@@ -32,6 +32,33 @@ connect and [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full folder tou
   SQLAlchemy is the transactional source of truth; Supabase's `events` table
   (`supabase_setup.sql`) is a parallel, append-only archive.
 
+- **Firebase Auth is the credential collector; `fastapi_app` owns the account**
+  (2026-08-14). Every Firebase sign-in is exchanged for a backend JWT at
+  `POST /api/v1/auth/firebase/exchange`, which auto-provisions the user. Firestore
+  is *not* used despite SRS section 8 describing a Firestore schema -- the
+  transactional store is SQLAlchemy (SQLite in dev, Postgres/Supabase in prod), and
+  the SRS's collection shapes are realised as relational tables.
+- **Two interchangeable auth backends** (2026-08-14). `AppConfig.useFirebaseAuth`
+  (default `true`) selects `AuthRepositoryRemote` (Firebase + exchange);
+  `--dart-define=USE_FIREBASE_AUTH=false` selects `AuthRepositoryNative`, which
+  talks to `fastapi_app` directly and needs no Firebase console configuration. The
+  native path cannot do Google, Apple or guest sign-in, which require a real
+  identity provider.
+- **Migrations are the single source of schema truth** (2026-08-14). `init_db()`
+  runs `alembic upgrade head` on startup instead of `Base.metadata.create_all`.
+  A database built by the old `create_all` path is adopted automatically: startup
+  stamps it at head, then upgrades. `create_all` is deliberately not used -- it
+  silently diverges from the migration chain, which is how the dev database ended
+  up with no `alembic_version` row and six unapplied migrations.
+- **Email verification is enforced only when it is deliverable** (2026-08-14).
+  `require_email_verification` defaults to "on iff SMTP is configured". Forcing it
+  on without a mail server would create accounts that can never sign in.
+- **The ambient aurora is a global layer, not per-screen** (2026-08-15).
+  `SaAmbientBackground` is mounted once in `MaterialApp.builder`; every `Scaffold`
+  is transparent. It is static by design -- it sits above the router, so an
+  animated field would never settle for `pumpAndSettle` and would make all ~200
+  golden tests flaky.
+
 ## Folder Changes
 
 - 2026-08-08: `src/models/` → `ml_training/` (top-level rename, no code changes beyond
@@ -40,6 +67,18 @@ connect and [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full folder tou
 - 2026-08-08: `docs/*.md` (8 pre-existing reports) + root `README.md` + `QUICKSTART.py`
   → `docs/archive/`, preserved verbatim (`QUICKSTART.py` renamed to
   `QUICKSTART.py.txt` since it's no longer meant to be executed).
+
+- 2026-08-15: `legacy_flask_gateway/` — **deleted**. The 2026-08-08 audit
+  relocated it pending a route-by-route parity check; nothing outside itself ever
+  imported it (verified by repo-wide grep), so it was removed rather than carried
+  further. Recoverable from git history.
+- 2026-08-15: `mobile/deprecated/legacy_flutter_tree/` — **deleted** (134 tracked
+  files). An older Flutter app tree, unreferenced by `mobile/lib` or `mobile/test`.
+- 2026-08-15: `mobile/.chrome_fresh_profile/` — **deleted** (3,152 tracked files,
+  ~400 MB). An accidentally-committed Chrome browser profile.
+- 2026-08-15: root `lib/` and `test/` — **deleted**. Empty directory skeletons
+  containing zero files.
+- 2026-08-15: `fastapi_app/workers/` — **added**, holding `deletion_purge.py`.
 
 ## File Changes
 
@@ -58,6 +97,36 @@ connect and [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full folder tou
 - 2026-08-08: `.gitignore` — expanded from 3 lines (`.env` only) to cover Python
   caches/venvs, `*.db`, browser-automation profiles, and Flutter build artifacts.
 
+- 2026-08-14: `alembic/env.py` — rewritten for async engines. It previously built
+  an async URL (`+aiosqlite`/`+asyncpg`) and drove it with a **sync**
+  `engine_from_config`, which fails at connect time with `MissingGreenlet`. Together
+  with a missing `alembic/script.py.mako`, this meant migrations had never been
+  runnable and `revision --autogenerate` could not write a file at all.
+- 2026-08-14: `alembic/script.py.mako` — **restored**; it was absent, so no new
+  migration could be generated.
+- 2026-08-14: `fastapi_app/db.py` — added `sync_database_url()`, translated
+  Supabase's libpq-style `?sslmode=require` into the `ssl` argument asyncpg
+  accepts, and replaced `create_all` with migration-driven `init_db()`.
+- 2026-08-14: `fastapi_app/main.py` — the custom `HTTPException` handler dropped
+  `exc.headers`, silently discarding `Retry-After` on lockout responses and
+  `WWW-Authenticate` on 401s across every endpoint. Now forwarded.
+- 2026-08-15: `fastapi_app/services/firebase_auth.py` — added
+  `CLOCK_SKEW_TOLERANCE_SECONDS` (30s). Firebase mints tokens against Google's
+  clock; a machine a second behind saw fresh tokens rejected as "Token used too
+  early", presenting as intermittent, unreproducible sign-in failures. Also logs
+  the rejection reason (previously swallowed entirely) while still returning a
+  generic 401, and derives synthetic addresses per provider
+  (`@anonymous.safeherapp.com` / `@phone.safeherapp.com`) instead of labelling
+  every emailless account as a phone user.
+- 2026-08-15: `mobile/lib/core/theme/app_shadows.dart` — light mode used neutral
+  black shadows; SRS section 2.4 specifies violet for every level with no
+  per-brightness split. This was the main reason light mode read as generic
+  Material grey.
+- 2026-08-15: `mobile/lib/features/auth/presentation/login_screen.dart` and
+  `forgot_password_screen.dart` — stopped forcing `AppColors.dark900`, and replaced
+  hardcoded `Colors.white` text/icons that were invisible against a light
+  background (SRS 5.4 requires 4.5:1).
+
 ## Deleted Files
 
 - 2026-08-08: `audit_system.py` — audited the legacy Flask gateway specifically
@@ -71,12 +140,34 @@ connect and [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full folder tou
   accidentally-committed Chrome browser profile), `safeher.db`, `safeher.runtime.db`,
   `safeher_app.db`, `test_safeher.db`, all `__pycache__/` directories (71 files).
 
+- 2026-08-15: `tests/test_microservices.py` — all 8 tests skipped
+  unconditionally ("Motion service not running"); it targets standalone services on
+  ports 8001-8004 that no longer exist.
+- 2026-08-15: `tests/test_authentication.py` — a test referenced a `token` fixture
+  that was never defined (collection error). Superseded by
+  `tests/test_auth_security.py`.
+- 2026-08-15: Untracked **and this time actually removed** — the 2026-08-08 entry
+  below records untracking `mobile/.chrome_fresh_profile/`, the `*.db` files and
+  all `__pycache__/`, but `git ls-files` still listed 3,152 + 46 of them, so that
+  cleanup never landed. Re-done: `git rm --cached` on all of them, `safeher.db` and
+  `test_safeher.db` kept on disk as live dev data. Repo working tree went from
+  389 MB to 103 MB.
+
 ## Added Files
 
 - 2026-08-08: Full documentation set — `README.md`, `ARCHITECTURE.md`, `API.md`,
   `SETUP.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `DEPENDENCIES.md`,
   `PROJECT_STRUCTURE.md`, `SECURITY.md`, `MEMORY.md` (this file). `docs/archive/README.md`
   explaining the archive's contents.
+
+- 2026-08-14/15: Backend — `fastapi_app/repositories/auth_security.py`,
+  `fastapi_app/services/email.py` (real SMTP; no pretend-send mode),
+  `fastapi_app/workers/deletion_purge.py`, `alembic/versions/0007_auth_hardening.py`,
+  `tests/test_auth_security.py` (27 tests), `tests/test_firebase_token_verification.py`
+  (8 tests).
+- 2026-08-14/15: Mobile — `lib/features/auth/data/auth_repository_native.dart`,
+  `lib/shared/components/layout/sa_ambient_background.dart`,
+  `test/features/auth/data/auth_repository_native_test.dart` (16 tests).
 
 ## Refactored Modules
 
@@ -176,7 +267,7 @@ in future work — this file describes state as of 2026-08-08, not necessarily t
 
 ## Last Updated
 
-2026-08-08
+2026-08-15
 
 ## Change History
 
@@ -186,3 +277,22 @@ in future work — this file describes state as of 2026-08-08, not necessarily t
   and ML training code relocated for clarity, a broken CI workflow fixed, and the full
   documentation set (this file plus 9 others) written from scratch against current
   source. See [CHANGELOG.md](CHANGELOG.md) for the itemized diff.
+
+- **2026-08-14** — Backend auth brought up to SRS section 4.1: emailed OTP
+  verification (FR-AUTH-01), 15-minute/30-day token lifetimes (FR-AUTH-04),
+  password change with cross-device session revocation (FR-AUTH-06), 5-failure
+  15-minute lockout (FR-AUTH-07), and 30-day deletion grace with an hourly purge
+  worker (FR-AUTH-08). Fixed three latent bugs found on the way: Alembic could
+  never run (async URL on a sync engine, plus a missing script template), the
+  schema was `create_all`-built with no `alembic_version`, and the global
+  exception handler discarded response headers. Added `AuthRepositoryNative` so
+  account creation no longer depends on Firebase console configuration.
+- **2026-08-15** — Firebase Authentication enabled by the project owner (Google,
+  Phone, Anonymous, Email/Password); app default flipped to the Firebase path and
+  guest sign-in added. Fixed a clock-skew token rejection that would have caused
+  intermittent production sign-in failures. Frontend: global aurora ambient layer,
+  translucent surfaces, SRS-compliant violet shadows in both themes, and light-mode
+  contrast fixes. Repo cleanup: deleted the legacy Flask gateway, the deprecated
+  Flutter tree, a committed 400 MB Chrome profile, empty root `lib/`+`test/`
+  skeletons and two dead test files; genuinely untracked the artifacts the
+  2026-08-08 pass had only claimed to untrack. Working tree 389 MB → 103 MB.

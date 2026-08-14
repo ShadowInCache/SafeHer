@@ -1,8 +1,8 @@
 # Dependencies
 
-`requirements.txt` (root) mixes three concerns in one flat file: the current FastAPI
-backend, the archived `legacy_flask_gateway/`, and the `ml_training/` pipeline. Grouped
-below by what actually needs each one.
+`requirements.txt` (root) mixes three concerns in one flat file: the FastAPI backend,
+the Dockerised event processor, and the `ml_training/` pipeline. Grouped below by what
+actually needs each one.
 
 ## Backend (`fastapi_app/`) — needed to run the app
 
@@ -29,18 +29,19 @@ below by what actually needs each one.
 `requirements.txt` previously listed `alembic` and bare `redis` twice each — deduped
 as part of this audit (harmless either way since pip dedupes, but cleaner).
 
-## Legacy (`legacy_flask_gateway/`) — only needed if you run the archived gateway
+## Event processor (`deployment/docker/safeher_event_processor.py`)
 
 | Package | Why |
 |---|---|
-| `flask` | The old app framework |
-| `flask-cors` | CORS for the old gateway |
-| `flask-sock` | WebSocket support for the old gateway |
-| `paho-mqtt` | MQTT client used by `legacy_flask_gateway/services/mqtt/` |
+| `flask` | HTTP surface of the event-processor container |
+| `flask-cors` | CORS for that container |
+| `paho-mqtt` | Its MQTT client (the backend itself uses `asyncio-mqtt`) |
 
-Not required for anything in `fastapi_app/` or `mobile/`. If `legacy_flask_gateway/`
-is ever deleted outright (see the recommendation in the audit report), these four can
-go with it.
+These are **not** used by `fastapi_app/` or `mobile/`, but they are required by the
+`safeher_event_processor` service in `deployment/docker/docker-compose.yml`. They were
+previously documented as belonging to the legacy Flask gateway; when that gateway was
+deleted on 2026-08-15 they were checked and kept, because the event processor imports
+all three. `flask-sock` was removed at the same time — nothing imports it.
 
 ## ML training (`ml_training/`) — only needed to retrain models
 
@@ -54,7 +55,7 @@ go with it.
 | `opencv-python`, `Pillow` | Image preprocessing |
 | `librosa`, `soundfile` | Voice-distress audio feature extraction |
 
-None of these are imported by `fastapi_app/` or `legacy_flask_gateway/` — they're a
+None of these are imported by `fastapi_app/` — they're a
 training-time-only dependency set. If you're only running the backend, you can skip
 installing this group (edit a local copy of `requirements.txt`, or split it into
 `requirements-backend.txt` / `requirements-ml.txt` — see Recommendations in the audit
@@ -98,9 +99,10 @@ corresponding import in `mobile/lib/`.
 
 ## Alternatives considered (for future reference, not acted on)
 
-- **Flask → FastAPI**: already done; this is why `legacy_flask_gateway/` exists.
+- **Flask → FastAPI**: complete. The legacy gateway was deleted on 2026-08-15; the
+  remaining Flask dependency belongs to the event-processor container only.
 - **`paho-mqtt` vs `asyncio-mqtt`**: the codebase currently has both (one per backend
   generation). Standardizing on `asyncio-mqtt` (already used by `fastapi_app/`) once
-  `legacy_flask_gateway/` is fully retired would remove the duplication.
+  the event processor is folded into the backend would remove the duplication.
 - **Splitting `requirements.txt`**: recommended — see DEPENDENCIES notes above and the
   Recommendations section of the audit report.
