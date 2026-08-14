@@ -10,6 +10,9 @@ until the first tagged release.
 ### 2026-08-15 — Firebase auth, design system, repo cleanup
 
 #### Added
+- iOS Firebase configuration: `GoogleService-Info.plist`, referenced from the
+  Xcode Resources build phase, with `REVERSED_CLIENT_ID` registered as a URL
+  scheme for `google_sign_in`. Not verified by an iOS build (Windows host).
 - Guest sign-in (Firebase Anonymous) — "Continue as guest" reaches the SOS button
   without an account. The backend still provisions a real account keyed to the
   Firebase uid.

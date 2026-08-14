@@ -265,12 +265,31 @@ Chrome is the quickest way to test Google sign-in today.
 
 ### iOS
 
-`mobile/ios/Runner/GoogleService-Info.plist` is **missing**, so Firebase does not
-initialise on iOS at all. Add the iOS app in the Firebase console, download the
-plist into `mobile/ios/Runner/`, and add its `REVERSED_CLIENT_ID` as a URL scheme
-in `Info.plist` (required by `google_sign_in`). Note the bundle id in
-`firebase_options.dart` is `com.example.safeherApp` — it must match whatever you
-register.
+Configured as of 2026-08-15. `mobile/ios/Runner/GoogleService-Info.plist` is in
+place for project `safeher-2a1f2`, bundle id `com.example.safeherApp` — which
+matches both `firebase_options.dart` and `PRODUCT_BUNDLE_IDENTIFIER` in the Xcode
+project. Unlike the Android file, it carries a real `CLIENT_ID` and
+`REVERSED_CLIENT_ID`, so an iOS OAuth client exists and Google sign-in does not
+need a separate fingerprint registration.
+
+Two wiring steps were done alongside it, both easy to miss:
+
+1. **The plist is referenced from `Runner.xcodeproj/project.pbxproj`.** Dropping
+   the file into `ios/Runner/` is not sufficient — Xcode only copies files listed
+   in the target's Resources build phase. Without that entry the app builds fine
+   and then fails at runtime with a missing-configuration error that reads like a
+   code bug.
+2. **`REVERSED_CLIENT_ID` is registered as a URL scheme in `Info.plist`.**
+   `google_sign_in` completes its OAuth callback by opening that scheme; without
+   it, sign-in hangs after the consent screen.
+
+> **Unverified on device.** These changes were made on Windows, where Flutter
+> cannot build for iOS. The plist and `Info.plist` were validated as parseable
+> and the `project.pbxproj` edit was structurally checked, but no iOS build has
+> been run. Verify on a Mac with `flutter build ios --debug` before trusting it.
+> If Xcode reports a corrupt project file, restore
+> `Runner.xcodeproj/project.pbxproj` from git and add the plist by dragging it
+> into the Runner group in Xcode with "Runner" ticked under target membership.
 
 ### Web (`flutter run -d chrome`)
 

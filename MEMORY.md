@@ -169,6 +169,12 @@ connect and [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full folder tou
   `lib/shared/components/layout/sa_ambient_background.dart`,
   `test/features/auth/data/auth_repository_native_test.dart` (16 tests).
 
+- 2026-08-15: `mobile/ios/Runner/GoogleService-Info.plist` — iOS Firebase config
+  for `safeher-2a1f2`, bundle id `com.example.safeherApp`. Wired into
+  `Runner.xcodeproj/project.pbxproj` (Resources build phase) and its
+  `REVERSED_CLIENT_ID` registered as a URL scheme in `Info.plist`. Not verified by
+  an iOS build — Flutter cannot build for iOS on Windows.
+
 ## Refactored Modules
 
 - 2026-08-08: No behavioral refactors performed — only relocations (see Folder
@@ -296,3 +302,10 @@ in future work — this file describes state as of 2026-08-08, not necessarily t
   Flutter tree, a committed 400 MB Chrome profile, empty root `lib/`+`test/`
   skeletons and two dead test files; genuinely untracked the artifacts the
   2026-08-08 pass had only claimed to untrack. Working tree 389 MB → 103 MB.
+- **2026-08-15 (later)** — iOS Firebase configuration added. Unlike the Android
+  file, the plist carries a real `CLIENT_ID`/`REVERSED_CLIENT_ID`, so iOS Google
+  sign-in needs no separate fingerprint registration. Two steps that are easy to
+  miss were done alongside it: referencing the plist from `project.pbxproj` (a
+  file merely present in `ios/Runner/` is never copied into the bundle) and
+  registering the reversed client id as a URL scheme (`google_sign_in`'s OAuth
+  callback needs it). Neither is verifiable on Windows.
