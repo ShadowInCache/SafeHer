@@ -46,6 +46,11 @@ until the first tagged release.
   white text, failing the 4.5:1 contrast floor in SRS 5.4. Shadows were neutral
   black where SRS section 2.4 specifies violet.
 
+#### Changed
+- Android: `com.google.gms.google-services` 4.3.15 → 4.5.0; removed the
+  `com.google.firebase.crashlytics` Gradle plugin, which was applied without
+  `firebase_crashlytics` ever being in pubspec.yaml.
+
 #### Removed
 - `legacy_flask_gateway/` — the superseded Flask backend. Nothing outside itself
   imported it. `flask`, `flask-cors` and `paho-mqtt` were **kept** because

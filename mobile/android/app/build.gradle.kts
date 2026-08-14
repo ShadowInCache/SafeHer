@@ -1,8 +1,9 @@
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
+    // Reads android/app/google-services.json and generates the resources the
+    // Firebase SDKs look up at runtime.
     id("com.google.gms.google-services")
-    id("com.google.firebase.crashlytics")
     // END: FlutterFire Configuration
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.

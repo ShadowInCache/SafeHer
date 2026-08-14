@@ -223,6 +223,40 @@ Firebase console → **Authentication → Sign-in method**, enable:
 If a provider is disabled, Firebase returns `operation-not-allowed` and the app
 surfaces "This sign-in method isn't enabled for this app yet."
 
+### Android Gradle wiring (already done)
+
+Firebase's Android setup guide asks you to add the Google services Gradle plugin.
+In a Flutter project `flutterfire configure` has already done this, in the
+Flutter-idiomatic place rather than the one the guide names:
+
+| Guide says | This project |
+|---|---|
+| plugins block in root `build.gradle.kts` | `android/settings.gradle.kts` plugins block |
+| `id("com.google.gms.google-services")` in app module | `android/app/build.gradle.kts` — present |
+| `google-services.json` in app module | `android/app/google-services.json` — present |
+
+**Do not add the Firebase BoM or `firebase-analytics` by hand.** That step in the
+guide is for native Android apps. Here the FlutterFire packages
+(`firebase_core`, `firebase_auth`, `firebase_messaging`) declare their own native
+dependencies at versions known to work together; adding the BoM on top invites
+version conflicts. To add a Firebase product, add its Flutter package to
+`pubspec.yaml` instead.
+
+Two changes were made on 2026-08-15:
+
+- `com.google.gms.google-services` bumped 4.3.15 → 4.5.0, the version current
+  Firebase docs specify and the one tested against Android Gradle Plugin 8.x
+  (this project uses AGP 8.11.1 with Gradle 8.14).
+- The `com.google.firebase.crashlytics` plugin was **removed**. It was applied in
+  `app/build.gradle.kts` while `firebase_crashlytics` was never in
+  `pubspec.yaml` — a Gradle plugin with no SDK behind it. Re-add both together
+  if you want crash reporting.
+
+> **Unverified by a build.** There is no Android SDK on the development machine,
+> so no Gradle build has been run against these changes. The files were checked
+> structurally only. If `flutter build apk` fails on the plugin version, revert
+> the bump to 4.3.15 first.
+
 ### Register the Android SHA-1 (this is what breaks Google sign-in)
 
 `mobile/android/app/google-services.json` currently has:
