@@ -1,0 +1,1 @@
+This directory is intentionally tracked via .gitkeep. It's declared as an asset directory in pubspec.yaml but has no committed assets yet -- flutter analyze/build fail without it existing.
