@@ -3,13 +3,22 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_app.db import get_session
-from fastapi_app.models import Incident, Media
+from fastapi_app.models import Incident, Location, Media
 from fastapi_app.schemas import IncidentCreate, IncidentPublic, UserPublic
 from fastapi_app.security import get_current_user
 from fastapi_app.services.notifications import send_fcm_notification
 from fastapi_app.config import get_settings
 
 router = APIRouter(prefix="/api/v1/incidents", tags=["incidents"])
+
+
+def _with_location(incident: Incident, location: Location | None) -> IncidentPublic:
+    public = IncidentPublic.model_validate(incident)
+    if location is not None:
+        public.latitude = location.lat
+        public.longitude = location.lng
+        public.location_accuracy = location.accuracy
+    return public
 
 
 @router.post("/", response_model=IncidentPublic, status_code=status.HTTP_201_CREATED)
@@ -73,7 +82,18 @@ async def list_incidents(
         .limit(limit)
         .offset(offset)
     )
-    return result.scalars().all()
+    rows = result.scalars().all()
+    if not rows:
+        return []
+
+    incident_ids = [row.id for row in rows]
+    locations = (
+        (await session.execute(select(Location).where(Location.incident_id.in_(incident_ids))))
+        .scalars()
+        .all()
+    )
+    location_by_incident = {loc.incident_id: loc for loc in locations}
+    return [_with_location(row, location_by_incident.get(row.id)) for row in rows]
 
 
 @router.get("/{incident_id}", response_model=IncidentPublic)
@@ -85,4 +105,7 @@ async def get_incident(
     incident = await session.get(Incident, incident_id)
     if not incident or incident.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
-    return incident
+    location = (
+        await session.execute(select(Location).where(Location.incident_id == incident_id))
+    ).scalar_one_or_none()
+    return _with_location(incident, location)

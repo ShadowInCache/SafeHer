@@ -15,11 +15,21 @@ router = APIRouter(tags=["health"])
 def health(settings: SettingsDep):
     redis_ok = False
     try:
+        # A raw precheck first: redis-py's own connect/socket timeouts don't
+        # reliably bound how long client.ping() takes when nothing is
+        # listening (observed 15s+ stalls in local dev on Windows, where
+        # "localhost" resolves to both ::1 and 127.0.0.1 and each candidate
+        # gets its own retry). A bare socket connect with an explicit short
+        # timeout fails fast and skips the redis client entirely when there's
+        # nothing there.
+        with socket.create_connection((settings.redis_host, settings.redis_port), timeout=0.3):
+            pass
         client = redis.Redis(
             host=settings.redis_host,
             port=settings.redis_port,
             password=settings.redis_password,
             socket_connect_timeout=1,
+            socket_timeout=1,
         )
         redis_ok = bool(client.ping())
     except Exception:

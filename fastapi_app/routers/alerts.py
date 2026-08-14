@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import desc, select
@@ -137,7 +138,9 @@ async def trigger_emergency_alert(
     session: AsyncSession = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ):
+    incident_id = str(uuid4())
     incident = Incident(
+        id=incident_id,
         user_id=current_user.id,
         title="Emergency SOS",
         description=payload.summary,
@@ -147,14 +150,17 @@ async def trigger_emergency_alert(
     session.add(incident)
 
     loc = payload.location or {}
-    location = Location(
-        user_id=current_user.id,
-        device_id=None,
-        lat=float(loc.get("latitude", 0.0)),
-        lng=float(loc.get("longitude", 0.0)),
-        accuracy=float(loc.get("accuracy", 0.0)) if "accuracy" in loc else None,
-    )
-    session.add(location)
+    has_location = "latitude" in loc and "longitude" in loc
+    if has_location:
+        location = Location(
+            user_id=current_user.id,
+            device_id=None,
+            incident_id=incident_id,
+            lat=float(loc["latitude"]),
+            lng=float(loc["longitude"]),
+            accuracy=float(loc["accuracy"]) if "accuracy" in loc else None,
+        )
+        session.add(location)
 
     await session.commit()
     await session.refresh(incident)
@@ -185,7 +191,12 @@ async def trigger_emergency_alert(
         "updated_at": datetime.utcnow().isoformat(),
     }
 
-    return incident
+    response = IncidentPublic.model_validate(incident)
+    if has_location:
+        response.latitude = float(loc["latitude"])
+        response.longitude = float(loc["longitude"])
+        response.location_accuracy = float(loc["accuracy"]) if "accuracy" in loc else None
+    return response
 
 
 @router.post("/heartbeat", status_code=status.HTTP_202_ACCEPTED)
