@@ -31,3 +31,13 @@ Thumbs.db
 # Flutter/Dart (see mobile/.gitignore for the authoritative, tool-generated version)
 **/build/
 .dart_tool/
+
+# --- Added 2026-08-15 ---
+# These were committed before the rules above existed, so ignoring them was not
+# enough: they stayed tracked until explicitly untracked with `git rm --cached`.
+.pytest_cache/
+mobile/.chrome_fresh_profile/
+mobile/build/
+mobile/.dart_tool/
+# Local agent worktrees
+.claude/worktrees/
