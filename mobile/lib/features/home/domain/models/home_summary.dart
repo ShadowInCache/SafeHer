@@ -1,48 +1,35 @@
-import '../../../../shared/components/cards/sa_stat_card.dart';
-
 class ThreatSnapshot {
   const ThreatSnapshot({
     required this.score,
-    required this.motionScore,
-    required this.audioScore,
-    required this.visionScore,
     required this.lastUpdated,
+    this.motionScore,
+    this.audioScore,
+    this.visionScore,
   });
 
   /// 0.0–1.0
   final double score;
-  final double motionScore;
-  final double audioScore;
-  final double visionScore;
   final DateTime lastUpdated;
+
+  /// Per-modality breakdown — null unless the backend actually returns a
+  /// component score for that modality (it doesn't today; `/alerts/live`
+  /// only exposes the fused overall score).
+  final double? motionScore;
+  final double? audioScore;
+  final double? visionScore;
 }
 
-class SafetyScoreSummary {
-  const SafetyScoreSummary({required this.score, required this.streakDays, required this.trend});
-
-  /// 0–100
-  final int score;
-  final int streakDays;
-  final SaTrendDirection trend;
-}
-
-/// Home-specific summary — live threat status, sensor preview data, and
-/// the daily safety score. Identity (name), devices, and recent alerts are
-/// NOT duplicated here; the screen reads those from their own shared
-/// providers (profile, devices, reports) so they can never drift from what
-/// those features' own screens show.
+/// Dashboard-specific summary — just the live fused threat reading.
+/// Identity (name), devices, live-monitoring connection, recent alerts,
+/// and weekly trends are NOT duplicated here; the screen reads those from
+/// their own shared providers so they can never drift from what those
+/// features' own screens show.
+///
+/// [threat] is null whenever there's genuinely no backend data to show
+/// yet (no wearable has ever reported a score). The screen renders an
+/// honest waiting state rather than a fabricated reading.
 class HomeSummary {
-  const HomeSummary({
-    required this.hasUnreadAlerts,
-    required this.threat,
-    required this.waveformPreview,
-    required this.motionPreview,
-    required this.safetyScore,
-  });
+  const HomeSummary({required this.threat});
 
-  final bool hasUnreadAlerts;
-  final ThreatSnapshot threat;
-  final List<double> waveformPreview;
-  final List<double> motionPreview;
-  final SafetyScoreSummary safetyScore;
+  final ThreatSnapshot? threat;
 }

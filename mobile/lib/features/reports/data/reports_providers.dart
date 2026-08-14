@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/network/network_providers.dart';
 import '../domain/models/report_detail.dart';
 import '../domain/models/report_summary.dart';
 import '../domain/reports_repository.dart';
@@ -13,7 +14,7 @@ part 'reports_providers.g.dart';
 @riverpod
 ReportsRepository reportsRepository(Ref ref) {
   if (AppConfig.useMockApi) return ReportsRepositoryMock();
-  return ReportsRepositoryRemote();
+  return ReportsRepositoryRemote(apiClient: ref.watch(apiClientProvider));
 }
 
 @riverpod

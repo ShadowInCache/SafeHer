@@ -41,9 +41,9 @@ class _AlwaysOfflineConnectivityNotifier extends ConnectivityNotifier {
 /// `ContactsNotifier`) transitively needs connectivity + the offline queue
 /// service — spread this into any test harness's `ProviderScope.overrides`
 /// alongside the screen's own repository overrides.
-List<Override> offlineTestOverrides({bool offline = false}) => [
+List<Override> offlineTestOverrides({bool offline = false, OfflineQueueService? queueService}) => [
   connectivityNotifierProvider.overrideWith(
     offline ? _AlwaysOfflineConnectivityNotifier.new : _AlwaysOnlineConnectivityNotifier.new,
   ),
-  offlineQueueServiceProvider.overrideWithValue(OfflineQueueService(FakeOfflineQueueBox())),
+  offlineQueueServiceProvider.overrideWithValue(queueService ?? OfflineQueueService(FakeOfflineQueueBox())),
 ];

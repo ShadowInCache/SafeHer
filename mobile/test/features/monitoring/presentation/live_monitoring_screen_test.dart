@@ -4,20 +4,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
+import 'package:safeher_app/features/devices/data/device_providers.dart';
 import 'package:safeher_app/features/monitoring/data/monitoring_providers.dart';
-import 'package:safeher_app/features/monitoring/domain/models/monitoring_snapshot.dart';
+import 'package:safeher_app/features/monitoring/domain/models/realtime_alert_event.dart';
 import 'package:safeher_app/features/monitoring/presentation/live_monitoring_screen.dart';
-import 'package:safeher_app/shared/components/charts/sa_motion_chart.dart';
+import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
-MonitoringSnapshot _sampleSnapshot() => MonitoringSnapshot(
-  threatScore: 0.42,
-  waveform: List.generate(64, (i) => 0.2 + (i % 8) * 0.05),
-  dbLevel: 48,
-  detectedEmotion: 'calm',
-  motionWindow: List.generate(30, (i) => MotionSample(x: i * 0.1, y: 0.2, z: 0.1)),
-  eventPins: const [MotionEventPin(sampleIndex: 10, label: 'Motion spike', timestamp: '10:00:00')],
-  glassesConnected: false,
-);
+class _FakeLiveMonitoringController extends LiveMonitoringController {
+  _FakeLiveMonitoringController(this._initial);
+
+  final LiveMonitoringState _initial;
+
+  @override
+  LiveMonitoringState build() => _initial;
+}
 
 GoRouter _buildTestRouter() {
   return GoRouter(
@@ -32,16 +32,23 @@ GoRouter _buildTestRouter() {
 
 Widget _harness({
   Brightness brightness = Brightness.dark,
-  Stream<MonitoringSnapshot>? stream,
+  LiveMonitoringState? state,
   Size surfaceSize = const Size(390, 844),
 }) {
+  final resolvedState =
+      state ?? const LiveMonitoringState(status: MonitoringConnectionStatus.disconnected, events: []);
   return ProviderScope(
     overrides: [
-      monitoringStreamProvider.overrideWith((ref) => stream ?? Stream.value(_sampleSnapshot())),
+      liveMonitoringControllerProvider.overrideWith(() => _FakeLiveMonitoringController(resolvedState)),
+      devicesProvider.overrideWith((ref) async => const []),
     ],
     child: MediaQuery(
       data: MediaQueryData(size: surfaceSize),
       child: MaterialApp.router(
+    // Mirrors main.dart's shell so screens render over the same ambient
+    // field users see; the scaffold background is transparent by design.
+    builder: (context, child) =>
+        SaAmbientBackground(child: child ?? const SizedBox.shrink()),
         theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
         routerConfig: _buildTestRouter(),
       ),
@@ -51,30 +58,45 @@ Widget _harness({
 
 void main() {
   group('LiveMonitoringScreen', () {
-    testWidgets('renders_without_exception (loading state)', (tester) async {
-      await tester.pumpWidget(_harness(stream: const Stream.empty()));
+    testWidgets('renders_without_exception (connecting state)', (tester) async {
+      await tester.pumpWidget(
+        _harness(state: const LiveMonitoringState(status: MonitoringConnectionStatus.connecting, events: [])),
+      );
       await tester.pump();
       expect(tester.takeException(), isNull);
+      expect(find.text('CONNECTING'), findsOneWidget);
     });
 
-    testWidgets('renders_with_data (mocked stream)', (tester) async {
+    testWidgets('renders_empty_state (disconnected, no device data)', (tester) async {
       await tester.pumpWidget(_harness());
       await tester.pump(const Duration(milliseconds: 50));
       expect(tester.takeException(), isNull);
       expect(find.text('Live Monitoring'), findsOneWidget);
-      expect(find.text('LIVE'), findsOneWidget);
-      expect(find.text('Audio'), findsOneWidget);
-      expect(find.text('Motion'), findsOneWidget);
-      expect(find.text('Camera'), findsOneWidget);
-      expect(find.text('Connect glasses'), findsOneWidget);
+      expect(find.text('OFFLINE'), findsOneWidget);
+      expect(find.text('No live device data available'), findsOneWidget);
+      expect(find.text('Retry Connection'), findsOneWidget);
+      expect(find.text('Waiting for live device data'), findsOneWidget);
     });
 
-    testWidgets('renders_error_state (retry)', (tester) async {
-      await tester.pumpWidget(_harness(stream: Stream.error(Exception('stream error'))));
+    testWidgets('renders_with_data (connected with a real received event)', (tester) async {
+      final state = LiveMonitoringState(
+        status: MonitoringConnectionStatus.connected,
+        events: [
+          RealtimeAlertEvent(
+            kind: RealtimeAlertKind.emergency,
+            summary: 'Emergency SOS triggered',
+            timestamp: DateTime.now(),
+            threatLevel: 'critical',
+          ),
+        ],
+      );
+      await tester.pumpWidget(_harness(state: state));
       await tester.pump(const Duration(milliseconds: 50));
       expect(tester.takeException(), isNull);
-      expect(find.text("Couldn't start live monitoring"), findsOneWidget);
-      expect(find.text('Retry'), findsOneWidget);
+      expect(find.text('LIVE'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Emergency SOS triggered'), 200);
+      expect(find.text('Emergency SOS triggered'), findsOneWidget);
+      expect(find.textContaining('CRITICAL'), findsOneWidget);
     });
 
     testWidgets('renders in light mode', (tester) async {
@@ -87,14 +109,6 @@ void main() {
       await tester.pumpWidget(_harness());
       await tester.pump(const Duration(milliseconds: 50));
       expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('renders 2-column layout on tablet width', (tester) async {
-      await tester.pumpWidget(_harness(surfaceSize: const Size(900, 1024)));
-      await tester.pump(const Duration(milliseconds: 50));
-      expect(tester.takeException(), isNull);
-      expect(find.text('Audio'), findsOneWidget);
-      expect(find.text('Camera'), findsOneWidget);
     });
 
     testWidgets('navigation_actions_work: back button returns to home', (tester) async {

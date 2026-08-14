@@ -1,68 +1,57 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-
+import '../../../core/network/api_client.dart';
 import '../domain/contacts_repository.dart';
 import '../domain/models/contact.dart';
 
-/// Firestore-backed [ContactsRepository]. Contacts live at
-/// `users/{uid}/contacts/{contactId}`; [priority] is kept in sync with
-/// list order on every mutation, same as the mock implementation.
+/// `fastapi_app`-backed [ContactsRepository] — `/api/v1/users/me/emergency-contacts`.
+/// See repo root API.md for the exact request/response shapes.
 class ContactsRepositoryRemote implements ContactsRepository {
-  ContactsRepositoryRemote({FirebaseFirestore? firestore, FirebaseAuth? auth})
-    : _firestore = firestore ?? FirebaseFirestore.instance,
-      _auth = auth ?? FirebaseAuth.instance;
+  ContactsRepositoryRemote({required ApiClient apiClient}) : _apiClient = apiClient;
 
-  final FirebaseFirestore _firestore;
-  final FirebaseAuth _auth;
+  final ApiClient _apiClient;
 
-  CollectionReference<Map<String, dynamic>> get _collection {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) throw StateError('No signed-in user.');
-    return _firestore.collection('users').doc(uid).collection('contacts');
-  }
+  static const _basePath = '/users/me/emergency-contacts';
 
-  Contact _fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data();
-    return Contact(
-      id: doc.id,
-      name: data['name'] as String,
-      relationship: data['relationship'] as String,
-      priority: data['priority'] as int,
-      confirmed: data['confirmed'] as bool? ?? false,
-    );
-  }
+  Contact _fromJson(Map<String, dynamic> json) => Contact(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    phone: json['phone'] as String,
+    // The backend has no contact-confirmation workflow (no per-contact OTP
+    // invite, unlike the aspirational SRS FR-EMG-10) — a contact existing
+    // on the server is the only "confirmed" state there is today.
+    confirmed: true,
+    relationship: json['relationship'] as String? ?? 'trusted_contact',
+    priority: json['priority'] as int? ?? 1,
+  );
 
   @override
   Future<List<Contact>> getContacts() async {
-    final snapshot = await _collection.orderBy('priority').get();
-    return snapshot.docs.map(_fromDoc).toList();
+    final response = await _apiClient.dio.get(_basePath);
+    return (response.data as List).cast<Map<String, dynamic>>().map(_fromJson).toList();
   }
 
   @override
-  Future<List<Contact>> addContact(String name, String relationship) async {
+  Future<List<Contact>> addContact(String name, String phone, String relationship) async {
     final existing = await getContacts();
-    await _collection.add({
-      'name': name,
-      'relationship': relationship,
-      'priority': existing.length + 1,
-      'confirmed': false,
-    });
+    await _apiClient.dio.post(
+      _basePath,
+      data: {'name': name, 'phone': phone, 'relationship': relationship, 'priority': existing.length + 1},
+    );
     return getContacts();
   }
 
   @override
   Future<List<Contact>> removeContact(String id) async {
-    await _collection.doc(id).delete();
+    await _apiClient.dio.delete('$_basePath/$id');
     return reorderContacts(await getContacts());
   }
 
   @override
   Future<List<Contact>> reorderContacts(List<Contact> newOrder) async {
-    final batch = _firestore.batch();
     for (var i = 0; i < newOrder.length; i++) {
-      batch.update(_collection.doc(newOrder[i].id), {'priority': i + 1});
+      final desiredPriority = i + 1;
+      if (newOrder[i].priority == desiredPriority) continue;
+      await _apiClient.dio.put('$_basePath/${newOrder[i].id}', data: {'priority': desiredPriority});
     }
-    await batch.commit();
     return getContacts();
   }
 }

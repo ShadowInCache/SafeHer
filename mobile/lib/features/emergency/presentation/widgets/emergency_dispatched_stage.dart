@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/animations/animation_helpers.dart';
+import '../../../../core/location/location_result.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -10,20 +12,23 @@ import '../../../../shared/components/cards/sa_contact_card.dart';
 import '../../../../shared/components/icons/sa_icon.dart';
 import '../../../contacts/domain/models/contact.dart';
 
-/// Stage 3 — the alert has been sent. Shows a simulated "sharing your
-/// location" panel and staggers each contact from "Notifying…" to
-/// "Notified" as [notifiedContactIds] grows.
+/// Stage 3 — the alert has been sent. Shows a live-location panel (real
+/// coordinates when a fix was acquired, a plain-language fallback
+/// otherwise) and staggers each contact from "Notifying…" to "Notified"
+/// as [notifiedContactIds] grows.
 class EmergencyDispatchedStage extends StatelessWidget {
   const EmergencyDispatchedStage({
     required this.contactsAsync,
     required this.notifiedContactIds,
     required this.onMarkSafe,
+    this.location,
     super.key,
   });
 
   final AsyncValue<List<Contact>> contactsAsync;
   final Set<String> notifiedContactIds;
   final VoidCallback onMarkSafe;
+  final LocationResult? location;
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +64,7 @@ class EmergencyDispatchedStage extends StatelessWidget {
           style: AppTypography.bodyM.copyWith(color: Colors.white.withValues(alpha: 0.7)),
         ),
         const SizedBox(height: AppSpacing.space5),
-        const _LiveLocationPanel(),
+        _LiveLocationPanel(location: location),
         const SizedBox(height: AppSpacing.space6),
         Text('Notifying', style: AppTypography.headingS.copyWith(color: Colors.white)),
         const SizedBox(height: AppSpacing.space3),
@@ -100,12 +105,20 @@ class EmergencyDispatchedStage extends StatelessWidget {
 }
 
 class _LiveLocationPanel extends StatelessWidget {
-  const _LiveLocationPanel();
+  const _LiveLocationPanel({this.location});
+
+  final LocationResult? location;
 
   @override
   Widget build(BuildContext context) {
+    final loc = location;
+    final subtitle = switch (loc) {
+      LocationAvailable() =>
+        '${loc.latitude.toStringAsFixed(6)}, ${loc.longitude.toStringAsFixed(6)} (±${loc.accuracyMeters.round()}m)',
+      LocationUnavailable() => loc.userMessage,
+      null => 'Acquiring your location…',
+    };
     return Container(
-      height: 140,
       padding: const EdgeInsets.all(AppSpacing.space4),
       decoration: BoxDecoration(
         color: AppColors.dark800,
@@ -121,15 +134,66 @@ class _LiveLocationPanel extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Sharing live location', style: AppTypography.headingS.copyWith(color: Colors.white)),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Sharing live location',
+                        style: AppTypography.headingS.copyWith(color: Colors.white),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (loc is LocationAvailable) ...[const SizedBox(width: AppSpacing.space2), const _LiveBadge()],
+                  ],
+                ),
                 const SizedBox(height: AppSpacing.space1),
                 Text(
-                  'Your location updates automatically as you move.',
-                  style: AppTypography.bodyS.copyWith(color: Colors.white.withValues(alpha: 0.6)),
+                  subtitle,
+                  style: AppTypography.monoDataS.copyWith(color: Colors.white.withValues(alpha: 0.6)),
                 ),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A pulsing "LIVE" badge — dot + label opacity breathing 1.0↔0.3 on a
+/// 1s loop, snapping to fully-on under reduced motion.
+class _LiveBadge extends StatefulWidget {
+  const _LiveBadge();
+
+  @override
+  State<_LiveBadge> createState() => _LiveBadgeState();
+}
+
+class _LiveBadgeState extends State<_LiveBadge> with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(vsync: this, duration: const Duration(seconds: 1));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    AnimationHelpers.repeat(context, _controller, reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 1.0, end: 0.3).animate(_controller),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(width: 6, height: 6, decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.coral500)),
+          const SizedBox(width: AppSpacing.space1),
+          Text('LIVE', style: AppTypography.labelM.copyWith(color: AppColors.coral500)),
         ],
       ),
     );

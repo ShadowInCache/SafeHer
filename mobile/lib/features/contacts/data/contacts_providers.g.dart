@@ -7,7 +7,7 @@ part of 'contacts_providers.dart';
 // **************************************************************************
 
 String _$contactsRepositoryHash() =>
-    r'd23e2b8e872054960cd80cd969733b35f31417a2';
+    r'9328fd428db2605f57c1a6fa8bac63da5921bf18';
 
 /// See also [contactsRepository].
 @ProviderFor(contactsRepository)
@@ -25,7 +25,7 @@ final contactsRepositoryProvider =
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef ContactsRepositoryRef = AutoDisposeProviderRef<ContactsRepository>;
-String _$contactsNotifierHash() => r'323b46d1001336e35150636ccf1e481496c7a424';
+String _$contactsNotifierHash() => r'346fe2c124204cfac5aa32ba03dacf7158427e31';
 
 /// The single source of truth for the app's emergency contacts — Settings,
 /// Emergency, Search, and Profile all watch this instead of keeping their

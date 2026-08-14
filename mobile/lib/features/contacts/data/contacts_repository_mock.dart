@@ -6,9 +6,9 @@ import '../domain/models/contact.dart';
 /// callers don't set it directly, it's recomputed on every mutation.
 class ContactsRepositoryMock implements ContactsRepository {
   final List<Contact> _contacts = [
-    const Contact(id: '1', name: 'Anika Sharma', relationship: 'Sister', priority: 1, confirmed: true),
-    const Contact(id: '2', name: 'Rahul Verma', relationship: 'Partner', priority: 2, confirmed: true),
-    const Contact(id: '3', name: 'Meera Iyer', relationship: 'Friend', priority: 3, confirmed: false),
+    const Contact(id: '1', name: 'Anika Sharma', phone: '+15550101001', relationship: 'Sister', priority: 1, confirmed: true),
+    const Contact(id: '2', name: 'Rahul Verma', phone: '+15550101002', relationship: 'Partner', priority: 2, confirmed: true),
+    const Contact(id: '3', name: 'Meera Iyer', phone: '+15550101003', relationship: 'Friend', priority: 3, confirmed: false),
   ];
   var _nextId = 4;
 
@@ -17,6 +17,7 @@ class ContactsRepositoryMock implements ContactsRepository {
       Contact(
         id: contacts[i].id,
         name: contacts[i].name,
+        phone: contacts[i].phone,
         relationship: contacts[i].relationship,
         priority: i + 1,
         confirmed: contacts[i].confirmed,
@@ -30,9 +31,11 @@ class ContactsRepositoryMock implements ContactsRepository {
   }
 
   @override
-  Future<List<Contact>> addContact(String name, String relationship) async {
+  Future<List<Contact>> addContact(String name, String phone, String relationship) async {
     await Future.delayed(const Duration(milliseconds: 150));
-    _contacts.add(Contact(id: '${_nextId++}', name: name, relationship: relationship, priority: 0, confirmed: false));
+    _contacts.add(
+      Contact(id: '${_nextId++}', name: name, phone: phone, relationship: relationship, priority: 0, confirmed: false),
+    );
     final updated = _withPriorities(_contacts);
     _contacts
       ..clear()

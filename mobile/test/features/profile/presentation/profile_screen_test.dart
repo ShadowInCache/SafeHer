@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
+import 'package:safeher_app/core/local/onboarding_prefs.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
+import 'package:safeher_app/features/auth/data/auth_providers.dart';
 import 'package:safeher_app/features/contacts/data/contacts_providers.dart';
 import 'package:safeher_app/features/contacts/domain/contacts_repository.dart';
 import 'package:safeher_app/features/contacts/domain/models/contact.dart';
@@ -15,7 +17,10 @@ import 'package:safeher_app/features/profile/domain/models/user_profile.dart';
 import 'package:safeher_app/features/profile/domain/profile_repository.dart';
 import 'package:safeher_app/features/profile/presentation/profile_screen.dart';
 
+import '../../../test_utils/fake_auth_repository.dart';
+import '../../../test_utils/fake_key_value_store.dart';
 import '../../../test_utils/offline_test_overrides.dart';
+import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
 UserProfile _sampleProfile() => const UserProfile(
   name: 'Priya Patel',
@@ -36,6 +41,9 @@ class _FakeProfileRepository implements ProfileRepository {
     if (shouldFail) throw Exception('network error');
     return _sampleProfile();
   }
+
+  @override
+  Future<UserProfile> updateProfile({String? name, String? phone}) => throw UnimplementedError();
 }
 
 class _FakeContactsRepository implements ContactsRepository {
@@ -47,13 +55,13 @@ class _FakeContactsRepository implements ContactsRepository {
     // pump budgets.
     await Future.delayed(const Duration(milliseconds: 10));
     return const [
-      Contact(id: '1', name: 'Anika Sharma', relationship: 'Sister', priority: 1, confirmed: true),
-      Contact(id: '2', name: 'Rahul Verma', relationship: 'Partner', priority: 2, confirmed: true),
+      Contact(id: '1', name: 'Anika Sharma', phone: '+15550101000', relationship: 'Sister', priority: 1, confirmed: true),
+      Contact(id: '2', name: 'Rahul Verma', phone: '+15550101000', relationship: 'Partner', priority: 2, confirmed: true),
     ];
   }
 
   @override
-  Future<List<Contact>> addContact(String name, String relationship) => throw UnimplementedError();
+  Future<List<Contact>> addContact(String name, String phone, String relationship) => throw UnimplementedError();
 
   @override
   Future<List<Contact>> removeContact(String id) => throw UnimplementedError();
@@ -91,7 +99,7 @@ GoRouter _buildTestRouter() {
       GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
       GoRoute(path: '/home', builder: (context, state) => const Scaffold(body: Text('home-stub'))),
       GoRoute(path: '/monitor', builder: (context, state) => const Scaffold(body: Text('monitor-stub'))),
-      GoRoute(path: '/dashboard', builder: (context, state) => const Scaffold(body: Text('dashboard-stub'))),
+      GoRoute(path: '/devices', builder: (context, state) => const Scaffold(body: Text('devices-stub'))),
       GoRoute(path: '/emergency', builder: (context, state) => const Scaffold(body: Text('emergency-stub'))),
       GoRoute(path: '/settings', builder: (context, state) => const Scaffold(body: Text('settings-stub'))),
       GoRoute(
@@ -109,9 +117,17 @@ Widget _harness({Brightness brightness = Brightness.dark, ProfileRepository? rep
       profileRepositoryProvider.overrideWithValue(repo ?? _FakeProfileRepository()),
       contactsRepositoryProvider.overrideWithValue(_FakeContactsRepository()),
       deviceRepositoryProvider.overrideWithValue(_FakeDeviceRepository()),
+      localKeyValueStoreProvider.overrideWithValue(FakeKeyValueStore()),
+      // Sign Out / Delete Account would otherwise reach the real
+      // Firebase-backed repository, which has no platform channel here.
+      authRepositoryProvider.overrideWithValue(FakeAuthRepository()),
       ...offlineTestOverrides(),
     ],
     child: MaterialApp.router(
+    // Mirrors main.dart's shell so screens render over the same ambient
+    // field users see; the scaffold background is transparent by design.
+    builder: (context, child) =>
+        SaAmbientBackground(child: child ?? const SizedBox.shrink()),
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
       routerConfig: _buildTestRouter(),
     ),
@@ -129,7 +145,7 @@ void main() {
     });
 
     testWidgets('renders_with_data (mocked repository)', (tester) async {
-      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      await tester.binding.setSurfaceSize(const Size(390, 2400));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(_harness());
       await tester.pump(const Duration(milliseconds: 100));
@@ -167,7 +183,7 @@ void main() {
     });
 
     testWidgets('navigation_actions_work: Settings row navigates to settings', (tester) async {
-      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      await tester.binding.setSurfaceSize(const Size(390, 2400));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(_harness());
       await tester.pump(const Duration(milliseconds: 100));
@@ -179,7 +195,7 @@ void main() {
     });
 
     testWidgets('navigation_actions_work: Sign Out requires a second confirm tap', (tester) async {
-      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      await tester.binding.setSurfaceSize(const Size(390, 2400));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(_harness());
       await tester.pump(const Duration(milliseconds: 100));
@@ -201,7 +217,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 400));
 
-      await tester.tap(find.bySemanticsLabel('Home'));
+      // The Dart enum value is still `SaNavTab.home`, but its visible
+      // label is "Dashboard" — see sa_bottom_nav_bar.dart's doc comment.
+      await tester.tap(find.bySemanticsLabel('Dashboard'));
       await tester.pumpAndSettle();
       expect(find.text('home-stub'), findsOneWidget);
     });

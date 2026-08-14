@@ -16,7 +16,7 @@ void main() {
         ),
       );
       expect(tester.takeException(), isNull);
-      expect(find.text('Home'), findsOneWidget);
+      expect(find.text('Dashboard'), findsOneWidget);
     });
 
     testWidgets('renders in dark mode', (tester) async {
@@ -37,9 +37,9 @@ void main() {
           surfaceSize: const Size(360, 300),
         ),
       );
-      await tester.tap(find.bySemanticsLabel('Dashboard'));
+      await tester.tap(find.bySemanticsLabel('Devices'));
       await tester.pump(const Duration(milliseconds: 250));
-      expect(selected, SaNavTab.dashboard);
+      expect(selected, SaNavTab.devices);
     });
 
     testWidgets('handles tap on SOS FAB', (tester) async {

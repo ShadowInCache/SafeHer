@@ -18,6 +18,7 @@ import 'package:safeher_app/features/search/presentation/search_screen.dart';
 import 'package:safeher_app/shared/models/threat_level.dart';
 
 import '../../../test_utils/offline_test_overrides.dart';
+import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
 class _FakeReportsRepository implements ReportsRepository {
   _FakeReportsRepository({this.shouldFail = false});
@@ -46,11 +47,11 @@ class _FakeContactsRepository implements ContactsRepository {
   @override
   Future<List<Contact>> getContacts() async {
     await Future.delayed(const Duration(milliseconds: 50));
-    return const [Contact(id: '1', name: 'Anika Sharma', relationship: 'Sister', priority: 1, confirmed: true)];
+    return const [Contact(id: '1', name: 'Anika Sharma', phone: '+15550101000', relationship: 'Sister', priority: 1, confirmed: true)];
   }
 
   @override
-  Future<List<Contact>> addContact(String name, String relationship) => throw UnimplementedError();
+  Future<List<Contact>> addContact(String name, String phone, String relationship) => throw UnimplementedError();
 
   @override
   Future<List<Contact>> removeContact(String id) => throw UnimplementedError();
@@ -86,6 +87,7 @@ GoRouter _buildTestRouter() {
     routes: [
       GoRoute(path: '/search', builder: (context, state) => const SearchScreen()),
       GoRoute(path: '/home', builder: (context, state) => const Scaffold(body: Text('home-stub'))),
+      GoRoute(path: '/reports', builder: (context, state) => const Scaffold(body: Text('reports-stub'))),
       GoRoute(
         path: '/reports/:id',
         builder: (context, state) => Scaffold(body: Text('report-${state.pathParameters['id']}-stub')),
@@ -94,6 +96,8 @@ GoRouter _buildTestRouter() {
         path: '/settings/contacts',
         builder: (context, state) => const Scaffold(body: Text('settings-contacts-stub')),
       ),
+      GoRoute(path: '/settings', builder: (context, state) => const Scaffold(body: Text('settings-stub'))),
+      GoRoute(path: '/devices', builder: (context, state) => const Scaffold(body: Text('devices-stub'))),
       GoRoute(
         path: '/devices/:id',
         builder: (context, state) => Scaffold(body: Text('device-${state.pathParameters['id']}-stub')),
@@ -111,6 +115,10 @@ Widget _harness({Brightness brightness = Brightness.dark, ReportsRepository? rep
       ...offlineTestOverrides(),
     ],
     child: MaterialApp.router(
+    // Mirrors main.dart's shell so screens render over the same ambient
+    // field users see; the scaffold background is transparent by design.
+    builder: (context, child) =>
+        SaAmbientBackground(child: child ?? const SizedBox.shrink()),
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
       routerConfig: _buildTestRouter(),
     ),
@@ -126,12 +134,49 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     });
 
-    testWidgets('renders_with_data: empty query shows prompt', (tester) async {
+    testWidgets('renders_with_data: empty query shows quick access grid', (tester) async {
       await tester.pumpWidget(_harness());
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump();
       expect(tester.takeException(), isNull);
-      expect(find.text('Search SafeHer'), findsOneWidget);
+      expect(find.text('Quick Access'), findsOneWidget);
+      expect(find.text('Reports'), findsOneWidget);
+      expect(find.text('Contacts'), findsWidgets);
+      expect(find.text('Devices'), findsWidgets);
+      expect(find.text('Settings'), findsWidgets);
+    });
+
+    testWidgets('tapping a Quick Access card navigates directly', (tester) async {
+      await tester.pumpWidget(_harness());
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+
+      await tester.tap(find.text('Reports'));
+      await tester.pumpAndSettle();
+      expect(find.text('reports-stub'), findsOneWidget);
+    });
+
+    testWidgets('recent searches appear as chips and re-run the search on tap', (tester) async {
+      await tester.pumpWidget(_harness());
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+
+      await tester.enterText(find.byType(TextField), 'ring');
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.bySemanticsLabel('Recent search: ring'), findsNothing);
+      // Let the 250ms debounce actually settle (and commit "ring" to
+      // recent searches) before clearing the field — clearing too early
+      // would cancel the pending timer instead of letting it fire.
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.enterText(find.byType(TextField), '');
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Recent Searches'), findsOneWidget);
+      expect(find.text('ring'), findsOneWidget);
+
+      await tester.tap(find.text('ring'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Smart Ring'), findsOneWidget);
     });
 
     testWidgets('typing a query filters and shows matching sections', (tester) async {
@@ -165,11 +210,12 @@ void main() {
 
       // The chip row scrolls horizontally, so "Devices" (the last chip)
       // may start outside the visible/tappable viewport. At this point
-      // (empty query, category still "all") "Devices" only appears once,
-      // as the chip label — no results section is showing yet.
-      await tester.ensureVisible(find.text('Devices'));
+      // (empty query, category still "all") "Devices" appears twice — the
+      // filter chip and the Quick Access grid card — the chip is first in
+      // paint order since it's above the results/empty-state area.
+      await tester.ensureVisible(find.text('Devices').first);
       await tester.pump();
-      await tester.tap(find.text('Devices'));
+      await tester.tap(find.text('Devices').first);
       await tester.pump(const Duration(milliseconds: 100));
       expect(tester.takeException(), isNull);
       // "Devices" appears both as the filter chip label and the section header.

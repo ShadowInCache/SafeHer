@@ -3,18 +3,55 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
+import 'package:safeher_app/core/local/onboarding_prefs.dart';
+import 'package:safeher_app/core/location/location_providers.dart';
+import 'package:safeher_app/core/location/location_result.dart';
+import 'package:safeher_app/core/offline/offline_queue_providers.dart';
+import 'package:safeher_app/core/offline/offline_queue_service.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
 import 'package:safeher_app/features/contacts/data/contacts_providers.dart';
 import 'package:safeher_app/features/contacts/domain/contacts_repository.dart';
 import 'package:safeher_app/features/contacts/domain/models/contact.dart';
+import 'package:safeher_app/features/emergency/data/emergency_providers.dart';
+import 'package:safeher_app/features/emergency/domain/emergency_repository.dart';
 import 'package:safeher_app/features/emergency/presentation/emergency_screen.dart';
+import 'package:safeher_app/features/auth/data/auth_providers.dart';
+import 'package:safeher_app/features/safety/data/safety_providers.dart';
 import 'package:safeher_app/shared/components/buttons/sa_sos_button.dart';
 
+import '../../../test_utils/fake_auth_repository.dart';
+import '../../../test_utils/fake_key_value_store.dart';
+import '../../../test_utils/fake_location_service.dart';
+import '../../../test_utils/fake_safety_repository.dart';
 import '../../../test_utils/offline_test_overrides.dart';
+import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
+
+class _RecordingEmergencyRepository implements EmergencyRepository {
+  final dispatched = <Map<String, Object?>>[];
+
+  @override
+  Future<void> dispatchAlert({
+    required String severity,
+    required String summary,
+    required bool auto,
+    double? latitude,
+    double? longitude,
+    double? accuracyMeters,
+  }) async {
+    dispatched.add({
+      'severity': severity,
+      'summary': summary,
+      'auto': auto,
+      'latitude': latitude,
+      'longitude': longitude,
+      'accuracyMeters': accuracyMeters,
+    });
+  }
+}
 
 List<Contact> _sampleContacts() => const [
-  Contact(id: '1', name: 'Anika Sharma', relationship: 'Sister', priority: 1, confirmed: true),
-  Contact(id: '2', name: 'Rahul Verma', relationship: 'Partner', priority: 2, confirmed: true),
+  Contact(id: '1', name: 'Anika Sharma', phone: '+15550101000', relationship: 'Sister', priority: 1, confirmed: true),
+  Contact(id: '2', name: 'Rahul Verma', phone: '+15550101000', relationship: 'Partner', priority: 2, confirmed: true),
 ];
 
 class _FakeContactsRepository implements ContactsRepository {
@@ -29,7 +66,7 @@ class _FakeContactsRepository implements ContactsRepository {
   }
 
   @override
-  Future<List<Contact>> addContact(String name, String relationship) => throw UnimplementedError();
+  Future<List<Contact>> addContact(String name, String phone, String relationship) => throw UnimplementedError();
 
   @override
   Future<List<Contact>> removeContact(String id) => throw UnimplementedError();
@@ -48,15 +85,52 @@ GoRouter _buildTestRouter() {
   );
 }
 
-Widget _harness({Brightness brightness = Brightness.dark, ContactsRepository? repo}) {
+Widget _harness({
+  Brightness brightness = Brightness.dark,
+  ContactsRepository? repo,
+  bool offline = false,
+  OfflineQueueService? queueService,
+  EmergencyRepository? emergencyRepo,
+}) {
   return ProviderScope(
     overrides: [
       contactsRepositoryProvider.overrideWithValue(repo ?? _FakeContactsRepository()),
-      ...offlineTestOverrides(),
+      localKeyValueStoreProvider.overrideWithValue(FakeKeyValueStore()),
+      ...offlineTestOverrides(offline: offline, queueService: queueService),
+      // Always overridden (not just when a test cares about the recorded
+      // call) — AppConfig.useMockApi defaults to false now that every
+      // feature has a real backend, so leaving this unoverridden would
+      // make dispatch attempt a real Dio call against no running server.
+      emergencyRepositoryProvider.overrideWithValue(emergencyRepo ?? _RecordingEmergencyRepository()),
+      // The cancel flow consults the user's safety preferences (is a PIN
+      // required to stand an alert down?), so this must be overridden for the
+      // same reason as the repository above.
+      safetyRepositoryProvider.overrideWithValue(FakeSafetyRepository()),
+      // Safety preferences resolve to signed-out defaults without a session,
+      // so the cancel gate needs one to be exercised at all.
+      authRepositoryProvider.overrideWithValue(FakeAuthRepository()),
+      // Deliberately the no-fix path: an SOS must dispatch without GPS, and
+      // that is the state these goldens document.
+      locationServiceProvider.overrideWithValue(
+        FakeLocationService(const LocationUnavailable(LocationFailureReason.unavailable)),
+      ),
     ],
-    child: MaterialApp.router(
-      theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
-      routerConfig: _buildTestRouter(),
+    // Mirrors SafeHerApp priming offlineQueueDrainerProvider at the root:
+    // without an early subscriber, connectivityNotifierProvider's overridden
+    // stream hasn't emitted its first value by the time a real user could
+    // reach the SOS button, so an offline check taken cold would race.
+    child: Consumer(
+      builder: (context, ref, _) {
+        ref.watch(offlineQueueDrainerProvider);
+        return MaterialApp.router(
+    // Mirrors main.dart's shell so screens render over the same ambient
+    // field users see; the scaffold background is transparent by design.
+    builder: (context, child) =>
+        SaAmbientBackground(child: child ?? const SizedBox.shrink()),
+          theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
+          routerConfig: _buildTestRouter(),
+        );
+      },
     ),
   );
 }
@@ -105,7 +179,7 @@ void main() {
       await _holdSos(tester);
       expect(tester.takeException(), isNull);
       expect(find.text('Sending alert in'), findsOneWidget);
-      expect(find.text('5'), findsOneWidget);
+      expect(find.text('10'), findsOneWidget);
     });
 
     testWidgets('cancelling the countdown returns to pre-activation', (tester) async {
@@ -114,10 +188,11 @@ void main() {
       await _holdSos(tester);
 
       await tester.tap(find.text('Cancel'));
-      // AnimatedSwitcher keeps the outgoing child around for its own
-      // 250ms transition.
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(milliseconds: 300));
+      // Cancelling now awaits the "require PIN to cancel" preference before
+      // deciding, then AnimatedSwitcher runs its own 250ms transition.
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
       expect(tester.takeException(), isNull);
       expect(find.text('Emergency SOS'), findsOneWidget);
       expect(find.text('Sending alert in'), findsNothing);
@@ -128,8 +203,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       await _holdSos(tester);
 
-      // 5 one-second ticks to fully elapse the countdown.
-      for (var i = 0; i < 6; i++) {
+      // 10 one-second ticks to fully elapse the countdown.
+      for (var i = 0; i < 11; i++) {
         await tester.pump(const Duration(seconds: 1));
       }
       await tester.pump(const Duration(milliseconds: 100));
@@ -138,11 +213,38 @@ void main() {
       expect(find.text('Sharing live location'), findsOneWidget);
     });
 
+    testWidgets('offline SOS queues the alert, then sends it once reconnected', (tester) async {
+      final queue = OfflineQueueService(FakeOfflineQueueBox());
+      final repo = _RecordingEmergencyRepository();
+      await tester.pumpWidget(_harness(offline: true, queueService: queue, emergencyRepo: repo));
+      await tester.pump(const Duration(milliseconds: 100));
+      await _holdSos(tester);
+
+      for (var i = 0; i < 11; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Countdown still reaches the dispatched confirmation UI immediately
+      // even though the device is offline — the alert itself is queued,
+      // not lost, and not blocking the on-screen "help is on the way" state.
+      expect(find.text('Help is on the way'), findsOneWidget);
+      expect(repo.dispatched, isEmpty);
+      expect(queue.pending, hasLength(1));
+      expect(queue.pending.single.actionType, 'emergency.dispatch');
+
+      // Reconnecting drains the queue and actually sends the alert.
+      await queue.drain();
+      expect(repo.dispatched, hasLength(1));
+      expect(repo.dispatched.single['severity'], 'critical');
+      expect(queue.pending, isEmpty);
+    });
+
     testWidgets('dispatched stage stages contacts as notified over time', (tester) async {
       await tester.pumpWidget(_harness());
       await tester.pump(const Duration(milliseconds: 100));
       await _holdSos(tester);
-      for (var i = 0; i < 6; i++) {
+      for (var i = 0; i < 11; i++) {
         await tester.pump(const Duration(seconds: 1));
       }
       await tester.pump(const Duration(milliseconds: 100));
@@ -160,7 +262,7 @@ void main() {
       await tester.pumpWidget(_harness());
       await tester.pump(const Duration(milliseconds: 100));
       await _holdSos(tester);
-      for (var i = 0; i < 6; i++) {
+      for (var i = 0; i < 11; i++) {
         await tester.pump(const Duration(seconds: 1));
       }
       await tester.pump(const Duration(milliseconds: 100));
@@ -179,7 +281,7 @@ void main() {
       await tester.pumpWidget(_harness());
       await tester.pump(const Duration(milliseconds: 100));
       await _holdSos(tester);
-      for (var i = 0; i < 6; i++) {
+      for (var i = 0; i < 11; i++) {
         await tester.pump(const Duration(seconds: 1));
       }
       await tester.pump(const Duration(milliseconds: 100));
@@ -218,7 +320,7 @@ void main() {
       await tester.pumpWidget(_harness(repo: _FakeContactsRepository(shouldFail: true)));
       await tester.pump(const Duration(milliseconds: 100));
       await _holdSos(tester);
-      for (var i = 0; i < 6; i++) {
+      for (var i = 0; i < 11; i++) {
         await tester.pump(const Duration(seconds: 1));
       }
       await tester.pump(const Duration(milliseconds: 100));
@@ -263,7 +365,7 @@ void main() {
       await tester.pumpWidgetBuilder(_harness(), surfaceSize: const Size(390, 844));
       await tester.pump(const Duration(milliseconds: 100));
       await _holdSos(tester);
-      for (var i = 0; i < 6; i++) {
+      for (var i = 0; i < 11; i++) {
         await tester.pump(const Duration(seconds: 1));
       }
       await tester.pump(const Duration(milliseconds: 1500));
@@ -278,7 +380,7 @@ void main() {
       await tester.pumpWidgetBuilder(_harness(), surfaceSize: const Size(390, 844));
       await tester.pump(const Duration(milliseconds: 100));
       await _holdSos(tester);
-      for (var i = 0; i < 6; i++) {
+      for (var i = 0; i < 11; i++) {
         await tester.pump(const Duration(seconds: 1));
       }
       await tester.pump(const Duration(milliseconds: 100));

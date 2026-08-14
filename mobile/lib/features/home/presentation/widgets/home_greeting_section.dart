@@ -7,14 +7,16 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/components/buttons/sa_icon_button.dart';
 import '../../../../shared/components/icons/sa_icon.dart';
+import '../../../monitoring/data/monitoring_providers.dart';
 
-/// Greeting header: avatar, "Good {time}, {name}", search, bell (with
-/// unread badge), date, and a "Monitoring Active" chip. [parallaxOffset]
-/// is applied as a vertical translate so the section scrolls at 0.5x speed.
+/// Greeting header: avatar, "Good {time}, {name}", search, bell, date, and
+/// a status chip reflecting the *real* live-monitoring connection state —
+/// not a hardcoded "Monitoring Active" label. [parallaxOffset] is applied
+/// as a vertical translate so the section scrolls at 0.5x speed.
 class HomeGreetingSection extends StatelessWidget {
   const HomeGreetingSection({
     required this.userName,
-    required this.hasUnreadAlerts,
+    required this.monitoringStatus,
     required this.onBellTap,
     required this.onSearchTap,
     super.key,
@@ -22,10 +24,16 @@ class HomeGreetingSection extends StatelessWidget {
   });
 
   final String userName;
-  final bool hasUnreadAlerts;
+  final MonitoringConnectionStatus monitoringStatus;
   final VoidCallback onBellTap;
   final VoidCallback onSearchTap;
   final double parallaxOffset;
+
+  (String, Color) _statusChip() => switch (monitoringStatus) {
+    MonitoringConnectionStatus.connected => ('Monitoring Active', AppColors.success500),
+    MonitoringConnectionStatus.connecting => ('Connecting…', AppColors.warning500),
+    MonitoringConnectionStatus.disconnected => ('Monitoring Offline', AppColors.neutral400),
+  };
 
   String get _greeting {
     final hour = DateTime.now().hour;
@@ -72,25 +80,10 @@ class HomeGreetingSection extends StatelessWidget {
                   semanticsLabel: 'Search',
                   onPressed: onSearchTap,
                 ),
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    SaIconButton(
-                      icon: const SaIcon(SaIconGlyph.bell),
-                      semanticsLabel: hasUnreadAlerts ? 'Notifications, unread alerts' : 'Notifications',
-                      onPressed: onBellTap,
-                    ),
-                    if (hasUnreadAlerts)
-                      Positioned(
-                        top: 6,
-                        right: 6,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.coral500),
-                        ),
-                      ),
-                  ],
+                SaIconButton(
+                  icon: const SaIcon(SaIconGlyph.bell),
+                  semanticsLabel: 'Notifications',
+                  onPressed: onBellTap,
                 ),
               ],
             ),
@@ -106,16 +99,18 @@ class HomeGreetingSection extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: AppSpacing.space3),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.success500.withValues(alpha: 0.15),
-                    borderRadius: AppRadius.fullRadius,
-                  ),
-                  child: Text(
-                    'Monitoring Active',
-                    style: AppTypography.labelM.copyWith(color: AppColors.success500),
-                  ),
+                Builder(
+                  builder: (context) {
+                    final (label, color) = _statusChip();
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.15),
+                        borderRadius: AppRadius.fullRadius,
+                      ),
+                      child: Text(label, style: AppTypography.labelM.copyWith(color: color)),
+                    );
+                  },
                 ),
               ],
             ),

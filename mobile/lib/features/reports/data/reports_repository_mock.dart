@@ -2,8 +2,11 @@ import 'dart:math';
 
 import '../../../shared/components/charts/sa_motion_chart.dart';
 import '../../../shared/models/threat_level.dart';
+import '../domain/models/evidence_item.dart';
+import '../domain/models/gps_breadcrumb.dart';
 import '../domain/models/report_detail.dart';
 import '../domain/models/report_summary.dart';
+import '../domain/models/timeline_event.dart';
 import '../domain/reports_repository.dart';
 
 const _reports = [
@@ -90,6 +93,72 @@ class ReportsRepositoryMock implements ReportsRepository {
       motionEvents: const [
         MotionEventPin(sampleIndex: 18, label: 'Peak event', timestamp: 'T+00:04'),
       ],
+      timeline: _timelineFor(id, summary.type),
+      evidence: _evidenceFor(id),
+      gpsBreadcrumbs: _breadcrumbsFor(random),
+      chainOfCustodyHash: sha256Placeholder(id),
     );
   }
+
+  List<TimelineEvent> _timelineFor(String id, String type) => [
+    const TimelineEvent(
+      type: TimelineEventType.sensorEvent,
+      title: 'Sensor anomaly detected',
+      description: 'Motion sensor reading crossed the baseline threshold.',
+      timestamp: 'T+00:00',
+    ),
+    TimelineEvent(
+      type: TimelineEventType.aiDetection,
+      title: 'AI classification: $type',
+      description: 'On-device model flagged the pattern for review.',
+      timestamp: 'T+00:01',
+      confidence: 0.6 + (id.hashCode.abs() % 35) / 100,
+    ),
+    const TimelineEvent(
+      type: TimelineEventType.alertTrigger,
+      title: 'Threat score threshold crossed',
+      description: 'Fused score exceeded your configured sensitivity.',
+      timestamp: 'T+00:03',
+    ),
+    const TimelineEvent(
+      type: TimelineEventType.evidenceCaptured,
+      title: 'Evidence capture started',
+      description: 'Audio and motion snapshot saved for this report.',
+      timestamp: 'T+00:04',
+    ),
+    const TimelineEvent(
+      type: TimelineEventType.contactNotified,
+      title: 'Emergency contacts notified',
+      description: 'Priority contacts were sent this report.',
+      timestamp: 'T+00:07',
+    ),
+  ];
+
+  List<EvidenceItem> _evidenceFor(String id) => [
+    EvidenceItem(id: '$id-video', type: EvidenceType.video, url: '', durationLabel: '0:18'),
+    const EvidenceItem(id: 'audio', type: EvidenceType.audio, url: ''),
+    EvidenceItem(id: '$id-photo', type: EvidenceType.photo, url: ''),
+  ];
+
+  List<GpsBreadcrumb> _breadcrumbsFor(Random random) {
+    const baseLat = 37.7749;
+    const baseLng = -122.4194;
+    double jitter() => (random.nextDouble() - 0.5) * 0.004;
+    return List.generate(
+      5,
+      (i) => GpsBreadcrumb(
+        latitude: baseLat + jitter() + i * 0.0008,
+        longitude: baseLng + jitter() + i * 0.0006,
+        timestamp: 'T+00:0$i',
+      ),
+    );
+  }
+}
+
+/// Deterministic 64-hex-char stand-in for a real SHA-256 — enough to prove
+/// the chain-of-custody display works, not a genuine hash of anything.
+String sha256Placeholder(String seed) {
+  final random = Random(seed.hashCode);
+  const chars = '0123456789abcdef';
+  return List.generate(64, (_) => chars[random.nextInt(chars.length)]).join();
 }

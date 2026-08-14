@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/network/network_providers.dart';
 import '../domain/device_repository.dart';
 import '../domain/models/device_detail.dart';
 import 'device_repository_mock.dart';
@@ -12,7 +13,7 @@ part 'device_providers.g.dart';
 @riverpod
 DeviceRepository deviceRepository(Ref ref) {
   if (AppConfig.useMockApi) return DeviceRepositoryMock();
-  return DeviceRepositoryRemote();
+  return DeviceRepositoryRemote(apiClient: ref.watch(apiClientProvider));
 }
 
 @riverpod

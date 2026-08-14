@@ -5,6 +5,7 @@ import 'package:safeher_app/core/theme/app_theme.dart';
 import 'package:safeher_app/shared/components/overlays/sa_confirm_dialog.dart';
 
 import '../../../test_utils/widget_test_helpers.dart';
+import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
 void main() {
   group('SaConfirmDialog', () {
@@ -33,6 +34,10 @@ void main() {
     testWidgets('confirm button stays disabled until phrase matches exactly', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+    // Mirrors main.dart's shell so screens render over the same ambient
+    // field users see; the scaffold background is transparent by design.
+    builder: (context, child) =>
+        SaAmbientBackground(child: child ?? const SizedBox.shrink()),
           theme: AppTheme.dark,
           home: Scaffold(
             body: SaConfirmDialog(title: 'Delete account', message: 'This is permanent.', confirmPhrase: 'DELETE'),
@@ -56,6 +61,10 @@ void main() {
       late Future<bool> resultFuture;
       await tester.pumpWidget(
         MaterialApp(
+    // Mirrors main.dart's shell so screens render over the same ambient
+    // field users see; the scaffold background is transparent by design.
+    builder: (context, child) =>
+        SaAmbientBackground(child: child ?? const SizedBox.shrink()),
           theme: AppTheme.dark,
           home: Builder(
             builder: (context) => ElevatedButton(

@@ -4,12 +4,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
+import 'package:safeher_app/features/devices/data/ble_providers.dart';
 import 'package:safeher_app/features/devices/data/device_providers.dart';
+import 'package:safeher_app/features/devices/domain/device_registration_repository.dart';
 import 'package:safeher_app/features/devices/domain/device_repository.dart';
+import 'package:safeher_app/features/devices/domain/models/ble_models.dart';
 import 'package:safeher_app/features/devices/domain/models/device_detail.dart';
+import 'package:safeher_app/features/devices/domain/models/registered_device.dart';
 import 'package:safeher_app/features/devices/presentation/device_management_screen.dart';
 
+import '../../../test_utils/fake_ble_service.dart';
 import '../../../test_utils/fake_webview_platform.dart';
+import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
 List<DeviceDetail> _sampleDevices() => const [
   DeviceDetail(
@@ -50,6 +56,16 @@ class _FakeDeviceRepository implements DeviceRepository {
   }
 }
 
+class _FakeRegistrationRepository implements DeviceRegistrationRepository {
+  @override
+  Future<RegisteredDevice> registerDevice({
+    required String deviceName,
+    required DeviceType deviceType,
+  }) async {
+    return RegisteredDevice(id: 'srv-1', deviceName: deviceName, deviceType: deviceType, isActive: true);
+  }
+}
+
 GoRouter _buildTestRouter({String? initialLocation}) {
   return GoRouter(
     initialLocation: initialLocation ?? '/devices',
@@ -64,10 +80,25 @@ GoRouter _buildTestRouter({String? initialLocation}) {
   );
 }
 
-Widget _harness({Brightness brightness = Brightness.dark, DeviceRepository? repo, String? initialLocation}) {
+Widget _harness({
+  Brightness brightness = Brightness.dark,
+  DeviceRepository? repo,
+  String? initialLocation,
+  FakeBleService? ble,
+}) {
   return ProviderScope(
-    overrides: [deviceRepositoryProvider.overrideWithValue(repo ?? _FakeDeviceRepository())],
+    overrides: [
+      deviceRepositoryProvider.overrideWithValue(repo ?? _FakeDeviceRepository()),
+      // The pairing sheet talks to a real radio, which does not exist in a
+      // `flutter test` environment — inject the fake instead.
+      bleServiceProvider.overrideWithValue(ble ?? FakeBleService()),
+      deviceRegistrationRepositoryProvider.overrideWithValue(_FakeRegistrationRepository()),
+    ],
     child: MaterialApp.router(
+    // Mirrors main.dart's shell so screens render over the same ambient
+    // field users see; the scaffold background is transparent by design.
+    builder: (context, child) =>
+        SaAmbientBackground(child: child ?? const SizedBox.shrink()),
       theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
       routerConfig: _buildTestRouter(initialLocation: initialLocation),
     ),
@@ -149,32 +180,49 @@ void main() {
       expect(find.text('home-stub'), findsOneWidget);
     });
 
-    testWidgets('full pairing flow: scan, find devices, enter PIN, success toast', (tester) async {
-      await tester.pumpWidget(_harness());
+    testWidgets('pairing flow: real scan, a genuinely discovered device, connect', (tester) async {
+      // The bottom nav bar (added so Devices is a real, always-reachable
+      // tab rather than a dead end) occupies a fixed region at the bottom
+      // of the viewport — on the default test surface, the "+ Pair
+      // Device" card can never scroll clear of it. A taller surface gives
+      // the scroll enough room, matching this suite's established pattern
+      // for screens combining a long list with the floating nav bar.
+      await tester.binding.setSurfaceSize(const Size(390, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final ble = FakeBleService();
+      addTearDown(ble.dispose);
+      await tester.pumpWidget(_harness(ble: ble));
       await tester.pump(const Duration(milliseconds: 100));
 
       // The radar pulse loops forever, so pumpAndSettle would never
       // converge here — bounded pumps throughout this test instead.
+      await tester.scrollUntilVisible(find.text('Pair Device'), 200, scrollable: find.byType(Scrollable).first);
       await tester.tap(find.text('Pair Device'));
       await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 100));
       expect(find.text('Scanning for nearby devices…'), findsOneWidget);
+      expect(ble.startScanCalls, 1);
 
-      await tester.pump(const Duration(milliseconds: 1300));
-      expect(find.textContaining('SafeHer Ring'), findsOneWidget);
+      // Nothing is listed until a peripheral actually advertises.
+      ble.emitDevices(const [
+        BleDiscoveredDevice(
+          id: 'AA:BB:CC:DD:EE:01',
+          advertisedName: 'SmartGlove-01',
+          rssi: -55,
+          isConnectable: true,
+        ),
+      ]);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('SmartGlove-01'), findsOneWidget);
 
-      await tester.tap(find.text('Pair').first);
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('Enter Pairing PIN'), findsOneWidget);
+      await tester.tap(find.text('Connect'));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
 
-      final otpFields = find.byType(TextField);
-      for (var i = 0; i < 6; i++) {
-        await tester.enterText(otpFields.at(i), '$i');
-        await tester.pump();
-      }
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(find.textContaining('paired!'), findsOneWidget);
-      // Flush the toast's own dismiss timers so nothing leaks past teardown.
-      await tester.pump(const Duration(seconds: 5));
+      expect(ble.connectCalls, 1);
+      expect(find.text('Connected'), findsOneWidget);
+      expect(find.text('2 GATT services discovered'), findsOneWidget);
     });
 
     testGoldens('golden - light', (tester) async {

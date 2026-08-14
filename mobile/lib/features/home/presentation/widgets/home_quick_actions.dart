@@ -11,14 +11,19 @@ class HomeQuickActionsGrid extends StatelessWidget {
     required this.onSos,
     required this.onCallContact,
     required this.onShareLocation,
-    required this.onRecordEvidence,
+    required this.onFindHelp,
     super.key,
   });
 
   final VoidCallback onSos;
   final VoidCallback onCallContact;
   final VoidCallback onShareLocation;
-  final VoidCallback onRecordEvidence;
+
+  /// Opens Nearby Safety. Replaced a "Record Evidence" tile that only ever
+  /// showed a toast claiming recording had started — there is no capture
+  /// pipeline behind it, so the tile was claiming a capability the app
+  /// doesn't have.
+  final VoidCallback onFindHelp;
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +40,7 @@ class HomeQuickActionsGrid extends StatelessWidget {
           _QuickActionCard(label: 'SOS', glyph: SaIconGlyph.shield, onTap: onSos, tinted: true),
           _QuickActionCard(label: 'Call Contact', glyph: SaIconGlyph.profile, onTap: onCallContact),
           _QuickActionCard(label: 'Share Location', glyph: SaIconGlyph.mapPin, onTap: onShareLocation),
-          _QuickActionCard(label: 'Record Evidence', glyph: SaIconGlyph.camera, onTap: onRecordEvidence),
+          _QuickActionCard(label: 'Find Help', glyph: SaIconGlyph.mapPin, onTap: onFindHelp),
         ],
       ),
     );

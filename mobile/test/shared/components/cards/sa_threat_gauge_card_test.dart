@@ -56,5 +56,28 @@ void main() {
       await tester.pump(const Duration(milliseconds: 900));
       await screenMatchesGolden(tester, 'sa_threat_gauge_card_dark');
     });
+
+    testWidgets('renders a waiting state instead of a gauge when score is null', (tester) async {
+      await tester.pumpWidget(
+        wrapWithTheme(
+          const SaThreatGaugeCard(score: null, componentScores: [], lastUpdated: null),
+          surfaceSize: const Size(360, 200),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.takeException(), isNull);
+      expect(find.text('Waiting for live device data'), findsOneWidget);
+      expect(find.text('Motion'), findsNothing);
+    });
+
+    testGoldens('golden - waiting for data', (tester) async {
+      await tester.pumpWidgetBuilder(
+        const SaThreatGaugeCard(score: null, componentScores: [], lastUpdated: null),
+        wrapper: (child) => wrapWithTheme(child, surfaceSize: const Size(360, 200)),
+        surfaceSize: const Size(360, 200),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await screenMatchesGolden(tester, 'sa_threat_gauge_card_waiting');
+    });
   });
 }

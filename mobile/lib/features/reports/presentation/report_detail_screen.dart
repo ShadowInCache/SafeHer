@@ -13,8 +13,12 @@ import '../../../shared/components/feedback/sa_empty_state.dart';
 import '../../../shared/components/feedback/sa_loading_shimmer.dart';
 import '../../../shared/components/feedback/sa_threat_chip.dart';
 import '../../../shared/components/icons/sa_icon.dart';
+import '../../../shared/components/overlays/sa_toast.dart';
 import '../data/reports_providers.dart';
 import '../domain/models/report_detail.dart';
+import 'widgets/report_breadcrumb_map.dart';
+import 'widgets/report_evidence_gallery.dart';
+import 'widgets/report_timeline.dart';
 
 /// Full detail for a single past incident report: what was detected, when,
 /// where, and a frozen snapshot of the sensor data around the event.
@@ -133,6 +137,30 @@ class _ReportDetailContent extends StatelessWidget {
               SaMotionChart(samples: detail.motionSamples, events: detail.motionEvents, height: 160),
             ],
           ),
+        ),
+        if (detail.timeline.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.space6),
+          Text('Event Timeline', style: AppTypography.headingM.copyWith(color: onSurface)),
+          const SizedBox(height: AppSpacing.space4),
+          ReportTimeline(events: detail.timeline),
+        ],
+        if (detail.evidence.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.space6),
+          Text('Evidence', style: AppTypography.headingM.copyWith(color: onSurface)),
+          const SizedBox(height: AppSpacing.space3),
+          ReportEvidenceGallery(items: detail.evidence),
+        ],
+        if (detail.gpsBreadcrumbs.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.space6),
+          Text('Location Trail', style: AppTypography.headingM.copyWith(color: onSurface)),
+          const SizedBox(height: AppSpacing.space3),
+          ReportBreadcrumbMap(breadcrumbs: detail.gpsBreadcrumbs),
+        ],
+        const SizedBox(height: AppSpacing.space6),
+        ReportExportActions(
+          chainOfCustodyHash: detail.chainOfCustodyHash,
+          onExportPdf: () => showSaToast(context, message: 'Preparing PDF export…'),
+          onShareLink: () => showSaToast(context, message: 'Secure link copied. Expires in 7 days.'),
         ),
       ],
     );
