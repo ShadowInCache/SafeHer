@@ -35,6 +35,11 @@ dependencies:
   # Firebase
   firebase_core: ^3.1.0
   firebase_auth: ^5.1.0
+
+  # Native Google account picker. firebase_auth's own signInWithProvider
+  # falls back to a web flow on Android/iOS, which shows a browser sheet
+  # instead of the device's Google accounts — this gives the real picker.
+  google_sign_in: ^6.2.1
   firebase_messaging: ^15.0.0
   cloud_firestore: ^5.1.0
 
@@ -67,6 +72,22 @@ dependencies:
 
   # Hardware
   flutter_blue_plus: ^1.31.0
+  permission_handler: ^11.3.1
+
+  # Accelerometer feed behind the opt-in shake trigger (Settings > Safety).
+  sensors_plus: ^6.0.0
+
+  # On-device speech recognition for the voice-command layer. Nothing is
+  # recorded or uploaded — recognised text is matched locally against a fixed
+  # command list and discarded.
+  speech_to_text: ^7.0.0
+
+  # Dialling helplines / nearby places and handing a destination to the
+  # device's own maps app. No embedded third-party SDK.
+  url_launcher: ^6.3.0
+
+  # Biometric unlock (FR-AUTH-05) — Face ID / Fingerprint, Profile > Security
+  local_auth: ^2.3.0
 
   # Formatting
   intl: ^0.20.2
