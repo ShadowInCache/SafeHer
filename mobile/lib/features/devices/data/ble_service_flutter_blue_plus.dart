@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -20,8 +19,25 @@ import '../domain/models/ble_models.dart';
 class FlutterBluePlusBleService implements BleService {
   const FlutterBluePlusBleService();
 
+  /// `dart:io`'s `Platform` is deliberately not used anywhere in this file.
+  /// It throws `Unsupported operation: Platform._operatingSystem` on web,
+  /// and because [canPromptToEnableBluetooth] is a plain getter read during
+  /// the pairing sheet's build, that throw took down the whole screen with
+  /// a red error page rather than surfacing as a handleable failure.
+  /// `defaultTargetPlatform` answers the same question everywhere.
+  static bool get _isAndroid => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  /// Web Bluetooth is a different shape of API from the native one: it has
+  /// no free-running scan, only a browser-drawn chooser opened from a user
+  /// gesture, so the scan-then-pick flow this app is built around cannot be
+  /// driven from it. `permission_handler` has no web implementation either.
+  /// Reporting "unsupported" up front is honest and lands the user on a
+  /// screen that tells them what to do instead.
   @override
-  Future<bool> isSupported() => FlutterBluePlus.isSupported;
+  Future<bool> isSupported() async {
+    if (kIsWeb) return false;
+    return FlutterBluePlus.isSupported;
+  }
 
   @override
   BleAdapterStatus get adapterStatusNow => _mapAdapterState(FlutterBluePlus.adapterStateNow);
@@ -31,7 +47,7 @@ class FlutterBluePlusBleService implements BleService {
       FlutterBluePlus.adapterState.map(_mapAdapterState).distinct();
 
   @override
-  bool get canPromptToEnableBluetooth => Platform.isAndroid;
+  bool get canPromptToEnableBluetooth => _isAndroid;
 
   /// Android asks for `BLUETOOTH_SCAN` / `BLUETOOTH_CONNECT` (API 31+) plus
   /// fine location — this app's `AndroidManifest.xml` declares
@@ -44,7 +60,7 @@ class FlutterBluePlusBleService implements BleService {
   /// iOS has a single Bluetooth authorization, prompted by CoreBluetooth.
   @override
   Future<BlePermissionStatus> requestScanPermissions() async {
-    final requested = Platform.isAndroid
+    final requested = _isAndroid
         ? <Permission>[Permission.bluetoothScan, Permission.bluetoothConnect, Permission.locationWhenInUse]
         : <Permission>[Permission.bluetooth];
 
@@ -57,7 +73,7 @@ class FlutterBluePlusBleService implements BleService {
 
   @override
   Future<void> requestEnableBluetooth() async {
-    if (!Platform.isAndroid) {
+    if (!_isAndroid) {
       // iOS gives apps no way to power the radio on; CoreBluetooth only
       // lets us ask the user to do it from Settings or Control Centre.
       throw const BleFailure('Turn Bluetooth on in Settings to pair a device.');

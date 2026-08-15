@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -142,6 +143,17 @@ class BlePairingController extends _$BlePairingController {
     }
   }
 
+  /// "No BLE here" means two very different things. On a phone it is a
+  /// hardware fact the user can do nothing about; in a browser it means
+  /// they are simply running SafeHer somewhere it cannot pair, and the
+  /// answer is to open it on their phone. Telling a Chrome user their
+  /// "phone doesn't support Bluetooth" would be both wrong and a dead end.
+  static String get _unsupportedMessage => kIsWeb
+      ? 'Pairing a wearable needs the SafeHer app on your phone — a browser '
+            'cannot talk to Bluetooth devices this way. Everything else here '
+            'works in the browser.'
+      : "This phone doesn't support Bluetooth Low Energy.";
+
   /// Bluetooth failures are mostly platform-channel noise. Translate the
   /// one case a user can act on, and keep the raw text for the rest rather
   /// than hiding it behind "something went wrong" — a developer reading a
@@ -176,7 +188,7 @@ class BlePairingController extends _$BlePairingController {
       _emit(
         state.copyWith(
           stage: BlePairingStage.unsupported,
-          errorMessage: "This phone doesn't support Bluetooth Low Energy.",
+          errorMessage: _unsupportedMessage,
         ),
       );
       return;
@@ -199,7 +211,7 @@ class BlePairingController extends _$BlePairingController {
         _emit(
           state.copyWith(
             stage: BlePairingStage.unsupported,
-            errorMessage: "This phone doesn't support Bluetooth Low Energy.",
+            errorMessage: _unsupportedMessage,
           ),
         );
         return;
