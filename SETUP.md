@@ -58,7 +58,10 @@ with an app password. For Gmail:
 
 ```env
 SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
+# 465, not 587: many consumer ISPs block 25 and 587 as an anti-spam measure
+# while leaving 465 open. If mail "times out" with correct credentials, this
+# is almost always why. TLS style is inferred from the port.
+SMTP_PORT=465
 SMTP_USE_TLS=true
 SMTP_USERNAME=you@gmail.com
 SMTP_PASSWORD=<the 16-character app password>

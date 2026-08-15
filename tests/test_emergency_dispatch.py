@@ -192,6 +192,29 @@ class TestEmailChannelSelection(unittest.TestCase):
         self.assertFalse(SmtpEmailSender(half).is_configured)
 
 
+class TestSmtpTransportSelection(unittest.TestCase):
+    """Which TLS style SMTP uses, and why it is inferred from the port.
+
+    Port 465 speaks TLS from the first byte; 587 and 25 begin in the clear
+    and upgrade with STARTTLS. Many consumer ISPs block 25 and 587 as an
+    anti-spam measure while leaving 465 open — a deployment that only knows
+    STARTTLS then times out with no useful error, which is exactly what
+    happened on this project's own network.
+    """
+
+    def test_465_means_implicit_tls(self):
+        self.assertTrue(Settings(smtp_port=465).smtp_use_ssl)
+
+    def test_587_and_25_use_starttls(self):
+        self.assertFalse(Settings(smtp_port=587).smtp_use_ssl)
+        self.assertFalse(Settings(smtp_port=25).smtp_use_ssl)
+
+    def test_an_explicit_override_wins_over_the_port(self):
+        # A provider on a non-standard SMTPS port still has to be reachable.
+        self.assertTrue(Settings(smtp_port=2465, smtp_use_ssl_override=True).smtp_use_ssl)
+        self.assertFalse(Settings(smtp_port=465, smtp_use_ssl_override=False).smtp_use_ssl)
+
+
 class TestPlainTextFallback(unittest.TestCase):
     def test_keeps_the_links_a_reader_must_act_on(self):
         _, html_body = build_emergency_email(

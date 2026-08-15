@@ -42,17 +42,28 @@ def _build_message(
 
 
 def _send_blocking(settings: Settings, message: EmailMessage) -> None:
-    if settings.smtp_use_tls:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as client:
+    """Deliver over whichever TLS style the port implies.
+
+    Port 465 speaks TLS from the first byte (SMTPS); 587 and 25 start in the
+    clear and upgrade with STARTTLS. The distinction matters more than it
+    looks: many consumer ISPs block 25 and 587 outright as an anti-spam
+    measure while leaving 465 open, so a deployment that only knows how to
+    STARTTLS simply times out with no useful error. That is exactly what
+    happened here.
+    """
+    if settings.smtp_use_ssl:
+        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=20) as client:
+            if settings.smtp_username:
+                client.login(settings.smtp_username, settings.smtp_password or "")
+            client.send_message(message)
+        return
+
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as client:
+        if settings.smtp_use_tls:
             client.starttls()
-            if settings.smtp_username:
-                client.login(settings.smtp_username, settings.smtp_password or "")
-            client.send_message(message)
-    else:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as client:
-            if settings.smtp_username:
-                client.login(settings.smtp_username, settings.smtp_password or "")
-            client.send_message(message)
+        if settings.smtp_username:
+            client.login(settings.smtp_username, settings.smtp_password or "")
+        client.send_message(message)
 
 
 async def send_email(

@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     smtp_username: Optional[str] = None
     smtp_password: Optional[str] = None
     smtp_use_tls: bool = True
+    # Implicit TLS (SMTPS). Left unset it follows the port, which is what
+    # every mail provider means by 465 anyway — and saves one more setting
+    # to get wrong. Set explicitly to override.
+    smtp_use_ssl_override: Optional[bool] = None
     smtp_from_email: Optional[str] = None
     smtp_from_name: str = "SafeHer"
     # Left unset, verification is enforced exactly when OTPs can actually be
@@ -134,6 +138,12 @@ class Settings(BaseSettings):
     @property
     def smtp_configured(self) -> bool:
         return bool(self.smtp_host and self.smtp_from_email)
+
+    @property
+    def smtp_use_ssl(self) -> bool:
+        if self.smtp_use_ssl_override is not None:
+            return self.smtp_use_ssl_override
+        return self.smtp_port == 465
 
     @property
     def email_verification_required(self) -> bool:
