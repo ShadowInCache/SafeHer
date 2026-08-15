@@ -76,8 +76,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         return;
       case SaNavTab.monitor:
         context.go('/monitor');
-      case SaNavTab.devices:
-        context.go('/devices');
+      case SaNavTab.dashboard:
+        context.go('/dashboard');
       case SaNavTab.profile:
         context.go('/profile');
     }

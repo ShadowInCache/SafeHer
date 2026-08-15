@@ -6,10 +6,17 @@ part of 'auth_providers.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$authRepositoryHash() => r'bb9a90dde528613faf8e8f72391b1d268078dbab';
+String _$authRepositoryHash() => r'7e8ef0f2095b13551bee11b4b4b9eaf586144680';
 
-/// Switches between the mock and Firebase+fastapi_app-backed
-/// [AuthRepository] based on [AppConfig.useMockApi].
+/// Selects the [AuthRepository] implementation.
+///
+/// * [AppConfig.useMockApi] -- fixture data, no network.
+/// * [AppConfig.useFirebaseAuth] -- Firebase collects the credential and the
+///   resulting ID token is exchanged for a backend JWT. Needed for Google and
+///   Apple sign-in, and requires Firebase Authentication to be enabled in the
+///   console.
+/// * Otherwise -- `fastapi_app` serves email/password auth directly, which is
+///   the default because it works without any console configuration.
 ///
 /// Copied from [authRepository].
 @ProviderFor(authRepository)

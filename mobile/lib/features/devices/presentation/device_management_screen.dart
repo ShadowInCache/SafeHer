@@ -27,8 +27,8 @@ class DeviceManagementScreen extends ConsumerWidget {
         context.go('/home');
       case SaNavTab.monitor:
         context.go('/monitor');
-      case SaNavTab.devices:
-        return;
+      case SaNavTab.dashboard:
+        context.go('/dashboard');
       case SaNavTab.profile:
         context.go('/profile');
     }
@@ -123,7 +123,7 @@ class DeviceManagementScreen extends ConsumerWidget {
             right: 0,
             bottom: 0,
             child: SaBottomNavBar(
-              currentTab: SaNavTab.devices,
+              currentTab: null,
               onTabSelected: (tab) => _handleTabSelected(context, tab),
               onSosTap: () => context.go('/emergency'),
             ),

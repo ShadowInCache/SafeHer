@@ -31,8 +31,8 @@ class LiveMonitoringScreen extends ConsumerWidget {
         context.go('/home');
       case SaNavTab.monitor:
         return;
-      case SaNavTab.devices:
-        context.go('/devices');
+      case SaNavTab.dashboard:
+        context.go('/dashboard');
       case SaNavTab.profile:
         context.go('/profile');
     }

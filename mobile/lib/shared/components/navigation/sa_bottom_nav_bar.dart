@@ -9,26 +9,31 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_typography.dart';
 import '../icons/sa_icon.dart';
 
-/// [home] is labelled "Dashboard" in the UI — it's SafeHer's single
-/// command-center screen (safety status, device status, live-monitoring
-/// summary, quick actions). The Dart identifier stays `home` to avoid
-/// churning every route/import that predates the rename; only the visible
-/// label and this tab's meaning changed. There is deliberately no separate
-/// analytics-only "Dashboard" tab anymore — it duplicated this one.
-enum SaNavTab { home, monitor, devices, profile }
+/// The four primary destinations, per SRS Part 3 §"Component Spec:
+/// SaBottomNavBar" — Home / Monitor / Dashboard / Profile.
+///
+/// Home is the live command centre (safety status, devices, quick actions);
+/// Dashboard is the retrospective analytics view (`/dashboard`, SCREEN 9).
+/// They answer different questions — "am I safe right now" versus "what has
+/// been happening to me" — which is why the SRS gives each its own tab.
+///
+/// Device management is deliberately not a tab: it's a management task, not
+/// a place you dwell, and it stays one tap away from Home, Profile and
+/// Search.
+enum SaNavTab { home, monitor, dashboard, profile }
 
 extension on SaNavTab {
   SaIconGlyph get glyph => switch (this) {
-    SaNavTab.home => SaIconGlyph.dashboard,
+    SaNavTab.home => SaIconGlyph.home,
     SaNavTab.monitor => SaIconGlyph.monitorPulse,
-    SaNavTab.devices => SaIconGlyph.bluetooth,
+    SaNavTab.dashboard => SaIconGlyph.dashboard,
     SaNavTab.profile => SaIconGlyph.profile,
   };
 
   String get label => switch (this) {
-    SaNavTab.home => 'Dashboard',
+    SaNavTab.home => 'Home',
     SaNavTab.monitor => 'Monitor',
-    SaNavTab.devices => 'Devices',
+    SaNavTab.dashboard => 'Dashboard',
     SaNavTab.profile => 'Profile',
   };
 }
@@ -50,13 +55,16 @@ class SaBottomNavBar extends StatelessWidget {
     this.visible = true,
   });
 
-  final SaNavTab currentTab;
+  /// Null on screens that are reachable from the bar but are not themselves
+  /// destinations (Device Management, for one) — the bar still shows, with
+  /// no tab claiming to be current.
+  final SaNavTab? currentTab;
   final ValueChanged<SaNavTab> onTabSelected;
   final VoidCallback onSosTap;
   final bool visible;
 
   static const _leftTabs = [SaNavTab.home, SaNavTab.monitor];
-  static const _rightTabs = [SaNavTab.devices, SaNavTab.profile];
+  static const _rightTabs = [SaNavTab.dashboard, SaNavTab.profile];
 
   @override
   Widget build(BuildContext context) {

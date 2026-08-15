@@ -43,5 +43,29 @@ final dashboardSummaryProvider =
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef DashboardSummaryRef = AutoDisposeFutureProviderRef<DashboardSummary>;
+String _$dashboardAnalyticsHash() =>
+    r'03d0b9b18993b1a0ceb3970fab89d5f46dea3513';
+
+/// Backs the Dashboard screen. Kept separate from [dashboardSummary] so that
+/// pull-to-refresh there invalidates only the heavy aggregation, not Home's
+/// weekly strip.
+///
+/// Copied from [dashboardAnalytics].
+@ProviderFor(dashboardAnalytics)
+final dashboardAnalyticsProvider =
+    AutoDisposeFutureProvider<DashboardAnalytics>.internal(
+      dashboardAnalytics,
+      name: r'dashboardAnalyticsProvider',
+      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+          ? null
+          : _$dashboardAnalyticsHash,
+      dependencies: null,
+      allTransitiveDependencies: null,
+    );
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef DashboardAnalyticsRef =
+    AutoDisposeFutureProviderRef<DashboardAnalytics>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

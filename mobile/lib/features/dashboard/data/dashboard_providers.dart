@@ -4,6 +4,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/network/network_providers.dart';
 import '../domain/dashboard_repository.dart';
+import '../domain/models/dashboard_analytics.dart';
 import '../domain/models/dashboard_summary.dart';
 import 'dashboard_repository_mock.dart';
 import 'dashboard_repository_remote.dart';
@@ -19,4 +20,12 @@ DashboardRepository dashboardRepository(Ref ref) {
 @riverpod
 Future<DashboardSummary> dashboardSummary(Ref ref) async {
   return ref.watch(dashboardRepositoryProvider).getDashboardSummary();
+}
+
+/// Backs the Dashboard screen. Kept separate from [dashboardSummary] so that
+/// pull-to-refresh there invalidates only the heavy aggregation, not Home's
+/// weekly strip.
+@riverpod
+Future<DashboardAnalytics> dashboardAnalytics(Ref ref) async {
+  return ref.watch(dashboardRepositoryProvider).getDashboardAnalytics();
 }

@@ -10,9 +10,8 @@ Never overwrite or delete a prior entry.
 SafeHer is an AI-powered wearable safety platform for women. The repo is a monorepo
 containing a current FastAPI backend (`fastapi_app/`), a Flutter mobile app
 (`mobile/`), ESP32 device firmware (`hardware/`), an ML training pipeline
-(`ml_training/`), serverless inference functions (`cloud_functions/`), a Docker
-Compose deployment (`deployment/`), and an archived, unused legacy Flask backend
-(`legacy_flask_gateway/`). See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces
+(`ml_training/`), serverless inference functions (`cloud_functions/`), and a Docker
+Compose deployment (`deployment/`). See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces
 connect and [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full folder tour.
 
 ## Architecture Decisions
@@ -309,3 +308,18 @@ in future work — this file describes state as of 2026-08-08, not necessarily t
   file merely present in `ios/Runner/` is never copied into the bundle) and
   registering the reversed client id as a URL scheme (`google_sign_in`'s OAuth
   callback needs it). Neither is verifiable on Windows.
+
+- **2026-08-15 (later still)** — SRS SCREEN 9 (Dashboard, `/dashboard`) built, the
+  last SRS screen that did not exist. A prior pass had folded analytics into Home
+  and removed the Dashboard nav tab; the SRS specifies both, so the screen was
+  built and the bottom navigation restored to the specified four tabs
+  (Home/Monitor/Dashboard/Profile), moving Device Management off the bar it was
+  never specified onto. New backend endpoint `GET /api/v1/dashboard/analytics` and a
+  new `SaHeatGrid` component. Two real defects surfaced while testing: an
+  `IntrinsicHeight` wrapping cards that contain a `LayoutBuilder` throws during
+  layout (a production crash, not just a test failure), and a stagger built on
+  `Future.delayed` leaks a timer when its card scrolls out of a lazily-built
+  sliver. Coverage was measured for the first time: **75.2%**, above the SRS's 70%
+  gate. Also added [docs/SRS_STATUS.md](docs/SRS_STATUS.md), the per-session SRS
+  compliance report, and removed the empty `legacy_flask_gateway/` directory tree
+  the 2026-08-08 untracking pass left behind on disk.

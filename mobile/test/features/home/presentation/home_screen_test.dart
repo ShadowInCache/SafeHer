@@ -6,6 +6,7 @@ import 'package:golden_toolkit/golden_toolkit.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
 import 'package:safeher_app/features/dashboard/data/dashboard_providers.dart';
 import 'package:safeher_app/features/dashboard/domain/dashboard_repository.dart';
+import 'package:safeher_app/features/dashboard/domain/models/dashboard_analytics.dart';
 import 'package:safeher_app/features/dashboard/domain/models/dashboard_summary.dart';
 import 'package:safeher_app/features/devices/data/device_providers.dart';
 import 'package:safeher_app/features/devices/domain/device_repository.dart';
@@ -124,6 +125,10 @@ class _FakeDashboardRepository implements DashboardRepository {
       eventBreakdown: [],
     );
   }
+
+  @override
+  Future<DashboardAnalytics> getDashboardAnalytics() =>
+      throw UnimplementedError('Home reads the weekly summary, not the analytics aggregation.');
 }
 
 class _FakeLiveMonitoringController extends LiveMonitoringController {
@@ -138,6 +143,7 @@ GoRouter _buildTestRouter() {
       GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
       GoRoute(path: '/monitor', builder: (context, state) => const Scaffold(body: Text('monitor-stub'))),
       GoRoute(path: '/devices', builder: (context, state) => const Scaffold(body: Text('devices-stub'))),
+      GoRoute(path: '/dashboard', builder: (context, state) => const Scaffold(body: Text('dashboard-stub'))),
       GoRoute(path: '/profile', builder: (context, state) => const Scaffold(body: Text('profile-stub'))),
       GoRoute(path: '/emergency', builder: (context, state) => const Scaffold(body: Text('emergency-stub'))),
       GoRoute(path: '/search', builder: (context, state) => const Scaffold(body: Text('search-stub'))),
@@ -312,21 +318,20 @@ void main() {
       expect(find.text('report-1-stub'), findsOneWidget);
     });
 
-    testWidgets('navigation_actions_work: bottom nav Devices tab switches routes', (tester) async {
+    testWidgets('navigation_actions_work: bottom nav Dashboard tab switches routes', (tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 844));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(_harness());
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 400));
 
-      // `find.bySemanticsLabel('Devices')` alone is ambiguous here: the
-      // "Devices" section heading in the scrolled content produces the
-      // same implicit text-semantics label as the nav bar's "Devices" tab.
+      // Scoped to the nav bar: a "Dashboard" heading elsewhere in the
+      // scrolled content would produce the same implicit text semantics.
       await tester.tap(
-        find.descendant(of: find.byType(SaBottomNavBar), matching: find.bySemanticsLabel('Devices')),
+        find.descendant(of: find.byType(SaBottomNavBar), matching: find.bySemanticsLabel('Dashboard')),
       );
       await tester.pumpAndSettle();
-      expect(find.text('devices-stub'), findsOneWidget);
+      expect(find.text('dashboard-stub'), findsOneWidget);
     });
 
     testWidgets('navigation_actions_work: search button navigates to search', (tester) async {

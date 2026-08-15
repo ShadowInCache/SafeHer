@@ -217,9 +217,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 400));
 
-      // The Dart enum value is still `SaNavTab.home`, but its visible
-      // label is "Dashboard" — see sa_bottom_nav_bar.dart's doc comment.
-      await tester.tap(find.bySemanticsLabel('Dashboard'));
+      await tester.tap(find.bySemanticsLabel('Home'));
       await tester.pumpAndSettle();
       expect(find.text('home-stub'), findsOneWidget);
     });

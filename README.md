@@ -230,6 +230,11 @@ Built on FastAPI, Flutter/Riverpod, SQLAlchemy, XGBoost, and Supabase. Historica
 project reports and an earlier architecture snapshot are preserved in
 [docs/archive/](docs/archive/) for context on how this codebase evolved.
 
+For how much of [SRS.md](SRS.md) is actually built — with the measured
+evidence behind each claim and a ranked list of what is still missing — see
+[docs/SRS_STATUS.md](docs/SRS_STATUS.md). It is refreshed at the start of
+every working session.
+
 Several phone-side safety features — Safe Journey, Nearby Safety, the Emergency Cancel
 PIN, shake-to-trigger, voice commands, Fake Call, and the helplines directory — were
 inspired by [GoSecure](https://github.com/Divijkatyal0406/GoSecure) (MIT licensed).
