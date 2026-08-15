@@ -36,12 +36,14 @@ from fastapi_app.config import Settings
 from fastapi_app.models import EmergencyContact, FcmToken, NotificationLog, User
 from fastapi_app.repositories import emergency_contacts as contacts_repo
 from fastapi_app.services.notifications import send_fcm_notification
+from fastapi_app.services.email import EmailDeliveryError, EmailNotConfigured
 from fastapi_app.services.onesignal import (
     OneSignalDeliveryError,
     OneSignalEmailSender,
     OneSignalNotConfigured,
     build_emergency_email,
 )
+from fastapi_app.services.smtp_email import build_email_sender
 from fastapi_app.services.sms import (
     SmsDeliveryError,
     SmsNotConfigured,
@@ -130,9 +132,14 @@ async def dispatch_to_contacts(
         auth_token=settings.twilio_auth_token,
         from_number=settings.twilio_from_number,
     )
-    emailer = email_sender or OneSignalEmailSender(
-        app_id=settings.onesignal_app_id,
-        api_key=settings.onesignal_api_key,
+    # SMTP first, then OneSignal — see `smtp_email.build_email_sender` for
+    # why. Either way the dispatcher only sees `is_configured` and `send`.
+    emailer = email_sender or build_email_sender(
+        settings,
+        onesignal_sender=OneSignalEmailSender(
+            app_id=settings.onesignal_app_id,
+            api_key=settings.onesignal_api_key,
+        ),
     )
 
     display_name = (user.full_name or user.email or "A SafeHer user").strip()
@@ -206,7 +213,7 @@ async def _notify_contact(
     # substitute — but it costs nothing, which makes it the one that works
     # when there is no budget for SMS at all.
     if contact.email:
-        if emailer.is_configured:
+        if emailer is not None and emailer.is_configured:
             subject, html_body = build_emergency_email(
                 user_name=display_name,
                 contact_name=contact.name,
@@ -224,7 +231,7 @@ async def _notify_contact(
                 result.failures["email"] = error
                 await _log(session, owner.id, "email", "failed", incident_id, contact.id)
         else:
-            result.failures["email"] = "OneSignal is not configured"
+            result.failures["email"] = "No email channel is configured"
             await _log(
                 session, owner.id, "email", "skipped_not_configured", incident_id, contact.id
             )
@@ -300,10 +307,10 @@ async def _with_retries(action) -> Optional[str]:
         try:
             await action()
             return None
-        except (SmsNotConfigured, OneSignalNotConfigured) as exc:
+        except (SmsNotConfigured, OneSignalNotConfigured, EmailNotConfigured) as exc:
             # Not worth retrying: configuration will not appear mid-alert.
             return str(exc)
-        except (SmsDeliveryError, OneSignalDeliveryError) as exc:
+        except (SmsDeliveryError, OneSignalDeliveryError, EmailDeliveryError) as exc:
             last_error = str(exc)
         except Exception as exc:  # noqa: BLE001 - dispatch must never crash
             last_error = f"{type(exc).__name__}: {exc}"

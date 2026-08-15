@@ -25,12 +25,19 @@ class EmailDeliveryError(RuntimeError):
     """Raised when the SMTP server refused or dropped the message."""
 
 
-def _build_message(*, settings: Settings, to: str, subject: str, body: str) -> EmailMessage:
+def _build_message(
+    *, settings: Settings, to: str, subject: str, body: str, html_body: str | None = None
+) -> EmailMessage:
     message = EmailMessage()
     message["From"] = f"{settings.smtp_from_name} <{settings.smtp_from_email}>"
     message["To"] = to
     message["Subject"] = subject
+    # Plain text is always set first and stays the fallback part: an
+    # emergency alert has to be readable on a client that refuses HTML, and
+    # a multipart/alternative with no text part is a common spam signal.
     message.set_content(body)
+    if html_body:
+        message.add_alternative(html_body, subtype="html")
     return message
 
 
@@ -48,7 +55,14 @@ def _send_blocking(settings: Settings, message: EmailMessage) -> None:
             client.send_message(message)
 
 
-async def send_email(*, settings: Settings, to: str, subject: str, body: str) -> None:
+async def send_email(
+    *,
+    settings: Settings,
+    to: str,
+    subject: str,
+    body: str,
+    html_body: str | None = None,
+) -> None:
     """Send one message, off the event loop.
 
     `smtplib` is blocking, so it runs in a worker thread; doing it inline would
@@ -57,7 +71,9 @@ async def send_email(*, settings: Settings, to: str, subject: str, body: str) ->
     if not settings.smtp_configured:
         raise EmailNotConfigured("SMTP_HOST and SMTP_FROM_EMAIL are not set")
 
-    message = _build_message(settings=settings, to=to, subject=subject, body=body)
+    message = _build_message(
+        settings=settings, to=to, subject=subject, body=body, html_body=html_body
+    )
     try:
         await asyncio.to_thread(_send_blocking, settings, message)
     except (smtplib.SMTPException, OSError) as exc:

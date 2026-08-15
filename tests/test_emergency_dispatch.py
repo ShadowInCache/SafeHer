@@ -30,7 +30,16 @@ from fastapi_app.db import SessionLocal, init_db
 from fastapi_app.main import app
 from fastapi_app.models import NotificationLog, User
 from fastapi_app.services.emergency_dispatch import MAX_ATTEMPTS, dispatch_to_contacts
-from fastapi_app.services.onesignal import OneSignalDeliveryError, build_emergency_email
+from fastapi_app.services.onesignal import (
+    OneSignalDeliveryError,
+    OneSignalEmailSender,
+    build_emergency_email,
+)
+from fastapi_app.services.smtp_email import (
+    SmtpEmailSender,
+    build_email_sender,
+    plain_text_fallback,
+)
 from fastapi_app.services.sms import (
     SMS_SEGMENT_LIMIT,
     SmsDeliveryError,
@@ -127,6 +136,77 @@ class TestEmailComposition(unittest.TestCase):
 
         self.assertNotIn("<script>", body)
         self.assertIn("&lt;script&gt;", body)
+
+
+class TestEmailChannelSelection(unittest.TestCase):
+    """Which email channel gets used, and why.
+
+    OneSignal needs a sending domain you own with SPF/DKIM/DMARC records and
+    refuses Gmail/Outlook as senders — so a project without a domain cannot
+    use it at all. Plain SMTP through an ordinary mailbox needs neither, and
+    is therefore preferred: not because it delivers better, but because it
+    is the one that can actually be configured.
+    """
+
+    def _settings(self, **overrides) -> Settings:
+        base = {
+            "smtp_host": None,
+            "smtp_from_email": None,
+            "onesignal_app_id": None,
+            "onesignal_api_key": None,
+        }
+        base.update(overrides)
+        return Settings(**base)
+
+    def test_smtp_wins_when_both_are_configured(self):
+        settings = self._settings(
+            smtp_host="smtp.gmail.com",
+            smtp_from_email="alerts@example.com",
+            onesignal_app_id="app",
+            onesignal_api_key="key",
+        )
+        sender = build_email_sender(
+            settings,
+            onesignal_sender=OneSignalEmailSender(app_id="app", api_key="key"),
+        )
+
+        self.assertIsInstance(sender, SmtpEmailSender)
+
+    def test_onesignal_is_used_when_smtp_is_absent(self):
+        settings = self._settings(onesignal_app_id="app", onesignal_api_key="key")
+        sender = build_email_sender(
+            settings,
+            onesignal_sender=OneSignalEmailSender(app_id="app", api_key="key"),
+        )
+
+        self.assertIsInstance(sender, OneSignalEmailSender)
+
+    def test_neither_configured_reports_unconfigured_rather_than_crashing(self):
+        sender = build_email_sender(self._settings(), onesignal_sender=None)
+
+        self.assertIsNone(sender)
+
+    def test_smtp_needs_both_host_and_from_address(self):
+        half = self._settings(smtp_host="smtp.gmail.com")
+
+        self.assertFalse(SmtpEmailSender(half).is_configured)
+
+
+class TestPlainTextFallback(unittest.TestCase):
+    def test_keeps_the_links_a_reader_must_act_on(self):
+        _, html_body = build_emergency_email(
+            user_name="Priya",
+            contact_name="Anika",
+            maps_url="https://maps.google.com/?q=17.385,78.487",
+            local_time="14:05 UTC",
+        )
+        text = plain_text_fallback(subject="EMERGENCY: Priya needs help now", html_body=html_body)
+
+        # A multipart/alternative with no usable text part loses the one
+        # thing the reader needs on a client that refuses HTML.
+        self.assertIn("https://maps.google.com/?q=17.385,78.487", text)
+        self.assertIn("EMERGENCY", text)
+        self.assertNotIn("<a href", text)
 
 
 class TestSmsComposition(unittest.TestCase):

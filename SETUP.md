@@ -38,8 +38,42 @@ Then fill in real values. Grouped by concern:
 | Redis | `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` | Used by the event-processing pipeline |
 | MQTT | `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD` | Needed if you're testing against real/simulated device firmware |
 | Auth | `JWT_SECRET_KEY`, `JWT_ISSUER`, `JWT_AUDIENCE`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS` | `JWT_SECRET_KEY` **must** be a strong, non-default value in staging/production — `fastapi_app/config.py` refuses to start otherwise |
-| Notifications | `FCM_SERVER_KEY`, `ONESIGNAL_*` | Push and emergency email. OneSignal's free tier covers 10,000 emails/month — this is the channel that works without a budget |
+| Notifications | `FCM_SERVER_KEY` | Push to the user's own devices |
+| Emergency email | `SMTP_*` **or** `ONESIGNAL_*` | The channel that works with no budget. SMTP is tried first — see below |
 | SMS | `TWILIO_*` | Optional and **not free**. Unset, an SOS reports SMS as unconfigured instead of pretending to send. OneSignal is not a way around this: its free-tier SMS connects *your own* Twilio account |
+
+### Emergency email with no domain and no budget
+
+An SOS reaches emergency contacts by email. Two ways to configure it, and
+the dispatcher picks whichever is available (SMTP first):
+
+**SMTP — works today, needs nothing you don't already have.** Any mailbox
+with an app password. For Gmail:
+
+1. Turn on 2-Step Verification on the Google account.
+2. Go to <https://myaccount.google.com/apppasswords> and create an app
+   password named "SafeHer".
+3. Put it in `.env` (never committed — CI fails the build if a `.env` is
+   ever tracked):
+
+```env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USE_TLS=true
+SMTP_USERNAME=you@gmail.com
+SMTP_PASSWORD=<the 16-character app password>
+SMTP_FROM_EMAIL=you@gmail.com
+SMTP_FROM_NAME=SafeHer
+```
+
+Gmail allows roughly 500 messages a day, which is far beyond what emergency
+contacts will use. The same settings also power sign-up OTP email.
+
+**OneSignal — better deliverability, but needs a domain.** Its free tier
+covers 10,000 emails a month, but sending requires a domain you own with
+SPF, DKIM and DMARC records; Gmail and Outlook addresses are explicitly
+refused as senders. Worth moving to once SafeHer has a domain. Until then
+the OneSignal path cannot be configured at all, so use SMTP.
 | Storage | `CLOUDINARY_*` | Optional — `/api/v1/media/sign-upload` returns 400 if unset |
 | Maps | `GOOGLE_MAPS_API_KEY` | Used by the mobile app |
 | CORS | `ALLOW_ORIGINS` | Comma-separated list |

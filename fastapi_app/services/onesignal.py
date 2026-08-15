@@ -4,11 +4,19 @@ Chosen for one reason that matters to this project: OneSignal's free tier
 includes 10,000 emails a month, so an emergency can reach a contact who has
 an email address without anyone paying a bill.
 
-**What OneSignal does not solve is SMS.** Its own pricing puts SMS at $3 per
-1,000 messages, and its free-tier SMS trial works by connecting *your own
-Twilio account* — OneSignal wraps Twilio rather than replacing it. So this
-module deliberately covers email only; `sms.py` keeps its own provider
-seam, and see `emergency_dispatch.py` for how the two are ranked.
+**Two things OneSignal does not solve.**
+
+*SMS:* its pricing puts SMS at $3 per 1,000 messages, and its free-tier SMS
+trial works by connecting *your own Twilio account* — it wraps Twilio rather
+than replacing it.
+
+*A domain:* OneSignal email requires a sending domain you own, verified by
+SPF/DKIM/DMARC records, and explicitly refuses Gmail and Outlook addresses
+as senders. A project with no domain cannot use this path at all, which is
+why `smtp_email.py` exists and is tried first — plain SMTP through an
+ordinary mailbox needs no domain and no DNS. This module is the better
+option once a domain exists, because deliverability from a verified sending
+domain beats a personal mailbox.
 
 Email is a weaker emergency channel than SMS and is treated as one: people
 do not watch an inbox the way they notice a text. It is a real additional
