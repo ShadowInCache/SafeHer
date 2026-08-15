@@ -39,7 +39,7 @@ Beyond the SRS's four, the repo also runs:
 | Check | Last measured | Status |
 |-------|---------------|--------|
 | `flutter test` (full suite) | 560 passing, 0 failing | ✅ |
-| `pytest tests/` (in-process suites) | 107 passing, 0 failing | ✅ |
+| `pytest tests/` (in-process suites) | 112 passing, 0 failing | ✅ |
 | Alembic from empty → head → downgrade → head | 14 migrations, reversible | ✅ |
 
 Coverage by area — the thin spots are where next session's tests should go:
@@ -260,10 +260,11 @@ Ordered by what a user would miss first.
    SOS; the `record` package is declared but imported nowhere, and nothing in
    the app calls `/api/v1/media`. Without this there is no evidence URL for
    FR-EMG-05 to carry and nothing for FR-EMG-07 to encrypt.
-2. **OneSignal credentials** — `ONESIGNAL_APP_ID` and `ONESIGNAL_API_KEY`.
-   Free, and the single step between the dispatch chain and a working SOS.
-   Until it is set, an alert reaches nobody in production. SMS is a separate,
-   paid decision (see below).
+2. **SMTP credentials** — a mailbox and an app password (`SMTP_*`). Free,
+   needs no domain, and is the single step between the dispatch chain and a
+   working SOS. Until an email channel is set, an alert reaches nobody in
+   production. OneSignal is *not* an alternative until SafeHer owns a
+   domain; SMS is a separate, paid decision.
 3. **PDF export + share link** (FR-RPT-03, FR-RPT-06) — an incident report
    that cannot leave the phone is of limited use to police or a lawyer.
 4. **Per-contact OTP confirmation** (FR-EMG-10) — an unconfirmed contact may
@@ -511,3 +512,34 @@ That is the third time this session a green test turned out to be checking a
 friendlier situation than the app's.
 
 Totals: 560 Flutter tests, 107 backend tests, all green.
+
+### 2026-08-15 — OneSignal blocked on a domain; SMTP added
+
+The OneSignal credentials arrived and failed with HTTP 401 on every endpoint
+and every auth scheme, including a plain `GET /apps/{id}` that has nothing to
+do with email.
+
+**A wrong diagnosis, corrected.** I first read the key's app segment in
+isolation, found one character off, and called it a paste error. That was
+wrong: the key is one continuous base32 stream of `APP_ID + KEY_ID + secret`,
+so character 26 legitimately mixes 3 bits of the app id with 2 bits of the
+next field. Decoding the whole body confirms the first 16 bytes are exactly
+this app's id. The key was fine; my inference was not.
+
+The real blocker is upstream: **OneSignal email requires a sending domain you
+own**, verified with SPF/DKIM/DMARC, and explicitly refuses Gmail and Outlook
+as senders. The onboarding form asking for a company link was asking for that
+domain. A project without one cannot complete the setup at all.
+
+So the channel now also runs over **plain SMTP** — any mailbox with an app
+password, no domain, no DNS, no bill. The repo already had a working SMTP
+service for sign-up OTPs; it gained an HTML alternative part and an adapter
+matching the OneSignal sender's shape. SMTP is tried first, deliberately not
+because it delivers better (a personal mailbox sending alert-shaped mail is
+more likely to be filtered) but because it is the one that can be configured
+today. OneSignal stays wired and becomes the better option once a domain
+exists.
+
+`SETUP.md` carries the Gmail app-password walkthrough.
+
+Totals: 560 Flutter tests, 112 backend tests, all green.
