@@ -38,8 +38,8 @@ Beyond the SRS's four, the repo also runs:
 
 | Check | Last measured | Status |
 |-------|---------------|--------|
-| `flutter test` (full suite) | 557 passing, 0 failing | ✅ |
-| `pytest tests/` (in-process suites) | 98 passing, 0 failing | ✅ |
+| `flutter test` (full suite) | 560 passing, 0 failing | ✅ |
+| `pytest tests/` (in-process suites) | 107 passing, 0 failing | ✅ |
 | Alembic from empty → head → downgrade → head | 14 migrations, reversible | ✅ |
 
 Coverage by area — the thin spots are where next session's tests should go:
@@ -187,7 +187,7 @@ All 17 specified component groups exist under `lib/shared/components/`, at
 | FR-EMG-01 | Manual SOS, dispatched < 3s | 🟡 Chain complete; the < 3s budget has not been measured against a live Twilio round trip |
 | FR-EMG-02 | Auto-SOS at threat ≥ 0.75 | 🟡 backend threshold implemented |
 | FR-EMG-03 | 10s countdown, cancellable | ✅ |
-| FR-EMG-04 | FCM + SMS to all contacts | ✅ `emergency_dispatch.py` — priority order, per-contact isolation, 3 attempts. SMS to every contact; push additionally when a contact is a SafeHer user. 🚧 Twilio credentials not yet configured |
+| FR-EMG-04 | FCM + SMS to all contacts | ✅ code / 🚧 config. `emergency_dispatch.py` — priority order, per-contact isolation, 3 attempts. Channels: **email** (OneSignal, free tier), SMS (Twilio, paid), push (when a contact is a SafeHer user). Needs `ONESIGNAL_*` set to work at all |
 | FR-EMG-05 | Alert payload contents | ✅ name, time, maps link, within the 160-char budget. Evidence URL is carried when one exists (see FR-EMG-06) |
 | FR-EMG-06 | Auto-start evidence recording | ⛔ **Gap.** No recording code exists; the `record` package is declared in `pubspec.yaml` and imported nowhere |
 | FR-EMG-07 | AES-256 at rest + TLS 1.3 | ⛔ **Gap.** No evidence is captured or uploaded, so there is nothing yet to encrypt; `/api/v1/media` is dead code from the client's side |
@@ -260,10 +260,10 @@ Ordered by what a user would miss first.
    SOS; the `record` package is declared but imported nowhere, and nothing in
    the app calls `/api/v1/media`. Without this there is no evidence URL for
    FR-EMG-05 to carry and nothing for FR-EMG-07 to encrypt.
-2. **Twilio credentials** — the dispatch chain is built and tested against a
-   fake, but no SMS has ever been sent to a real phone. This is a
-   configuration step, not development work, and until it is done an SOS
-   still reaches nobody in production.
+2. **OneSignal credentials** — `ONESIGNAL_APP_ID` and `ONESIGNAL_API_KEY`.
+   Free, and the single step between the dispatch chain and a working SOS.
+   Until it is set, an alert reaches nobody in production. SMS is a separate,
+   paid decision (see below).
 3. **PDF export + share link** (FR-RPT-03, FR-RPT-06) — an incident report
    that cannot leave the phone is of limited use to police or a lawyer.
 4. **Per-contact OTP confirmation** (FR-EMG-10) — an unconfirmed contact may
@@ -474,3 +474,40 @@ contact row already holds a phone number.
 Everything is tested against a fake sender; no SMS has reached a real phone.
 
 Totals: 557 Flutter tests, 98 backend tests, all green.
+
+### 2026-08-15 — OneSignal email, and what it does and does not solve
+
+The project has no budget for Twilio, so the ask was to move to OneSignal.
+
+**It does not solve SMS.** OneSignal prices SMS at $3 per 1,000 messages,
+and its free-tier SMS trial works by connecting *your own Twilio account* —
+it wraps Twilio rather than replacing it. No provider gives SMS away;
+carriers charge for it. This is recorded here so the question does not get
+re-asked and re-answered.
+
+**It does solve email**, with 10,000 free sends a month. Email is therefore
+now a first-class channel in the fan-out, ranked below SMS (nobody watches
+an inbox the way they notice a text) but counted as genuinely reaching a
+contact, because it is not nothing. For a project with no sponsor it is the
+channel that actually works.
+
+Two things had to change before it was usable:
+
+- **The contact form had no email field**, so no contact would ever have had
+  an address for the free channel to use. Added, with copy explaining why it
+  matters and validation that nudges rather than blocks.
+- Adding that field exposed a real layout bug. `showModalBottomSheet` with
+  `isScrollControlled` hands the sheet unbounded height, so a form taller
+  than the screen lays out past the bottom of it — no overflow stripe, no
+  exception, just a save button nothing can reach. Every `SaBottomSheet` is
+  now height-capped and internally scrollable.
+
+**A testing lesson, again.** The existing "adding a contact appends it to the
+list" test asserted `find.text('Kabir Rao')` after typing that name into a
+text field — so it passed whether or not the contact was ever saved. It had
+never verified the thing it was named for. Now asserted against the
+repository; two of the three new form tests would have had the same hole.
+That is the third time this session a green test turned out to be checking a
+friendlier situation than the app's.
+
+Totals: 560 Flutter tests, 107 backend tests, all green.
