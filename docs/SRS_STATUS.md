@@ -30,7 +30,7 @@ All four gates pass as of the last refresh.
 | Gate | Requirement | Last measured | Status |
 |------|-------------|---------------|--------|
 | `flutter analyze` | 0 issues | 0 issues | ✅ |
-| `flutter test --coverage` | > 70% line coverage | **75.2%** (6,008 / 7,988 lines) | ✅ |
+| `flutter test --coverage` | > 70% line coverage | **75.2%** (6,024 / 8,009 lines) | ✅ |
 | `flutter build apk --release` | 0 errors | 68.5 MB APK, exit 0 | ✅ |
 | `dart run build_runner build` | 0 conflicts | 46 outputs, 0 conflicts | ✅ |
 
@@ -38,7 +38,7 @@ Beyond the SRS's four, the repo also runs:
 
 | Check | Last measured | Status |
 |-------|---------------|--------|
-| `flutter test` (full suite) | 520 passing, 0 failing | ✅ |
+| `flutter test` (full suite) | 538 passing, 0 failing | ✅ |
 | `pytest tests/` (in-process suites) | 80 passing, 0 failing | ✅ |
 | Alembic from empty → head → downgrade → head | 14 migrations, reversible | ✅ |
 
@@ -52,7 +52,7 @@ Coverage by area — the thin spots are where next session's tests should go:
 | `features/auth` | 79.1% |
 | `features/devices` | 76.7% |
 | `features/reports` | 75.6% |
-| `features/dashboard` | 66.4% |
+| `features/dashboard` | 65.9% |
 | `features/monitoring` | 64.6% |
 | `features/safety` | 47.9% |
 | `core/network` | 32.1% |
