@@ -13,7 +13,6 @@ import '../../../core/theme/app_typography.dart';
 import '../../../shared/components/icons/sa_icon.dart';
 import '../../../shared/components/overlays/sa_bottom_sheet.dart';
 import '../../contacts/data/contacts_providers.dart';
-import '../../contacts/domain/models/contact.dart';
 import '../../safety/data/safety_providers.dart';
 import '../../safety/presentation/widgets/cancel_pin_prompt.dart';
 import '../data/emergency_providers.dart';
@@ -50,10 +49,11 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
   int _countdownSeconds = _defaultCountdownSeconds;
   int _secondsRemaining = _defaultCountdownSeconds;
   Timer? _countdownTimer;
-  Timer? _notifyTimer;
-  int _notifyIndex = 0;
   final Set<String> _notifiedContactIds = {};
-  List<Contact> _contacts = const [];
+
+  /// Null until the dispatch call comes back — the view shows contacts as
+  /// still pending until then, rather than assuming either outcome.
+  DispatchResult? _dispatchResult;
   LocationResult? _location;
 
   @override
@@ -69,7 +69,6 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
   @override
   void dispose() {
     _countdownTimer?.cancel();
-    _notifyTimer?.cancel();
     super.dispose();
   }
 
@@ -149,11 +148,10 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
     );
   }
 
-  /// Fire-and-forget: the dispatched-stage UI (contact notification,
-  /// evidence sharing) shows immediately regardless of network state, so
-  /// this doesn't block anything on screen. If offline it queues via
-  /// [EmergencyDispatchNotifier] and replays automatically on reconnect —
-  /// see that provider for why the UI doesn't need to know the difference.
+  /// Not awaited by the countdown — the dispatched-stage UI appears
+  /// immediately regardless of network state, so a slow request never
+  /// leaves the user staring at nothing mid-emergency. The *result*,
+  /// however, is now used: it decides which contacts are shown as reached.
   void _dispatchAlert() {
     final location = _location;
     final hasFix = location is LocationAvailable;
@@ -167,27 +165,32 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
             latitude: hasFix ? location.latitude : null,
             longitude: hasFix ? location.longitude : null,
             accuracyMeters: hasFix ? location.accuracyMeters : null,
-          ),
+          )
+          .then((result) {
+            if (!mounted) return;
+            setState(() {
+              _dispatchResult = result;
+              _notifiedContactIds
+                ..clear()
+                ..addAll(result.outcome.reachedContactIds);
+            });
+          }),
     );
   }
 
+  /// Loads the contact list for the dispatched view.
+  ///
+  /// This used to walk a 600ms timer down the list, marking each contact
+  /// notified as it went, with no connection to whether anything had been
+  /// sent — pure animation. On this screen that is not a cosmetic problem:
+  /// it told a woman in danger that her sister had been alerted when no
+  /// message had left the phone. Contacts are now marked only by
+  /// [_dispatchAlert], from what the server reports it actually delivered.
   void _startNotifyingContacts() {
-    _contacts = ref.read(contactsNotifierProvider).valueOrNull ?? const [];
-    _notifyIndex = 0;
     _notifiedContactIds.clear();
-    if (_contacts.isEmpty) return;
-    _notifyTimer = Timer.periodic(const Duration(milliseconds: 600), (timer) {
-      if (!mounted || _notifyIndex >= _contacts.length) {
-        timer.cancel();
-        return;
-      }
-      setState(() => _notifiedContactIds.add(_contacts[_notifyIndex].id));
-      _notifyIndex += 1;
-    });
   }
 
   void _markSafe() {
-    _notifyTimer?.cancel();
     setState(() => _stage = EmergencyStage.cancelled);
   }
 
@@ -234,6 +237,7 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
                     key: const ValueKey('dispatched'),
                     contactsAsync: contactsAsync,
                     notifiedContactIds: _notifiedContactIds,
+                    dispatchResult: _dispatchResult,
                     onMarkSafe: _markSafe,
                     location: _location,
                   ),

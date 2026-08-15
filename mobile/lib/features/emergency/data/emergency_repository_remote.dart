@@ -2,16 +2,19 @@ import '../../../core/network/api_client.dart';
 import '../domain/emergency_repository.dart';
 
 /// `fastapi_app`-backed [EmergencyRepository] — `POST /api/v1/alerts/emergency`.
-/// Creates a real `Incident` row, broadcasts over the alerts WebSocket, and
-/// best-effort pushes FCM to the user's registered devices server-side (see
-/// repo root API.md and `fastapi_app/routers/alerts.py`).
+///
+/// Creates a real `Incident` row, stores the location, broadcasts over the
+/// alerts WebSocket, and — since `emergency_dispatch.py` landed — fans the
+/// alert out to the user's emergency contacts over SMS and, where a contact
+/// is themselves a SafeHer user, push. The response carries how many of them
+/// were actually reached, which this returns rather than discards.
 class EmergencyRepositoryRemote implements EmergencyRepository {
   EmergencyRepositoryRemote({required ApiClient apiClient}) : _apiClient = apiClient;
 
   final ApiClient _apiClient;
 
   @override
-  Future<void> dispatchAlert({
+  Future<DispatchOutcome> dispatchAlert({
     required String severity,
     required String summary,
     required bool auto,
@@ -19,7 +22,7 @@ class EmergencyRepositoryRemote implements EmergencyRepository {
     double? longitude,
     double? accuracyMeters,
   }) async {
-    await _apiClient.dio.post(
+    final response = await _apiClient.dio.post<Map<String, dynamic>>(
       '/alerts/emergency',
       data: {
         'auto': auto,
@@ -38,6 +41,14 @@ class EmergencyRepositoryRemote implements EmergencyRepository {
           if (accuracyMeters != null) 'accuracy': accuracyMeters,
         },
       },
+    );
+
+    final data = response.data ?? const <String, dynamic>{};
+    return DispatchOutcome(
+      contactsTotal: (data['contacts_total'] as num?)?.toInt(),
+      contactsNotified: (data['contacts_notified'] as num?)?.toInt(),
+      reachedContactIds:
+          (data['contacts_reached'] as List<dynamic>? ?? const []).cast<String>(),
     );
   }
 }

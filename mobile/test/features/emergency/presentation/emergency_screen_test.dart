@@ -27,10 +27,14 @@ import '../../../test_utils/offline_test_overrides.dart';
 import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
 class _RecordingEmergencyRepository implements EmergencyRepository {
+  _RecordingEmergencyRepository({this.outcome = const DispatchOutcome(contactsTotal: 2, contactsNotified: 2)});
+
+  final DispatchOutcome outcome;
+
   final dispatched = <Map<String, Object?>>[];
 
   @override
-  Future<void> dispatchAlert({
+  Future<DispatchOutcome> dispatchAlert({
     required String severity,
     required String summary,
     required bool auto,
@@ -46,6 +50,7 @@ class _RecordingEmergencyRepository implements EmergencyRepository {
       'longitude': longitude,
       'accuracyMeters': accuracyMeters,
     });
+    return outcome;
   }
 }
 
@@ -211,6 +216,92 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.text('Help is on the way'), findsOneWidget);
       expect(find.text('Sharing live location'), findsOneWidget);
+    });
+
+    testWidgets('contacts are marked reached only when the server says so', (tester) async {
+      // Regression: the dispatched view used to walk a 600ms timer down the
+      // contact list, ticking each one green with no connection to whether
+      // anything had been sent. On this screen that told a woman in danger
+      // that her sister had been alerted when nothing had left the phone.
+      final repo = _RecordingEmergencyRepository(
+        outcome: const DispatchOutcome(
+          contactsTotal: 2,
+          contactsNotified: 1,
+          reachedContactIds: ['1'],
+        ),
+      );
+      await tester.pumpWidget(_harness(emergencyRepo: repo));
+      await tester.pump(const Duration(milliseconds: 100));
+      await _holdSos(tester);
+      for (var i = 0; i < 11; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('1 of 2 emergency contacts alerted.'), findsOneWidget);
+      // Rahul was not reached, and the screen says so rather than showing
+      // him as confirmed alongside Anika.
+      expect(find.text('Could not reach'), findsOneWidget);
+    });
+
+    testWidgets('reaching nobody is stated loudly, not glossed over', (tester) async {
+      final repo = _RecordingEmergencyRepository(
+        outcome: const DispatchOutcome(contactsTotal: 2, contactsNotified: 0),
+      );
+      await tester.pumpWidget(_harness(emergencyRepo: repo));
+      await tester.pump(const Duration(milliseconds: 100));
+      await _holdSos(tester);
+      for (var i = 0; i < 11; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Your alert could not be delivered to anyone.'), findsOneWidget);
+      // The worst outcome is a user who believes help is coming and stops
+      // trying, so she is told what to do instead.
+      expect(
+        find.text('Nobody could be reached. Call your local emergency number now.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('every contact reached reads as such', (tester) async {
+      final repo = _RecordingEmergencyRepository(
+        outcome: const DispatchOutcome(
+          contactsTotal: 2,
+          contactsNotified: 2,
+          reachedContactIds: ['1', '2'],
+        ),
+      );
+      await tester.pumpWidget(_harness(emergencyRepo: repo));
+      await tester.pump(const Duration(milliseconds: 100));
+      await _holdSos(tester);
+      for (var i = 0; i < 11; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('All 2 emergency contacts have been alerted.'), findsOneWidget);
+      expect(find.text('Could not reach'), findsNothing);
+    });
+
+    testWidgets('an offline SOS says pending, never delivered', (tester) async {
+      final queue = OfflineQueueService(FakeOfflineQueueBox());
+      await tester.pumpWidget(_harness(offline: true, queueService: queue));
+      await tester.pump(const Duration(milliseconds: 100));
+      await _holdSos(tester);
+      for (var i = 0; i < 11; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        find.text(
+          'You are offline. Your alert is saved and will send the moment you have signal.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Could not reach'), findsNothing);
     });
 
     testWidgets('offline SOS queues the alert, then sends it once reconnected', (tester) async {

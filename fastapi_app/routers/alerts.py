@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_app.config import Settings, get_settings
 from fastapi_app.db import get_session
-from fastapi_app.models import Incident, Location
+from fastapi_app.models import Incident, Location, User
 from fastapi_app.realtime import manager
 from fastapi_app.repositories import fcm_tokens
 from fastapi_app.schemas import (
@@ -19,6 +19,7 @@ from fastapi_app.schemas import (
     UserPublic,
 )
 from fastapi_app.security import get_current_user
+from fastapi_app.services.emergency_dispatch import dispatch_to_contacts
 from fastapi_app.services.notifications import send_fcm_notification
 from fastapi_app.services.processor_client import process_threat
 
@@ -191,11 +192,33 @@ async def trigger_emergency_alert(
         "updated_at": datetime.utcnow().isoformat(),
     }
 
+    # FR-EMG-04/05: notify the people who can actually help. Everything
+    # above this line only told the user's own devices about an emergency
+    # they already know they are in.
+    #
+    # The incident is committed before this runs, so a dispatch that fails
+    # wholesale still leaves a durable record to retry from, and the caller
+    # still gets a 201 rather than an error that would make the app think
+    # the SOS never landed.
+    owner = await session.get(User, current_user.id)
+    dispatch = await dispatch_to_contacts(
+        session=session,
+        settings=settings,
+        user=owner,
+        incident_id=incident.id,
+        latitude=float(loc["latitude"]) if has_location else None,
+        longitude=float(loc["longitude"]) if has_location else None,
+        evidence_url=incident.evidence_url,
+    )
+
     response = IncidentPublic.model_validate(incident)
     if has_location:
         response.latitude = float(loc["latitude"])
         response.longitude = float(loc["longitude"])
         response.location_accuracy = float(loc["accuracy"]) if "accuracy" in loc else None
+    response.contacts_total = dispatch.contacts_total
+    response.contacts_notified = dispatch.contacts_notified
+    response.contacts_reached = dispatch.reached_contact_ids
     return response
 
 

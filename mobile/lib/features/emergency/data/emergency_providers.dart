@@ -49,11 +49,17 @@ class EmergencyDispatchNotifier extends _$EmergencyDispatchNotifier {
 
   bool get _isOffline => ref.read(connectivityNotifierProvider).valueOrNull == false;
 
-  /// Returns true if the alert was queued for later delivery (offline)
-  /// rather than sent immediately — callers don't need to change their UI
-  /// based on this, it's informational only. [latitude]/[longitude] are
-  /// omitted when a location fix wasn't available — see [LocationService].
-  Future<bool> dispatch({
+  /// Sends the alert and reports what happened to it.
+  ///
+  /// Callers **do** need this result: the Emergency screen shows which
+  /// contacts were reached, and it used to animate every contact green on a
+  /// timer regardless of whether anything was sent. On a safety screen that
+  /// is not a cosmetic bug — it tells a woman in danger that her sister
+  /// knows, when nothing left the phone.
+  ///
+  /// [latitude]/[longitude] are omitted when a location fix wasn't
+  /// available — see [LocationService].
+  Future<DispatchResult> dispatch({
     required String severity,
     required String summary,
     required bool auto,
@@ -70,10 +76,10 @@ class EmergencyDispatchNotifier extends _$EmergencyDispatchNotifier {
         'longitude': longitude,
         'accuracyMeters': accuracyMeters,
       });
-      return true;
+      return const DispatchResult.queued();
     }
     try {
-      await ref
+      final outcome = await ref
           .read(emergencyRepositoryProvider)
           .dispatchAlert(
             severity: severity,
@@ -83,6 +89,7 @@ class EmergencyDispatchNotifier extends _$EmergencyDispatchNotifier {
             longitude: longitude,
             accuracyMeters: accuracyMeters,
           );
+      return DispatchResult.sent(outcome);
     } catch (_) {
       // Reachable network but the request itself failed (timeout, 5xx,
       // etc.) — still queue it rather than silently losing the alert.
@@ -94,8 +101,20 @@ class EmergencyDispatchNotifier extends _$EmergencyDispatchNotifier {
         'longitude': longitude,
         'accuracyMeters': accuracyMeters,
       });
-      return true;
+      return const DispatchResult.queued();
     }
-    return false;
   }
+}
+
+/// What became of a dispatch attempt.
+class DispatchResult {
+  const DispatchResult.sent(this.outcome) : isQueued = false;
+
+  /// The device was offline, or the request failed and the alert was put on
+  /// the offline queue to replay. Nothing has reached anyone *yet* — which
+  /// the UI must show as pending, never as delivered.
+  const DispatchResult.queued() : isQueued = true, outcome = const DispatchOutcome.queued();
+
+  final bool isQueued;
+  final DispatchOutcome outcome;
 }

@@ -182,6 +182,18 @@ class IncidentPublic(BaseModel):
     longitude: Optional[float] = None
     location_accuracy: Optional[float] = None
 
+    # Set only by POST /alerts/emergency, which fans the alert out to the
+    # user's emergency contacts (FR-EMG-04). None on every other endpoint
+    # that returns an incident, where no dispatch was attempted — which is
+    # a different fact from "attempted and reached nobody" (0).
+    contacts_total: Optional[int] = None
+    contacts_notified: Optional[int] = None
+    # Ids of the contacts a channel actually accepted. The client marks
+    # exactly these in the UI — an aggregate count alone would force it to
+    # guess *which* contacts were reached, and guessing wrong on this screen
+    # tells a woman in danger that help is coming when it is not.
+    contacts_reached: Optional[list[str]] = None
+
     model_config = ConfigDict(from_attributes=True)
 
 

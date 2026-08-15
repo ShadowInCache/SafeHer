@@ -23,14 +23,14 @@ import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart'
 
 class _NoopEmergencyRepository implements EmergencyRepository {
   @override
-  Future<void> dispatchAlert({
+  Future<DispatchOutcome> dispatchAlert({
     required String severity,
     required String summary,
     required bool auto,
     double? latitude,
     double? longitude,
     double? accuracyMeters,
-  }) async {}
+  }) async => const DispatchOutcome(contactsTotal: 0, contactsNotified: 0);
 }
 
 class _EmptyContactsRepository implements ContactsRepository {
