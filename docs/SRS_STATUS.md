@@ -38,7 +38,7 @@ Beyond the SRS's four, the repo also runs:
 
 | Check | Last measured | Status |
 |-------|---------------|--------|
-| `flutter test` (full suite) | 550 passing, 0 failing | ✅ |
+| `flutter test` (full suite) | 553 passing, 0 failing | ✅ |
 | `pytest tests/` (in-process suites) | 80 passing, 0 failing | ✅ |
 | Alembic from empty → head → downgrade → head | 14 migrations, reversible | ✅ |
 
@@ -70,7 +70,7 @@ Coverage by area — the thin spots are where next session's tests should go:
 | All screens correct in dark **and** light mode | 🟡 | 19 of 20 screen tests carry a light-mode case, with goldens in both themes. `safe_journey_screen_test.dart` is the exception. |
 | SOS: tap → hold → countdown → alert → contacts notified | 🟡 | Covered by widget tests; never run against a live backend + real contacts. |
 | Offline SOS: disable network → trigger → reconnect → sent | 🟡 | `core/offline` queue implemented and unit-tested; the physical airplane-mode run has not been done. |
-| BLE pairing flow completes | 🚧 | Works against the fake BLE service. Real hardware not yet paired. |
+| BLE pairing flow completes | 🚧 | Works against the fake BLE service. Real hardware not yet paired. **Not available on web at all** — see the 2026-08-15 log entry. |
 | Device status updates live via MQTT | 🟡 | WebSocket path implemented (`realtime_client.dart`); MQTT worker exists backend-side, untested against a broker. |
 | Threat gauge animates smoothly to new values | ✅ | `SaThreatGauge` component tests + goldens. |
 | Evidence recording starts within 1s of SOS | 🚧 | Needs a device; not measurable in the widget test binding. |
@@ -366,3 +366,38 @@ spinning on "Scanning…" with nothing on screen. Same hole in
 names the cause.
 
 Totals: 550 Flutter tests, 80 backend tests, all green.
+
+### 2026-08-15 — the pairing crash on web
+
+Follow-up to the entry above. The reported "device pairing does nothing"
+turned out to have a second, larger cause than the swallowed errors already
+fixed: a full-screen red error page reading
+`Unsupported operation: Platform._operatingSystem`.
+
+`canPromptToEnableBluetooth` used `dart:io`'s `Platform.isAndroid`, which
+throws on web. Because it is a plain getter read during the pairing sheet's
+`build()`, the throw landed inside the render pipeline, where no
+controller-level error handling can reach it — the guards added earlier the
+same day wrap async controller calls, not `build()`. All platform questions
+now go through `defaultTargetPlatform`, and `dart:io` is gone from `lib/`.
+
+**BLE is now reported unsupported on web, on purpose.** Web Bluetooth is a
+different shape of API — a browser-drawn chooser opened from a user gesture,
+with no free-running scan — so the scan-then-pick flow cannot be driven from
+it, and `permission_handler` has no web implementation. The message is
+platform-aware, because telling a Chrome user their "phone doesn't support
+Bluetooth" is both wrong and a dead end.
+
+Two regression tests: the getter is total across every `TargetPlatform`, and
+no library under `lib/` imports `dart:io`. The second was verified by
+planting a canary file and watching it fail — a guard nobody has seen fail
+is a guard nobody has checked. `flutter build web` also confirmed clean,
+which exercises the conditional import behind certificate pinning.
+
+**Testing lesson worth keeping:** three defects this session (the toast's
+missing `Material`, this crash, and the swallowed BLE errors) were all
+invisible to a green suite because the tests exercised the components in a
+friendlier context than the app gives them. Prefer asserting through the
+real entry point over the convenient one.
+
+Totals: 553 Flutter tests, 80 backend tests, all green.
