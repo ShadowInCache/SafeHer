@@ -41,3 +41,7 @@ mobile/build/
 mobile/.dart_tool/
 # Local agent worktrees
 .claude/worktrees/
+
+# JetBrains IDE
+.idea/
+*.iml
