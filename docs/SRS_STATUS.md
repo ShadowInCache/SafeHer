@@ -68,7 +68,7 @@ Coverage by area — the thin spots are where next session's tests should go:
 |-----------|--------|----------|
 | All 14+ screens render without exception | ✅ Android/web | 25 screens across 14 SRS specs + extras; widget tests assert no exceptions. iOS unverified — 🚧 needs a Mac. |
 | All screens correct in dark **and** light mode | 🟡 | 19 of 20 screen tests carry a light-mode case, with goldens in both themes. `safe_journey_screen_test.dart` is the exception. |
-| SOS: tap → hold → countdown → alert → contacts notified | 🟡 | Covered by widget tests; never run against a live backend + real contacts. |
+| SOS: tap → hold → countdown → alert → contacts notified | ⛔ | The first four steps work. **Contacts are never notified** — nothing in the backend or the app reads the `emergency_contacts` table when an SOS fires. See gap #1. |
 | Offline SOS: disable network → trigger → reconnect → sent | 🟡 | `core/offline` queue implemented and unit-tested; the physical airplane-mode run has not been done. |
 | BLE pairing flow completes | 🚧 | Works against the fake BLE service. Real hardware not yet paired. **Not available on web at all** — see the 2026-08-15 log entry. |
 | Device status updates live via MQTT | 🟡 | WebSocket path implemented (`realtime_client.dart`); MQTT worker exists backend-side, untested against a broker. |
@@ -184,13 +184,13 @@ All 17 specified component groups exist under `lib/shared/components/`, at
 
 | ID | Requirement | Status |
 |----|-------------|--------|
-| FR-EMG-01 | Manual SOS, dispatched < 3s | 🟡 |
+| FR-EMG-01 | Manual SOS, dispatched < 3s | 🟡 An incident is recorded; "dispatch" reaches only the user's own devices |
 | FR-EMG-02 | Auto-SOS at threat ≥ 0.75 | 🟡 backend threshold implemented |
 | FR-EMG-03 | 10s countdown, cancellable | ✅ |
-| FR-EMG-04 | FCM + SMS to all contacts | 🟡 FCM implemented; SMS provider not configured |
-| FR-EMG-05 | Alert payload contents | ✅ |
-| FR-EMG-06 | Auto-start evidence recording | 🚧 needs a device |
-| FR-EMG-07 | AES-256 at rest + TLS 1.3 | ⛔ **Gap** — no evidence-encryption test suite |
+| FR-EMG-04 | FCM + SMS to all contacts | ⛔ **Gap.** FCM goes to the *user's own* devices. Contacts get nothing — no push, no SMS. Twilio settings exist in `config.py` but no code reads them |
+| FR-EMG-05 | Alert payload contents | ⛔ No outbound alert exists to carry them |
+| FR-EMG-06 | Auto-start evidence recording | ⛔ **Gap.** No recording code exists; the `record` package is declared in `pubspec.yaml` and imported nowhere |
+| FR-EMG-07 | AES-256 at rest + TLS 1.3 | ⛔ **Gap.** No evidence is captured or uploaded, so there is nothing yet to encrypt; `/api/v1/media` is dead code from the client's side |
 | FR-EMG-08 | False-alarm cancellation logged | ✅ |
 | FR-EMG-09 | Offline emergency queue | ✅ `core/offline` |
 | FR-EMG-10 | Up to 10 contacts, drag priority, OTP per contact | 🟡 drag + limit done; per-contact OTP confirmation missing |
@@ -256,20 +256,32 @@ battery". Drawing a trend from a single sample would be a fabricated chart.
 
 Ordered by what a user would miss first.
 
-1. **WebSocket certificate pinning** — the HTTP API is pinned; the live
+1. **Nobody is told when the SOS fires** (FR-EMG-04, FR-EMG-05). This is
+   the app's entire reason to exist and it is missing. `POST /alerts/emergency`
+   creates an incident, stores the location, opens a WebSocket message and
+   pushes FCM — all to the person who triggered it. The `emergency_contacts`
+   table is read by nothing in the alert path. Contacts can be added, ordered
+   and deleted; they are never notified. Needs: a dispatch service that fans
+   out to contacts over FCM and SMS (Twilio settings already exist in
+   `config.py`, unused), with the retry and 5-second budget FR-EMG-04
+   specifies.
+2. **No evidence is captured** (FR-EMG-06, FR-EMG-07). No recording starts on
+   SOS; the `record` package is declared but imported nowhere, and nothing in
+   the app calls `/api/v1/media`. Without this there is no evidence URL for
+   FR-EMG-05 to carry and nothing for FR-EMG-07 to encrypt.
+3. **PDF export + share link** (FR-RPT-03, FR-RPT-06) — an incident report
+   that cannot leave the phone is of limited use to police or a lawyer.
+4. **Per-contact OTP confirmation** (FR-EMG-10) — an unconfirmed contact is
+   an alert sent into the void, once alerts exist to send.
+5. **WebSocket certificate pinning** — the HTTP API is pinned; the live
    monitoring socket (`realtime_client.dart`) still uses the platform
    default. `WebSocketChannel.connect` offers no leaf-certificate hook, so
    this needs an `IOWebSocketChannel` with a custom `HttpClient` and a
    `SecureSocket`-level check.
-2. **PDF export + share link** (FR-RPT-03, FR-RPT-06) — an incident report
-   that cannot leave the phone is of limited use to police or a lawyer.
-3. **Per-contact OTP confirmation** (FR-EMG-10) — an unconfirmed contact is
-   an alert sent into the void.
-4. **Evidence encryption test suite** (FR-EMG-07).
-5. **Firmware OTA + device sets** (FR-DEV-04, FR-DEV-06).
-6. **Coverage in the thin areas** — `features/contacts` and `core/network`
+6. **Firmware OTA + device sets** (FR-DEV-04, FR-DEV-06).
+7. **Coverage in the thin areas** — `features/contacts` and `core/network`
    are the weakest points in an otherwise healthy total.
-7. **iOS verification** 🚧 — the `project.pbxproj` edit registering
+8. **iOS verification** 🚧 — the `project.pbxproj` edit registering
    `GoogleService-Info.plist` is the one change in the repo nobody has
    compiled. Needs `flutter build ios --debug` on a Mac.
 
@@ -401,3 +413,33 @@ friendlier context than the app gives them. Prefer asserting through the
 real entry point over the convenient one.
 
 Totals: 553 Flutter tests, 80 backend tests, all green.
+
+### 2026-08-15 — correction: the emergency chain is not connected
+
+Re-auditing §4.3 for a status report turned up the most serious finding of
+the day, and a correction to this file's own earlier entry.
+
+**An SOS notifies nobody but the person who pressed it.**
+`POST /api/v1/alerts/emergency` creates the incident, stores the location,
+broadcasts on the user's own WebSocket and pushes FCM to the user's own
+devices. It never reads `emergency_contacts`. There is no SMS code anywhere
+— `twilio_*` settings sit in `config.py` unused. The two `sendSms` call
+sites in the app are manual "message this contact" buttons, not the alert
+path.
+
+**No evidence is captured either.** Nothing imports the `record` package
+(declared in `pubspec.yaml`), and no client code calls `/api/v1/media`.
+
+This file previously rated FR-EMG-04 as "🟡 FCM implemented; SMS provider
+not configured" and FR-EMG-05 as "✅". Both were wrong, and wrong in the
+flattering direction: FCM *is* implemented, but it points at the wrong
+person. Corrected to ⛔ above, and promoted to gaps #1 and #2.
+
+Worse, `emergency_repository.dart`'s doc comment asserted that dispatch
+"triggers emergency-contact notification and evidence upload server-side" —
+a comment describing four unimplemented requirements as done, in the one
+feature where being wrong is dangerous. Rewritten to state what the call
+actually does.
+
+Nothing here is a regression: this was never built. The reporting was the
+defect.
