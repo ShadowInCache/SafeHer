@@ -1,0 +1,94 @@
+name: SafeHer Backend CI
+
+on:
+  push:
+    paths:
+      - "fastapi_app/**"
+      - "alembic/**"
+      - "tests/**"
+      - "requirements.txt"
+      - "alembic.ini"
+      - ".github/workflows/backend-ci.yml"
+  pull_request:
+    paths:
+      - "fastapi_app/**"
+      - "alembic/**"
+      - "tests/**"
+      - "requirements.txt"
+      - "alembic.ini"
+      - ".github/workflows/backend-ci.yml"
+
+jobs:
+  backend-checks:
+    runs-on: ubuntu-latest
+
+    env:
+      # A throwaway secret: config.py refuses to start without one outside
+      # development, and CI must not depend on a real value.
+      JWT_SECRET_KEY: ci-only-secret-not-used-anywhere-else
+      DATABASE_URL: sqlite:///./ci_safeher.db
+      ENABLE_MQTT_WORKER: "false"
+      LOG_LEVEL: WARNING
+      ENVIRONMENT: development
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # The ML training stack (torch, ultralytics, librosa) is several GB and
+      # nothing under test imports it, so CI installs only what the backend and
+      # its tests actually need. See DEPENDENCIES.md for the full grouping.
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install \
+            fastapi uvicorn "pydantic>=2" pydantic-settings \
+            "sqlalchemy>=2" alembic aiosqlite asyncpg \
+            "python-jose[cryptography]" "passlib[bcrypt]" python-multipart \
+            httpx aiomqtt redis google-auth requests \
+            pytest pytest-asyncio pytest-subtests
+
+      - name: Verify migrations run from an empty database
+        # Guards the class of bug that let this repo ship six migrations that
+        # had never been applied: a schema built by create_all diverges silently
+        # from the migration chain.
+        run: |
+          rm -f ci_safeher.db
+          python -m alembic upgrade head
+          python -m alembic current
+
+      - name: Verify migrations are reversible
+        run: |
+          python -m alembic downgrade -1
+          python -m alembic upgrade head
+
+      # test_api_gateway.py and test_integration.py drive a live server over
+      # HTTP rather than the ASGI app, so they need a running backend and are
+      # excluded from this job.
+      - name: Run in-process test suites
+        run: |
+          python -m pytest tests/ -q \
+            --ignore=tests/test_api_gateway.py \
+            --ignore=tests/test_integration.py
+
+      - name: Check no secrets or artifacts are tracked
+        # Cheap regression guard: this repo has twice shipped committed
+        # artifacts and once a live Supabase key.
+        run: |
+          set -e
+          fail=0
+          for pattern in '__pycache__' '\.db$' 'chrome_fresh_profile' '(^|/)\.env$'; do
+            count=$(git ls-files | grep -cE "$pattern" || true)
+            if [ "$count" -ne 0 ]; then
+              echo "::error::$count tracked file(s) match '$pattern'"
+              git ls-files | grep -E "$pattern" | head -5
+              fail=1
+            fi
+          done
+          exit $fail
