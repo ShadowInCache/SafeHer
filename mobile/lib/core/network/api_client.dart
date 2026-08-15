@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import '../config/app_config.dart';
 import 'auth_token_store.dart';
+import 'certificate_pinning.dart';
 
 /// Shared, pre-configured Dio instance for every `*RepositoryRemote`. Adds
 /// the bearer token to outgoing requests, silently refreshes it once on a
@@ -31,6 +32,12 @@ class ApiClient {
           headers: {'Content-Type': 'application/json'},
         ),
       ) {
+    // Both clients, not just the main one: the refresh client carries the
+    // long-lived refresh token, which is the most valuable thing on the
+    // wire. An unpinned refresh path would undo the pin on every other.
+    applyCertificatePinning(this.dio);
+    applyCertificatePinning(_refreshDio);
+
     this.dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {

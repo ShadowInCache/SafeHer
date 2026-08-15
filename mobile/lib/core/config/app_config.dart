@@ -34,6 +34,23 @@ abstract final class AppConfig {
   /// That path cannot do Google, Apple or guest sign-in.
   static const useFirebaseAuth = bool.fromEnvironment('USE_FIREBASE_AUTH', defaultValue: true);
 
+  /// Comma-separated, base64-encoded SHA-256 fingerprints of the DER
+  /// certificates the API is allowed to present (SRS section 5.2). Supplied
+  /// at build time with `--dart-define=PINNED_CERT_SHA256=<pin>,<backup>`
+  /// and never committed -- a pin is not a secret, but hardcoding one turns
+  /// certificate renewal into a source release.
+  ///
+  /// Empty in development, where the backend is plain HTTP on localhost and
+  /// there is no certificate to pin. See `certificate_pinning.dart` for how
+  /// to read a fingerprint off a live host, and why you want two of them.
+  static const _pinnedCertificateHashesRaw = String.fromEnvironment('PINNED_CERT_SHA256');
+
+  static Set<String> get pinnedCertificateHashes => _pinnedCertificateHashesRaw
+      .split(',')
+      .map((pin) => pin.trim())
+      .where((pin) => pin.isNotEmpty)
+      .toSet();
+
   static const apiConnectTimeout = Duration(seconds: 10);
   static const apiReceiveTimeout = Duration(seconds: 15);
 

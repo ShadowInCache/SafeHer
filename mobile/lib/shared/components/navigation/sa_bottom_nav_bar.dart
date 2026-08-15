@@ -125,10 +125,7 @@ class SaBottomNavBar extends StatelessWidget {
                 ),
               ),
             ),
-            Positioned(
-              bottom: 76,
-              child: _SosFab(onTap: onSosTap),
-            ),
+            Positioned(bottom: 76, child: _SosFab(onTap: onSosTap)),
           ],
         ),
       ),
@@ -154,50 +151,59 @@ class _NavTabItem extends StatelessWidget {
       label: tab.label,
       selected: isActive,
       button: true,
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: SizedBox(
-          width: 56,
-          height: 64,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AnimatedScale(
-                scale: isActive ? 1.15 : 1.0,
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOut,
-                child: AnimatedOpacity(
-                  opacity: isActive ? 1.0 : 0.5,
+      // The pill is a fixed 64dp floating bar, so an unclamped system font
+      // scale pushes the label past its tab — at 200% it overflowed by a
+      // pixel. Clamped to 1.3, matching what Material's own NavigationBar
+      // does with destination labels: the icon and the Semantics label above
+      // carry the meaning, and the visible caption is a hint, so capping it
+      // costs a user on large text far less than a clipped bar would.
+      child: MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.3,
+        child: GestureDetector(
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: SizedBox(
+            width: 56,
+            height: 64,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AnimatedScale(
+                  scale: isActive ? 1.15 : 1.0,
                   duration: const Duration(milliseconds: 200),
-                  child: SaIcon(tab.glyph, size: 24, color: Colors.white),
+                  curve: Curves.easeOut,
+                  child: AnimatedOpacity(
+                    opacity: isActive ? 1.0 : 0.5,
+                    duration: const Duration(milliseconds: 200),
+                    child: SaIcon(tab.glyph, size: 24, color: Colors.white),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 2),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: isActive
-                    ? Text(
-                        tab.label,
-                        key: ValueKey(tab),
-                        style: AppTypography.labelM.copyWith(color: Colors.white),
-                        maxLines: 1,
-                        softWrap: false,
-                        overflow: TextOverflow.ellipsis,
-                      )
-                    : const SizedBox(height: 14, key: ValueKey('empty')),
-              ),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                margin: const EdgeInsets.only(top: 2),
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isActive ? AppColors.violet500 : Colors.transparent,
+                const SizedBox(height: 2),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: isActive
+                      ? Text(
+                          tab.label,
+                          key: ValueKey(tab),
+                          style: AppTypography.labelM.copyWith(color: Colors.white),
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                        )
+                      : const SizedBox(height: 14, key: ValueKey('empty')),
                 ),
-              ),
-            ],
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.only(top: 2),
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isActive ? AppColors.violet500 : Colors.transparent,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -234,9 +240,10 @@ class _SosFabState extends State<_SosFab> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final breathe = Tween<double>(begin: 1.0, end: 1.06).animate(
-      CurvedAnimation(parent: _breatheController, curve: Curves.easeInOut),
-    );
+    final breathe = Tween<double>(
+      begin: 1.0,
+      end: 1.06,
+    ).animate(CurvedAnimation(parent: _breatheController, curve: Curves.easeInOut));
     return Semantics(
       label: 'SOS emergency',
       button: true,
@@ -253,7 +260,13 @@ class _SosFabState extends State<_SosFab> with SingleTickerProviderStateMixin {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: AppColors.coral500,
-                boxShadow: [BoxShadow(color: AppColors.coral500.withValues(alpha: 0.4), blurRadius: 16, spreadRadius: 2)],
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.coral500.withValues(alpha: 0.4),
+                    blurRadius: 16,
+                    spreadRadius: 2,
+                  ),
+                ],
               ),
               alignment: Alignment.center,
               child: const SaIcon(SaIconGlyph.shield, size: 26, color: Colors.white),

@@ -100,7 +100,7 @@ Coverage by area — the thin spots are where next session's tests should go:
 | Criterion | Status | Note |
 |-----------|--------|------|
 | TalkBack: all interactive elements labelled | 🟡 | `Semantics()` is applied throughout (SRS Rule 9) but no screen-reader pass has been done. |
-| Font scale 200%: no overflow | ⛔ | **Untested.** No test currently pumps at `textScaleFactor: 2.0`. |
+| Font scale 200%: no overflow | ✅ | `test/accessibility/font_scale_test.dart` pumps the component library at 200% (and 300%) in both themes, asserting no overflow exception. Found and fixed a real 1px overflow in the bottom nav. |
 | Reduced motion: all screens usable | ✅ | Every animation routes through `AnimationHelpers`, which checks `MediaQuery.disableAnimations`. |
 | Contrast ≥ 4.5:1 | 🟡 | Palette designed to the SRS spec; not machine-verified. |
 
@@ -110,7 +110,7 @@ Coverage by area — the thin spots are where next session's tests should go:
 |-----------|--------|------|
 | No credentials in source or committed `.env` | ✅ | CI fails the build if `.env`, `*.db`, `__pycache__` or a browser profile is ever tracked. |
 | JWT in `flutter_secure_storage`, not Hive | ✅ | `core/network/auth_token_store.dart`. |
-| Certificate pinning for production | ⛔ | **Gap.** Nothing in `lib/` pins a certificate. |
+| Certificate pinning for production | ✅ HTTP / ⛔ WebSocket | `core/network/certificate_pinning.dart` pins the leaf certificate on both the API and refresh clients, with pins supplied at build time via `--dart-define=PINNED_CERT_SHA256`. The live-monitoring WebSocket is **not** pinned — see gaps. |
 | No sensitive data logged in release | 🟡 | No `print()` in the network layer; not audited app-wide. |
 
 ---
@@ -256,21 +256,20 @@ battery". Drawing a trend from a single sample would be a fabricated chart.
 
 Ordered by what a user would miss first.
 
-1. **Certificate pinning** (§5.2, acceptance criteria) — a safety app
-   sending GPS and evidence over TLS with no pin is one hostile network away
-   from a readable session.
+1. **WebSocket certificate pinning** — the HTTP API is pinned; the live
+   monitoring socket (`realtime_client.dart`) still uses the platform
+   default. `WebSocketChannel.connect` offers no leaf-certificate hook, so
+   this needs an `IOWebSocketChannel` with a custom `HttpClient` and a
+   `SecureSocket`-level check.
 2. **PDF export + share link** (FR-RPT-03, FR-RPT-06) — an incident report
    that cannot leave the phone is of limited use to police or a lawyer.
 3. **Per-contact OTP confirmation** (FR-EMG-10) — an unconfirmed contact is
    an alert sent into the void.
-4. **Font-scale 200% testing** (§5.4) — cheap to add, and the most likely
-   source of a broken layout in the field.
-5. **Evidence encryption test suite** (FR-EMG-07).
-6. **Firmware OTA + device sets** (FR-DEV-04, FR-DEV-06).
-7. **Coverage in the thin areas** — `features/contacts` at 12.1% and
-   `core/network` at 32.1% are the weakest points in an otherwise healthy
-   75.2%.
-8. **iOS verification** 🚧 — the `project.pbxproj` edit registering
+4. **Evidence encryption test suite** (FR-EMG-07).
+5. **Firmware OTA + device sets** (FR-DEV-04, FR-DEV-06).
+6. **Coverage in the thin areas** — `features/contacts` and `core/network`
+   are the weakest points in an otherwise healthy total.
+7. **iOS verification** 🚧 — the `project.pbxproj` edit registering
    `GoogleService-Info.plist` is the one change in the repo nobody has
    compiled. Needs `flutter build ios --debug` on a Mac.
 
@@ -280,7 +279,7 @@ Ordered by what a user would miss first.
 
 Append-only. Newest last.
 
-### 2026-08-15 — SCREEN 9 Dashboard
+### 2026-08-15 — SCREEN 9 Dashboard, certificate pinning, font-scale testing
 
 The last missing SRS screen. A prior decision had folded analytics into Home
 and dropped the Dashboard tab; the SRS specifies both, answering different
@@ -302,4 +301,28 @@ was built and the nav bar restored to the specified four tabs.
   replaced with an `Interval` baked into the controller duration.
 - **First coverage measurement ever taken: 75.2%**, above the SRS's 70% gate.
 
-Totals after this session: 520 Flutter tests, 80 backend tests, all green.
+Then two gaps the new status report had ranked at the top:
+
+**Certificate pinning (SRS §5.2, ranked #1).** `applyCertificatePinning`
+installs a leaf-certificate check on both the API client and the refresh
+client — the refresh path carries the long-lived token, so leaving it
+unpinned would have undone the pin everywhere else. Pins are base64 SHA-256
+of the DER certificate, supplied with `--dart-define=PINNED_CERT_SHA256` and
+never committed; the format is exactly what `openssl` prints, so a
+fingerprint can be read off a live host and pasted in. With no pins
+configured the app falls back to ordinary CA validation rather than failing
+shut, because a dev build against local HTTP has no certificate to pin.
+**Configure at least two pins in production** — a single pin turns routine
+certificate renewal into an outage only an app-store update can fix, and for
+this app an outage means an SOS that does not send. Web builds get a
+documented no-op: a browser never hands the chain to page JavaScript.
+
+**Font scale 200% (SRS §5.4, ranked #4).** A new
+`test/accessibility/font_scale_test.dart` pumps the component library at 200%
+and 300% in both themes. It immediately earned its place: the bottom
+navigation overflowed by 1px at 200%. Fixed by clamping the tab label to a
+1.3 scale factor — what Material's own `NavigationBar` does — since the icon
+and the `Semantics` label carry the meaning and a clipped bar costs a
+large-text user far more than a capped caption.
+
+Totals after this session: 538 Flutter tests, 80 backend tests, all green.

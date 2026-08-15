@@ -25,6 +25,9 @@ dependencies:
 
   # Networking / realtime
   dio: ^5.4.3
+  # Direct, not transitive: certificate_pinning_io.dart hashes DER
+  # certificates with it.
+  crypto: ^3.0.3
   mqtt_client: ^10.0.0
   web_socket_channel: ^2.4.0
 
