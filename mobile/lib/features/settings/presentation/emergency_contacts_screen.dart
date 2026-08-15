@@ -24,12 +24,15 @@ class EmergencyContactsScreen extends ConsumerWidget {
   const EmergencyContactsScreen({super.key});
 
   Future<void> _handleAdd(BuildContext context, WidgetRef ref) async {
-    final result = await showSaBottomSheet<(String, String, String)>(
+    final result = await showSaBottomSheet<(String, String, String, String)>(
       context,
       builder: (context) => const AddContactSheet(),
     );
     if (result == null) return;
-    await ref.read(contactsNotifierProvider.notifier).addContact(result.$1, result.$2, result.$3);
+    final email = result.$4.trim();
+    await ref
+        .read(contactsNotifierProvider.notifier)
+        .addContact(result.$1, result.$2, result.$3, email: email.isEmpty ? null : email);
   }
 
   @override

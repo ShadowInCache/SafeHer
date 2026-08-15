@@ -61,7 +61,12 @@ class _FakeContactsRepository implements ContactsRepository {
   }
 
   @override
-  Future<List<Contact>> addContact(String name, String phone, String relationship) => throw UnimplementedError();
+  Future<List<Contact>> addContact(
+    String name,
+    String phone,
+    String relationship, {
+    String? email,
+  }) => throw UnimplementedError();
 
   @override
   Future<List<Contact>> removeContact(String id) => throw UnimplementedError();

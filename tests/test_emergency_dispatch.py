@@ -30,6 +30,7 @@ from fastapi_app.db import SessionLocal, init_db
 from fastapi_app.main import app
 from fastapi_app.models import NotificationLog, User
 from fastapi_app.services.emergency_dispatch import MAX_ATTEMPTS, dispatch_to_contacts
+from fastapi_app.services.onesignal import OneSignalDeliveryError, build_emergency_email
 from fastapi_app.services.sms import (
     SMS_SEGMENT_LIMIT,
     SmsDeliveryError,
@@ -59,6 +60,73 @@ class FakeSmsSender:
             raise SmsDeliveryError("Twilio rejected the message (HTTP 400).")
         self.sent.append((to, body))
         return f"SM{uuid4().hex[:8]}"
+
+
+class FakeEmailSender:
+    """Stands in for OneSignal."""
+
+    def __init__(self, *, configured: bool = True, failures: set[str] | None = None):
+        self.configured = configured
+        self.failures = failures or set()
+        self.sent: list[tuple[str, str, str]] = []
+        self.attempts = 0
+
+    @property
+    def is_configured(self) -> bool:
+        return self.configured
+
+    async def send(self, *, to: str, subject: str, html_body: str) -> str:
+        self.attempts += 1
+        if to in self.failures:
+            raise OneSignalDeliveryError("OneSignal rejected the message (HTTP 400).")
+        self.sent.append((to, subject, html_body))
+        return "notif-id"
+
+
+class TestEmailComposition(unittest.TestCase):
+    def test_subject_carries_the_whole_message(self):
+        subject, _ = build_emergency_email(
+            user_name="Priya Patel",
+            contact_name="Anika",
+            maps_url="https://maps.google.com/?q=1,2",
+            local_time="14:05 UTC",
+        )
+
+        # A locked phone shows the subject and nothing else, so it has to
+        # say who and that it is an emergency on its own.
+        self.assertIn("EMERGENCY", subject)
+        self.assertIn("Priya Patel", subject)
+
+    def test_body_links_the_location(self):
+        _, body = build_emergency_email(
+            user_name="Priya",
+            contact_name="Anika",
+            maps_url="https://maps.google.com/?q=17.385,78.487",
+            local_time="14:05 UTC",
+        )
+
+        self.assertIn("https://maps.google.com/?q=17.385,78.487", body)
+        self.assertIn("Anika", body)
+
+    def test_missing_location_says_so_rather_than_linking_nowhere(self):
+        _, body = build_emergency_email(
+            user_name="Priya", contact_name="Anika", maps_url=None, local_time="14:05 UTC"
+        )
+
+        self.assertIn("No location was available", body)
+        self.assertNotIn("maps.google.com", body)
+
+    def test_names_are_escaped(self):
+        # A display name is user-controlled and lands in an HTML email.
+        _, body = build_emergency_email(
+            user_name="<script>alert(1)</script>",
+            contact_name="Anika",
+            maps_url=None,
+            local_time="14:05 UTC",
+        )
+
+        self.assertNotIn("<script>", body)
+        self.assertIn("&lt;script&gt;", body)
 
 
 class TestSmsComposition(unittest.TestCase):
@@ -141,11 +209,21 @@ class TestEmergencyDispatch(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(login.status_code, 200, login.text)
         return login.json()["access_token"]
 
-    async def _add_contact(self, *, name: str, phone: str, priority: int = 1) -> str:
+    async def _add_contact(
+        self, *, name: str, phone: str, priority: int = 1, email: str | None = None
+    ) -> str:
+        payload = {
+            "name": name,
+            "phone": phone,
+            "relationship": "Sister",
+            "priority": priority,
+        }
+        if email:
+            payload["email"] = email
         response = await self.client.post(
             "/api/v1/users/me/emergency-contacts",
             headers=self.headers,
-            json={"name": name, "phone": phone, "relationship": "Sister", "priority": priority},
+            json=payload,
         )
         self.assertEqual(response.status_code, 201, response.text)
         return response.json()["id"]
@@ -158,7 +236,7 @@ class TestEmergencyDispatch(unittest.IsolatedAsyncioTestCase):
                 .one()
             )
 
-    async def _dispatch(self, sender: FakeSmsSender, **kwargs) -> object:
+    async def _dispatch(self, sender: FakeSmsSender, emailer=None, **kwargs) -> object:
         user = await self._current_user()
         async with SessionLocal() as session:
             return await dispatch_to_contacts(
@@ -167,8 +245,65 @@ class TestEmergencyDispatch(unittest.IsolatedAsyncioTestCase):
                 user=user,
                 incident_id=kwargs.pop("incident_id", f"inc_{uuid4().hex[:8]}"),
                 sms_sender=sender,
+                email_sender=emailer or FakeEmailSender(configured=False),
                 **kwargs,
             )
+
+    # ------------------------------------------------------------- email
+
+    async def test_a_contact_with_an_email_gets_one(self):
+        await self._add_contact(name="Anika", phone="+911111111111", email="anika@example.com")
+
+        emailer = FakeEmailSender()
+        report = await self._dispatch(
+            FakeSmsSender(configured=False), emailer=emailer, latitude=17.385, longitude=78.487
+        )
+
+        self.assertEqual(len(emailer.sent), 1)
+        self.assertEqual(emailer.sent[0][0], "anika@example.com")
+        # Email alone still counts as reaching the contact — it is a weaker
+        # channel than SMS, but it is not nothing.
+        self.assertEqual(report.contacts_notified, 1)
+
+    async def test_a_contact_without_an_email_is_not_emailed(self):
+        await self._add_contact(name="Anika", phone="+911111111111")
+
+        emailer = FakeEmailSender()
+        await self._dispatch(FakeSmsSender(configured=False), emailer=emailer)
+
+        self.assertEqual(emailer.sent, [])
+
+    async def test_email_and_sms_are_reported_separately(self):
+        await self._add_contact(name="Anika", phone="+911111111111", email="anika@example.com")
+
+        report = await self._dispatch(FakeSmsSender(), emailer=FakeEmailSender())
+
+        self.assertEqual(
+            sorted(report.results[0].delivered_channels), ["email", "sms"]
+        )
+
+    async def test_email_failure_does_not_hide_a_successful_sms(self):
+        await self._add_contact(name="Anika", phone="+911111111111", email="anika@example.com")
+
+        emailer = FakeEmailSender(failures={"anika@example.com"})
+        report = await self._dispatch(FakeSmsSender(), emailer=emailer)
+
+        self.assertEqual(report.contacts_notified, 1)
+        self.assertIn("sms", report.results[0].delivered_channels)
+        self.assertIn("email", report.results[0].failures)
+
+    async def test_email_alone_reaches_a_contact_when_sms_is_unaffordable(self):
+        # The configuration this project actually ships with: no Twilio
+        # account, OneSignal's free email tier only.
+        await self._add_contact(name="Anika", phone="+911111111111", email="anika@example.com")
+
+        report = await self._dispatch(
+            FakeSmsSender(configured=False), emailer=FakeEmailSender()
+        )
+
+        self.assertEqual(report.contacts_notified, 1)
+        self.assertEqual(report.results[0].delivered_channels, ["email"])
+        self.assertIn("not configured", report.results[0].failures["sms"])
 
     # ------------------------------------------------------- the happy path
 

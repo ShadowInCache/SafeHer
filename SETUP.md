@@ -38,7 +38,8 @@ Then fill in real values. Grouped by concern:
 | Redis | `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` | Used by the event-processing pipeline |
 | MQTT | `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD` | Needed if you're testing against real/simulated device firmware |
 | Auth | `JWT_SECRET_KEY`, `JWT_ISSUER`, `JWT_AUDIENCE`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS` | `JWT_SECRET_KEY` **must** be a strong, non-default value in staging/production — `fastapi_app/config.py` refuses to start otherwise |
-| Notifications | `FCM_SERVER_KEY`, `TWILIO_*` | Optional — push/SMS silently no-op if unset |
+| Notifications | `FCM_SERVER_KEY`, `ONESIGNAL_*` | Push and emergency email. OneSignal's free tier covers 10,000 emails/month — this is the channel that works without a budget |
+| SMS | `TWILIO_*` | Optional and **not free**. Unset, an SOS reports SMS as unconfigured instead of pretending to send. OneSignal is not a way around this: its free-tier SMS connects *your own* Twilio account |
 | Storage | `CLOUDINARY_*` | Optional — `/api/v1/media/sign-upload` returns 400 if unset |
 | Maps | `GOOGLE_MAPS_API_KEY` | Used by the mobile app |
 | CORS | `ALLOW_ORIGINS` | Comma-separated list |

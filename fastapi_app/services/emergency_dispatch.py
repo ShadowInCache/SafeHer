@@ -36,6 +36,12 @@ from fastapi_app.config import Settings
 from fastapi_app.models import EmergencyContact, FcmToken, NotificationLog, User
 from fastapi_app.repositories import emergency_contacts as contacts_repo
 from fastapi_app.services.notifications import send_fcm_notification
+from fastapi_app.services.onesignal import (
+    OneSignalDeliveryError,
+    OneSignalEmailSender,
+    OneSignalNotConfigured,
+    build_emergency_email,
+)
 from fastapi_app.services.sms import (
     SmsDeliveryError,
     SmsNotConfigured,
@@ -108,6 +114,7 @@ async def dispatch_to_contacts(
     longitude: Optional[float] = None,
     evidence_url: Optional[str] = None,
     sms_sender: Optional[SmsSender] = None,
+    email_sender: Optional[OneSignalEmailSender] = None,
 ) -> DispatchReport:
     """Notifies every emergency contact. Never raises — a partial failure is
     reported, not thrown, because the incident is already recorded and the
@@ -122,6 +129,10 @@ async def dispatch_to_contacts(
         account_sid=settings.twilio_account_sid,
         auth_token=settings.twilio_auth_token,
         from_number=settings.twilio_from_number,
+    )
+    emailer = email_sender or OneSignalEmailSender(
+        app_id=settings.onesignal_app_id,
+        api_key=settings.onesignal_api_key,
     )
 
     display_name = (user.full_name or user.email or "A SafeHer user").strip()
@@ -141,11 +152,15 @@ async def dispatch_to_contacts(
             session=session,
             settings=settings,
             sender=sender,
+            emailer=emailer,
             contact=contact,
             owner=user,
             incident_id=incident_id,
             body=body,
             maps_url=link,
+            display_name=display_name,
+            local_time=local_time,
+            evidence_url=evidence_url,
         )
         report.results.append(result)
 
@@ -157,11 +172,15 @@ async def _notify_contact(
     session: AsyncSession,
     settings: Settings,
     sender: SmsSender,
+    emailer: OneSignalEmailSender,
     contact: EmergencyContact,
     owner: User,
     incident_id: str,
     body: str,
     maps_url: Optional[str],
+    display_name: str,
+    local_time: str,
+    evidence_url: Optional[str],
 ) -> ContactDispatchResult:
     result = ContactDispatchResult(contact_id=contact.id, contact_name=contact.name)
 
@@ -180,6 +199,35 @@ async def _notify_contact(
         # not infer it from an absence.
         result.failures["sms"] = "Twilio is not configured"
         await _log(session, owner.id, "sms", "skipped_not_configured", incident_id, contact.id)
+
+    # --- Email: free, and the only channel this project can rely on -------
+    # Ranked below SMS on purpose. Nobody watches an inbox the way they
+    # notice a text, so email is an additional channel rather than a
+    # substitute — but it costs nothing, which makes it the one that works
+    # when there is no budget for SMS at all.
+    if contact.email:
+        if emailer.is_configured:
+            subject, html_body = build_emergency_email(
+                user_name=display_name,
+                contact_name=contact.name,
+                maps_url=maps_url,
+                local_time=local_time,
+                evidence_url=evidence_url,
+            )
+            error = await _with_retries(
+                lambda: emailer.send(to=contact.email, subject=subject, html_body=html_body)
+            )
+            if error is None:
+                result.delivered_channels.append("email")
+                await _log(session, owner.id, "email", "sent", incident_id, contact.id)
+            else:
+                result.failures["email"] = error
+                await _log(session, owner.id, "email", "failed", incident_id, contact.id)
+        else:
+            result.failures["email"] = "OneSignal is not configured"
+            await _log(
+                session, owner.id, "email", "skipped_not_configured", incident_id, contact.id
+            )
 
     # --- Push: only if this contact is themselves a SafeHer user ----------
     tokens = await _tokens_for_contact(session, contact)
@@ -252,10 +300,10 @@ async def _with_retries(action) -> Optional[str]:
         try:
             await action()
             return None
-        except SmsNotConfigured as exc:
+        except (SmsNotConfigured, OneSignalNotConfigured) as exc:
             # Not worth retrying: configuration will not appear mid-alert.
             return str(exc)
-        except SmsDeliveryError as exc:
+        except (SmsDeliveryError, OneSignalDeliveryError) as exc:
             last_error = str(exc)
         except Exception as exc:  # noqa: BLE001 - dispatch must never crash
             last_error = f"{type(exc).__name__}: {exc}"

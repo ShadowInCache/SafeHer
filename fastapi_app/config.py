@@ -72,9 +72,18 @@ class Settings(BaseSettings):
 
     # Notifications
     fcm_server_key: Optional[str] = None
+    # SMS. Note that OneSignal is not an alternative here: its free-tier
+    # SMS trial works by connecting your own Twilio account, and its paid
+    # SMS is billed per message. Whichever route, SMS costs money.
     twilio_account_sid: Optional[str] = None
     twilio_auth_token: Optional[str] = None
     twilio_from_number: Optional[str] = None
+
+    # Email, via OneSignal's free tier (10,000 sends/month at time of
+    # writing). This is the emergency channel that costs nothing, so it is
+    # the one a project without a sponsor can actually rely on.
+    onesignal_app_id: Optional[str] = None
+    onesignal_api_key: Optional[str] = None
 
     # Storage
     cloudinary_cloud_name: Optional[str] = None

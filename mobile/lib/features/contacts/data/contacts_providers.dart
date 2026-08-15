@@ -42,6 +42,7 @@ class ContactsNotifier extends _$ContactsNotifier {
         payload['name'] as String,
         payload['phone'] as String,
         payload['relationship'] as String,
+        email: payload['email'] as String?,
       );
       state = AsyncData(updated);
     });
@@ -54,7 +55,12 @@ class ContactsNotifier extends _$ContactsNotifier {
 
   bool get _isOffline => ref.read(connectivityNotifierProvider).valueOrNull == false;
 
-  Future<void> addContact(String name, String phone, String relationship) async {
+  Future<void> addContact(
+    String name,
+    String phone,
+    String relationship, {
+    String? email,
+  }) async {
     final current = state.valueOrNull ?? const [];
     if (_isOffline) {
       final optimistic = Contact(
@@ -64,14 +70,22 @@ class ContactsNotifier extends _$ContactsNotifier {
         relationship: relationship,
         priority: current.length + 1,
         confirmed: false,
+        email: email,
       );
       state = AsyncData([...current, optimistic]);
-      await ref
-          .read(offlineQueueServiceProvider)
-          .enqueue('contacts.add', {'name': name, 'phone': phone, 'relationship': relationship});
+      await ref.read(offlineQueueServiceProvider).enqueue('contacts.add', {
+        'name': name,
+        'phone': phone,
+        'relationship': relationship,
+        'email': email,
+      });
       return;
     }
-    state = AsyncData(await ref.read(contactsRepositoryProvider).addContact(name, phone, relationship));
+    state = AsyncData(
+      await ref
+          .read(contactsRepositoryProvider)
+          .addContact(name, phone, relationship, email: email),
+    );
   }
 
   Future<void> removeContact(String id) async {

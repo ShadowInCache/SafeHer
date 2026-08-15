@@ -30,7 +30,12 @@ class _StubContactsRepository implements ContactsRepository {
   ];
 
   @override
-  Future<List<Contact>> addContact(String name, String phone, String relationship) async => const [];
+  Future<List<Contact>> addContact(
+    String name,
+    String phone,
+    String relationship, {
+    String? email,
+  }) async => const [];
 
   @override
   Future<List<Contact>> removeContact(String id) async => const [];

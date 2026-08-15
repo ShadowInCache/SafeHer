@@ -31,10 +31,23 @@ class ContactsRepositoryMock implements ContactsRepository {
   }
 
   @override
-  Future<List<Contact>> addContact(String name, String phone, String relationship) async {
+  Future<List<Contact>> addContact(
+    String name,
+    String phone,
+    String relationship, {
+    String? email,
+  }) async {
     await Future.delayed(const Duration(milliseconds: 150));
     _contacts.add(
-      Contact(id: '${_nextId++}', name: name, phone: phone, relationship: relationship, priority: 0, confirmed: false),
+      Contact(
+        id: '${_nextId++}',
+        name: name,
+        phone: phone,
+        relationship: relationship,
+        priority: 0,
+        confirmed: false,
+        email: email,
+      ),
     );
     final updated = _withPriorities(_contacts);
     _contacts

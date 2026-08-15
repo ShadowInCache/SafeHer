@@ -6,9 +6,14 @@ import '../../../../shared/components/buttons/sa_button.dart';
 import '../../../../shared/components/inputs/sa_text_field.dart';
 
 /// Bottom sheet form for adding a new emergency contact. Pops with a
-/// `(name, phone, relationship)` record, or null if cancelled. Phone is
-/// required — it's how the contact actually gets notified (SMS/call), and
-/// the backend rejects a contact without one.
+/// `(name, phone, relationship, email)` record, or null if cancelled.
+///
+/// Phone is required — the backend rejects a contact without one, and it is
+/// what a call falls back to. Email is optional but strongly encouraged in
+/// the copy below, because it is the one emergency channel this project can
+/// run for free: SMS costs money with every provider, while OneSignal's free
+/// tier covers 10,000 emails a month. A contact with no email address can
+/// only be reached if SMS credit exists.
 class AddContactSheet extends StatefulWidget {
   const AddContactSheet({super.key});
 
@@ -20,25 +25,40 @@ class _AddContactSheetState extends State<AddContactSheet> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _relationshipController = TextEditingController();
+  final _emailController = TextEditingController();
 
   @override
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
     _relationshipController.dispose();
+    _emailController.dispose();
     super.dispose();
+  }
+
+  /// Permissive on purpose. This is a nudge, not a gate: a contact with a
+  /// slightly odd address is better than one the user abandoned because the
+  /// form argued with them mid-setup.
+  bool get _emailLooksValid {
+    final value = _emailController.text.trim();
+    if (value.isEmpty) return true;
+    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value);
   }
 
   bool get _canSave =>
       _nameController.text.trim().isNotEmpty &&
       _phoneController.text.trim().replaceAll(RegExp(r'\s'), '').length >= 5 &&
-      _relationshipController.text.trim().isNotEmpty;
+      _relationshipController.text.trim().isNotEmpty &&
+      _emailLooksValid;
 
   void _submit() {
     if (!_canSave) return;
-    Navigator.of(
-      context,
-    ).pop((_nameController.text.trim(), _phoneController.text.trim(), _relationshipController.text.trim()));
+    Navigator.of(context).pop((
+      _nameController.text.trim(),
+      _phoneController.text.trim(),
+      _relationshipController.text.trim(),
+      _emailController.text.trim(),
+    ));
   }
 
   @override
@@ -66,6 +86,21 @@ class _AddContactSheetState extends State<AddContactSheet> {
             label: 'Relationship',
             controller: _relationshipController,
             onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          SaTextField(
+            label: 'Email (recommended)',
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            semanticsLabel: 'Email address, recommended',
+            errorText: _emailLooksValid ? null : 'That doesn’t look like an email address.',
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          Text(
+            'SafeHer always emails your contacts during an emergency. '
+            'Without an address, this contact can only be reached by SMS.',
+            style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.6)),
           ),
           const SizedBox(height: AppSpacing.space5),
           SaButton(label: 'Add Contact', fullWidth: true, onPressed: _canSave ? _submit : null),

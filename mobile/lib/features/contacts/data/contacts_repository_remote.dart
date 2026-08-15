@@ -21,6 +21,7 @@ class ContactsRepositoryRemote implements ContactsRepository {
     confirmed: true,
     relationship: json['relationship'] as String? ?? 'trusted_contact',
     priority: json['priority'] as int? ?? 1,
+    email: json['email'] as String?,
   );
 
   @override
@@ -30,11 +31,24 @@ class ContactsRepositoryRemote implements ContactsRepository {
   }
 
   @override
-  Future<List<Contact>> addContact(String name, String phone, String relationship) async {
+  Future<List<Contact>> addContact(
+    String name,
+    String phone,
+    String relationship, {
+    String? email,
+  }) async {
     final existing = await getContacts();
     await _apiClient.dio.post(
       _basePath,
-      data: {'name': name, 'phone': phone, 'relationship': relationship, 'priority': existing.length + 1},
+      data: {
+        'name': name,
+        'phone': phone,
+        'relationship': relationship,
+        'priority': existing.length + 1,
+        // Omitted rather than sent as null/empty: the backend validates
+        // this as an EmailStr, and an empty string fails that check.
+        if (email != null && email.isNotEmpty) 'email': email,
+      },
     );
     return getContacts();
   }

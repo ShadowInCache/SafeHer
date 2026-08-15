@@ -24,6 +24,9 @@ class _FakeContactsRepository implements ContactsRepository {
   final List<Contact> _contacts;
   var _nextId = 3;
 
+  /// Read-only view for assertions.
+  List<Contact> get contacts => List.unmodifiable(_contacts);
+
   @override
   Future<List<Contact>> getContacts() async {
     await Future.delayed(const Duration(milliseconds: 50));
@@ -32,7 +35,12 @@ class _FakeContactsRepository implements ContactsRepository {
   }
 
   @override
-  Future<List<Contact>> addContact(String name, String phone, String relationship) async {
+  Future<List<Contact>> addContact(
+    String name,
+    String phone,
+    String relationship, {
+    String? email,
+  }) async {
     await Future.delayed(const Duration(milliseconds: 50));
     _contacts.add(
       Contact(
@@ -42,6 +50,7 @@ class _FakeContactsRepository implements ContactsRepository {
         relationship: relationship,
         priority: _contacts.length + 1,
         confirmed: false,
+        email: email,
       ),
     );
     return List.unmodifiable(_contacts);
@@ -89,6 +98,15 @@ Widget _harness({Brightness brightness = Brightness.dark, ContactsRepository? re
       routerConfig: _buildTestRouter(),
     ),
   );
+}
+
+/// Opens sequence for a modal sheet: one frame to insert the route, then
+/// its entrance animation. A single 300ms pump leaves the sheet still fully
+/// below the viewport, where its controls cannot be tapped.
+Future<void> _settleSheet(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 void main() {
@@ -159,11 +177,12 @@ void main() {
     testWidgets('adding a contact via the sheet appends it to the list', (tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 1000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
-      await tester.pumpWidget(_harness());
+      final repo = _FakeContactsRepository();
+      await tester.pumpWidget(_harness(repo: repo));
       await tester.pump(const Duration(milliseconds: 100));
 
       await tester.tap(find.byTooltip('Add contact'));
-      await tester.pump(const Duration(milliseconds: 300));
+      await _settleSheet(tester);
       expect(find.text('Add Emergency Contact'), findsOneWidget);
 
       final fields = find.byType(TextField);
@@ -172,11 +191,105 @@ void main() {
       await tester.enterText(fields.at(2), 'Neighbor');
       await tester.pump();
 
+      await tester.ensureVisible(find.text('Add Contact'));
+      await tester.pump();
+      await tester.tap(find.text('Add Contact'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(tester.takeException(), isNull);
+      // Asserted against the repository, not `find.text`: the name is also
+      // sitting in the text field it was typed into, so a find-by-text here
+      // passes whether or not the contact was ever saved.
+      expect(repo.contacts.map((c) => c.name), contains('Kabir Rao'));
+    });
+
+    testWidgets('an email address reaches the repository', (tester) async {
+      // Email is the only emergency channel this project can run for free
+      // (OneSignal's free tier), so a contact saved without one can only be
+      // reached if SMS credit exists. The field has to actually work.
+      await tester.binding.setSurfaceSize(const Size(390, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final repo = _FakeContactsRepository();
+      await tester.pumpWidget(_harness(repo: repo));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.byTooltip('Add contact'));
+      await _settleSheet(tester);
+
+      final fields = find.byType(TextField);
+      await tester.enterText(fields.at(0), 'Kabir Rao');
+      await tester.enterText(fields.at(1), '+15550101099');
+      await tester.enterText(fields.at(2), 'Neighbor');
+      await tester.enterText(fields.at(3), 'kabir@example.com');
+      await tester.pump();
+
+      await tester.ensureVisible(find.text('Add Contact'));
+      await tester.pump();
+      await tester.tap(find.text('Add Contact'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final saved = repo.contacts.firstWhere((c) => c.name == 'Kabir Rao');
+      expect(saved.email, 'kabir@example.com');
+      expect(saved.hasEmail, isTrue);
+    });
+
+    testWidgets('a malformed email blocks saving rather than being sent', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final repo = _FakeContactsRepository();
+      await tester.pumpWidget(_harness(repo: repo));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.byTooltip('Add contact'));
+      await _settleSheet(tester);
+
+      final fields = find.byType(TextField);
+      await tester.enterText(fields.at(0), 'Kabir Rao');
+      await tester.enterText(fields.at(1), '+15550101099');
+      await tester.enterText(fields.at(2), 'Neighbor');
+      await tester.enterText(fields.at(3), 'not-an-email');
+      await tester.pump();
+
+      expect(find.text('That doesn’t look like an email address.'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Add Contact'));
+      await tester.pump();
+      await tester.tap(find.text('Add Contact'), warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Against the repository, not the screen: 'Kabir Rao' is sitting in
+      // the name field either way.
+      expect(repo.contacts.map((c) => c.name), isNot(contains('Kabir Rao')));
+    });
+
+    testWidgets('an omitted email is saved as null, not an empty string', (tester) async {
+      // The backend validates this as an EmailStr; an empty string is a
+      // 422, so "no email" has to travel as an absent field.
+      await tester.binding.setSurfaceSize(const Size(390, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final repo = _FakeContactsRepository();
+      await tester.pumpWidget(_harness(repo: repo));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.byTooltip('Add contact'));
+      await _settleSheet(tester);
+
+      final fields = find.byType(TextField);
+      await tester.enterText(fields.at(0), 'Kabir Rao');
+      await tester.enterText(fields.at(1), '+15550101099');
+      await tester.enterText(fields.at(2), 'Neighbor');
+      await tester.pump();
+
+      await tester.ensureVisible(find.text('Add Contact'));
+      await tester.pump();
       await tester.tap(find.text('Add Contact'), warnIfMissed: false);
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(milliseconds: 100));
-      expect(tester.takeException(), isNull);
-      expect(find.text('Kabir Rao'), findsOneWidget);
+
+      final saved = repo.contacts.firstWhere((c) => c.name == 'Kabir Rao');
+      expect(saved.email, isNull);
     });
 
     testGoldens('golden - light', (tester) async {
