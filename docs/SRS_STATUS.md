@@ -38,8 +38,8 @@ Beyond the SRS's four, the repo also runs:
 
 | Check | Last measured | Status |
 |-------|---------------|--------|
-| `flutter test` (full suite) | 553 passing, 0 failing | ✅ |
-| `pytest tests/` (in-process suites) | 80 passing, 0 failing | ✅ |
+| `flutter test` (full suite) | 557 passing, 0 failing | ✅ |
+| `pytest tests/` (in-process suites) | 98 passing, 0 failing | ✅ |
 | Alembic from empty → head → downgrade → head | 14 migrations, reversible | ✅ |
 
 Coverage by area — the thin spots are where next session's tests should go:
@@ -68,7 +68,7 @@ Coverage by area — the thin spots are where next session's tests should go:
 |-----------|--------|----------|
 | All 14+ screens render without exception | ✅ Android/web | 25 screens across 14 SRS specs + extras; widget tests assert no exceptions. iOS unverified — 🚧 needs a Mac. |
 | All screens correct in dark **and** light mode | 🟡 | 19 of 20 screen tests carry a light-mode case, with goldens in both themes. `safe_journey_screen_test.dart` is the exception. |
-| SOS: tap → hold → countdown → alert → contacts notified | ⛔ | The first four steps work. **Contacts are never notified** — nothing in the backend or the app reads the `emergency_contacts` table when an SOS fires. See gap #1. |
+| SOS: tap → hold → countdown → alert → contacts notified | ✅ code / 🚧 live | Full chain implemented and covered by 18 backend + 4 widget tests. Delivery over Twilio is unverified against the real API — no credentials configured yet. |
 | Offline SOS: disable network → trigger → reconnect → sent | 🟡 | `core/offline` queue implemented and unit-tested; the physical airplane-mode run has not been done. |
 | BLE pairing flow completes | 🚧 | Works against the fake BLE service. Real hardware not yet paired. **Not available on web at all** — see the 2026-08-15 log entry. |
 | Device status updates live via MQTT | 🟡 | WebSocket path implemented (`realtime_client.dart`); MQTT worker exists backend-side, untested against a broker. |
@@ -184,11 +184,11 @@ All 17 specified component groups exist under `lib/shared/components/`, at
 
 | ID | Requirement | Status |
 |----|-------------|--------|
-| FR-EMG-01 | Manual SOS, dispatched < 3s | 🟡 An incident is recorded; "dispatch" reaches only the user's own devices |
+| FR-EMG-01 | Manual SOS, dispatched < 3s | 🟡 Chain complete; the < 3s budget has not been measured against a live Twilio round trip |
 | FR-EMG-02 | Auto-SOS at threat ≥ 0.75 | 🟡 backend threshold implemented |
 | FR-EMG-03 | 10s countdown, cancellable | ✅ |
-| FR-EMG-04 | FCM + SMS to all contacts | ⛔ **Gap.** FCM goes to the *user's own* devices. Contacts get nothing — no push, no SMS. Twilio settings exist in `config.py` but no code reads them |
-| FR-EMG-05 | Alert payload contents | ⛔ No outbound alert exists to carry them |
+| FR-EMG-04 | FCM + SMS to all contacts | ✅ `emergency_dispatch.py` — priority order, per-contact isolation, 3 attempts. SMS to every contact; push additionally when a contact is a SafeHer user. 🚧 Twilio credentials not yet configured |
+| FR-EMG-05 | Alert payload contents | ✅ name, time, maps link, within the 160-char budget. Evidence URL is carried when one exists (see FR-EMG-06) |
 | FR-EMG-06 | Auto-start evidence recording | ⛔ **Gap.** No recording code exists; the `record` package is declared in `pubspec.yaml` and imported nowhere |
 | FR-EMG-07 | AES-256 at rest + TLS 1.3 | ⛔ **Gap.** No evidence is captured or uploaded, so there is nothing yet to encrypt; `/api/v1/media` is dead code from the client's side |
 | FR-EMG-08 | False-alarm cancellation logged | ✅ |
@@ -256,23 +256,18 @@ battery". Drawing a trend from a single sample would be a fabricated chart.
 
 Ordered by what a user would miss first.
 
-1. **Nobody is told when the SOS fires** (FR-EMG-04, FR-EMG-05). This is
-   the app's entire reason to exist and it is missing. `POST /alerts/emergency`
-   creates an incident, stores the location, opens a WebSocket message and
-   pushes FCM — all to the person who triggered it. The `emergency_contacts`
-   table is read by nothing in the alert path. Contacts can be added, ordered
-   and deleted; they are never notified. Needs: a dispatch service that fans
-   out to contacts over FCM and SMS (Twilio settings already exist in
-   `config.py`, unused), with the retry and 5-second budget FR-EMG-04
-   specifies.
-2. **No evidence is captured** (FR-EMG-06, FR-EMG-07). No recording starts on
+1. **No evidence is captured** (FR-EMG-06, FR-EMG-07). No recording starts on
    SOS; the `record` package is declared but imported nowhere, and nothing in
    the app calls `/api/v1/media`. Without this there is no evidence URL for
    FR-EMG-05 to carry and nothing for FR-EMG-07 to encrypt.
+2. **Twilio credentials** — the dispatch chain is built and tested against a
+   fake, but no SMS has ever been sent to a real phone. This is a
+   configuration step, not development work, and until it is done an SOS
+   still reaches nobody in production.
 3. **PDF export + share link** (FR-RPT-03, FR-RPT-06) — an incident report
    that cannot leave the phone is of limited use to police or a lawyer.
-4. **Per-contact OTP confirmation** (FR-EMG-10) — an unconfirmed contact is
-   an alert sent into the void, once alerts exist to send.
+4. **Per-contact OTP confirmation** (FR-EMG-10) — an unconfirmed contact may
+   be a wrong number that silently absorbs every alert.
 5. **WebSocket certificate pinning** — the HTTP API is pinned; the live
    monitoring socket (`realtime_client.dart`) still uses the platform
    default. `WebSocketChannel.connect` offers no leaf-certificate hook, so
@@ -443,3 +438,39 @@ actually does.
 
 Nothing here is a regression: this was never built. The reporting was the
 defect.
+
+### 2026-08-15 — the emergency chain, connected
+
+Built the fan-out the previous entry identified as gap #1.
+
+`emergency_dispatch.py` notifies contacts in the user's own priority order,
+attempts each independently so one bad number cannot stop the rest, and
+retries three times with a short backoff (FR-EMG-04 also caps the whole
+dispatch at five seconds, so a polite exponential backoff would blow the
+budget while someone waits). SMS carries the alert to contacts who have
+never installed SafeHer; push is sent additionally when a contact turns out
+to have an account. With no Twilio credentials the channel reports itself
+unconfigured and logs `skipped_not_configured` — never a fake success.
+
+Message composition holds FR-EMG-05's 160-character budget, and when it must
+truncate it drops the evidence link before the location: where someone is
+beats what was recorded.
+
+**The larger find was in the app.** The dispatched screen ran a 600ms timer
+down the contact list, ticking each one green — with no connection to
+whether anything had been sent, and at the time nothing ever was. On the
+Emergency screen that is not a cosmetic bug; it told a woman in danger that
+her sister had been alerted when no message had left the phone. Contacts are
+now marked from the ids the server confirms it delivered to, and three
+states are kept distinct: sending, saved-because-offline, and failed.
+Reaching nobody raises a banner telling her to call her local emergency
+number — the worst outcome on this screen is a user who believes help is
+coming and stops trying.
+
+Audit rows record ids only; the message body carries a live location and the
+contact row already holds a phone number.
+
+**Still required before this works in production:** Twilio credentials.
+Everything is tested against a fake sender; no SMS has reached a real phone.
+
+Totals: 557 Flutter tests, 98 backend tests, all green.
