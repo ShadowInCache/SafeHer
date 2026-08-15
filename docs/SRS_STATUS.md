@@ -39,7 +39,7 @@ Beyond the SRS's four, the repo also runs:
 | Check | Last measured | Status |
 |-------|---------------|--------|
 | `flutter test` (full suite) | 560 passing, 0 failing | ✅ |
-| `pytest tests/` (in-process suites) | 112 passing, 0 failing | ✅ |
+| `pytest tests/` (in-process suites) | 115 passing, 0 failing | ✅ |
 | Alembic from empty → head → downgrade → head | 14 migrations, reversible | ✅ |
 
 Coverage by area — the thin spots are where next session's tests should go:
@@ -68,7 +68,7 @@ Coverage by area — the thin spots are where next session's tests should go:
 |-----------|--------|----------|
 | All 14+ screens render without exception | ✅ Android/web | 25 screens across 14 SRS specs + extras; widget tests assert no exceptions. iOS unverified — 🚧 needs a Mac. |
 | All screens correct in dark **and** light mode | 🟡 | 19 of 20 screen tests carry a light-mode case, with goldens in both themes. `safe_journey_screen_test.dart` is the exception. |
-| SOS: tap → hold → countdown → alert → contacts notified | ✅ code / 🚧 live | Full chain implemented and covered by 18 backend + 4 widget tests. Delivery over Twilio is unverified against the real API — no credentials configured yet. |
+| SOS: tap → hold → countdown → alert → contacts notified | ✅ **verified live** | Real SOS against the running backend delivered to a real inbox: `contacts_total 1, contacts_notified 1`, audit row `email sent`. SMS remains unconfigured (paid). |
 | Offline SOS: disable network → trigger → reconnect → sent | 🟡 | `core/offline` queue implemented and unit-tested; the physical airplane-mode run has not been done. |
 | BLE pairing flow completes | 🚧 | Works against the fake BLE service. Real hardware not yet paired. **Not available on web at all** — see the 2026-08-15 log entry. |
 | Device status updates live via MQTT | 🟡 | WebSocket path implemented (`realtime_client.dart`); MQTT worker exists backend-side, untested against a broker. |
@@ -187,7 +187,7 @@ All 17 specified component groups exist under `lib/shared/components/`, at
 | FR-EMG-01 | Manual SOS, dispatched < 3s | 🟡 Chain complete; the < 3s budget has not been measured against a live Twilio round trip |
 | FR-EMG-02 | Auto-SOS at threat ≥ 0.75 | 🟡 backend threshold implemented |
 | FR-EMG-03 | 10s countdown, cancellable | ✅ |
-| FR-EMG-04 | FCM + SMS to all contacts | ✅ code / 🚧 config. `emergency_dispatch.py` — priority order, per-contact isolation, 3 attempts. Channels: **email** (OneSignal, free tier), SMS (Twilio, paid), push (when a contact is a SafeHer user). Needs `ONESIGNAL_*` set to work at all |
+| FR-EMG-04 | FCM + SMS to all contacts | ✅ email **verified end to end**; SMS ⛔ unconfigured (paid). `emergency_dispatch.py` — priority order, per-contact isolation, 3 attempts. Channels: email (SMTP, working), SMS (Twilio, paid), push (when a contact is a SafeHer user) |
 | FR-EMG-05 | Alert payload contents | ✅ name, time, maps link, within the 160-char budget. Evidence URL is carried when one exists (see FR-EMG-06) |
 | FR-EMG-06 | Auto-start evidence recording | ⛔ **Gap.** No recording code exists; the `record` package is declared in `pubspec.yaml` and imported nowhere |
 | FR-EMG-07 | AES-256 at rest + TLS 1.3 | ⛔ **Gap.** No evidence is captured or uploaded, so there is nothing yet to encrypt; `/api/v1/media` is dead code from the client's side |
@@ -260,11 +260,9 @@ Ordered by what a user would miss first.
    SOS; the `record` package is declared but imported nowhere, and nothing in
    the app calls `/api/v1/media`. Without this there is no evidence URL for
    FR-EMG-05 to carry and nothing for FR-EMG-07 to encrypt.
-2. **SMTP credentials** — a mailbox and an app password (`SMTP_*`). Free,
-   needs no domain, and is the single step between the dispatch chain and a
-   working SOS. Until an email channel is set, an alert reaches nobody in
-   production. OneSignal is *not* an alternative until SafeHer owns a
-   domain; SMS is a separate, paid decision.
+2. **SMS delivery** — still unconfigured, and still the only channel that
+   reaches a contact who does not check email. Costs money with every
+   provider; a deliberate deferral, not an oversight.
 3. **PDF export + share link** (FR-RPT-03, FR-RPT-06) — an incident report
    that cannot leave the phone is of limited use to police or a lawyer.
 4. **Per-contact OTP confirmation** (FR-EMG-10) — an unconfirmed contact may
@@ -543,3 +541,33 @@ exists.
 `SETUP.md` carries the Gmail app-password walkthrough.
 
 Totals: 560 Flutter tests, 112 backend tests, all green.
+
+### 2026-08-15 — emergency email delivering, verified live
+
+An SOS now reaches a real inbox. Proven against the running backend, not
+just in tests: `contacts_total 1, contacts_notified 1`, one id in
+`contacts_reached`, and an `email sent` row in the notification log.
+
+Two defects surfaced on the way.
+
+**Port 465.** Delivery failed with a bare "timed out" despite correct
+credentials. A port scan explained it: 25 and 587 both time out on this
+network while 465 connects — a common consumer-ISP anti-spam policy. The
+service only knew how to STARTTLS, so it could not use the one port that was
+open. It now speaks implicit TLS when the port calls for it, inferred from
+the port rather than adding another setting to get wrong.
+
+**The test suite was reading the developer's `.env`** — and therefore
+**sending real email**. Registration emails a verification code, so every
+test that created a user had been mailing made-up `@safeherapp.com`
+addresses for as long as SMTP was configured locally. The same leak flipped
+`require_email_verification` on (it follows deliverability) and made 18
+tests fail on a 403 that had nothing to do with the code under test.
+`tests/conftest.py` now blanks every outbound channel before any test module
+imports the app.
+
+That is the fourth time this session a green suite turned out to be testing
+a different situation than the app's — and the first where the leak reached
+outside the process.
+
+Totals: 560 Flutter tests, 115 backend tests, all green.
