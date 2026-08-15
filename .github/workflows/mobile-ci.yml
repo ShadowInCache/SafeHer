@@ -21,9 +21,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Pinned rather than tracking `stable`: an unpinned channel silently
+      # changes the Dart language version under CI, so a green build can go red
+      # with no commit to explain it. Bump deliberately alongside local Flutter.
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: 3.41.6
           channel: stable
           cache: true
 
@@ -33,5 +37,11 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
+      # Golden assertions are skipped off Windows by
+      # mobile/test/flutter_test_config.dart -- the .png files were rendered on
+      # Windows and text rasterises differently per OS, so comparing them on
+      # Linux fails every run regardless of whether anything regressed. The
+      # tests still build and pump their widget trees here, which is what
+      # catches real breakage.
       - name: Run tests
         run: flutter test --reporter expanded

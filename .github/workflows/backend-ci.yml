@@ -7,6 +7,7 @@ on:
       - "alembic/**"
       - "tests/**"
       - "requirements.txt"
+      - "requirements-backend.txt"
       - "alembic.ini"
       - ".github/workflows/backend-ci.yml"
   pull_request:
@@ -15,6 +16,7 @@ on:
       - "alembic/**"
       - "tests/**"
       - "requirements.txt"
+      - "requirements-backend.txt"
       - "alembic.ini"
       - ".github/workflows/backend-ci.yml"
 
@@ -41,18 +43,20 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      # The ML training stack (torch, ultralytics, librosa) is several GB and
-      # nothing under test imports it, so CI installs only what the backend and
-      # its tests actually need. See DEPENDENCIES.md for the full grouping.
+      # requirements-backend.txt rather than requirements.txt: the latter also
+      # carries the ML training stack (torch, ultralytics, librosa -- several
+      # GB) that nothing under fastapi_app/ or tests/ imports.
+      #
+      # That file is a pinned subset, verified by installing it into an empty
+      # venv and importing the app. Doing so found three gaps a hand-written
+      # package list had missed: cloudinary (imported unconditionally by
+      # routers/media.py), email-validator (required by pydantic's EmailStr),
+      # and a paho-mqtt 1.x pin -- asyncio-mqtt 0.13 references
+      # paho.mqtt.client.WebsocketWrapper, which paho 2.x renamed.
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install \
-            fastapi uvicorn "pydantic>=2" pydantic-settings \
-            "sqlalchemy>=2" alembic aiosqlite asyncpg \
-            "python-jose[cryptography]" "passlib[bcrypt]" python-multipart \
-            httpx aiomqtt redis google-auth requests \
-            pytest pytest-asyncio pytest-subtests
+          pip install -r requirements-backend.txt
 
       - name: Verify migrations run from an empty database
         # Guards the class of bug that let this repo ship six migrations that

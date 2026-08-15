@@ -1,0 +1,64 @@
+# Backend + test dependencies only.
+#
+# requirements.txt mixes three concerns in one file: this backend, the
+# Dockerised event processor, and the ML training pipeline (torch, ultralytics,
+# librosa and friends -- several gigabytes that nothing under fastapi_app/ or
+# tests/ imports). Installing all of it just to run the API or CI is wasteful
+# and slow.
+#
+# Versions are pinned identically to requirements.txt; this is a subset, not a
+# fork. Keep them in sync when bumping.
+#
+# Derived from the actual import graph:
+#   grep -rhoE '^(import|from) [a-z_]+' fastapi_app/ tests/
+# which yields: asyncio_mqtt, cloudinary, fastapi, httpx, jose, passlib,
+# pydantic, pydantic_settings, redis, sqlalchemy (+ stdlib).
+
+# --- web framework ---
+fastapi==0.110.0
+uvicorn[standard]==0.27.1
+pydantic-settings==2.15.0
+python-multipart==0.0.9
+# Required by pydantic's EmailStr, which schemas.py uses throughout. Without it
+# `import fastapi_app.main` raises ImportError at schema definition time. This
+# is missing from requirements.txt too -- the dev environment only works
+# because something else pulled it in transitively.
+email-validator==2.1.1
+
+# --- auth ---
+# `jose` comes from python-jose; `passlib` provides the pbkdf2_sha256 hashing
+# used for both passwords and the Safety PIN.
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+# Verifies Firebase ID tokens in services/firebase_auth.py.
+google-auth==2.38.0
+
+# --- database ---
+sqlalchemy==2.0.23
+alembic==1.13.1
+aiosqlite==0.19.0
+asyncpg==0.29.0
+
+# --- integrations ---
+# Imported unconditionally by routers/media.py, so the app fails to import
+# without it even when Cloudinary is unconfigured.
+cloudinary==1.37.0
+redis[hiredis]==5.0.1
+# Module name is `asyncio_mqtt`. The project was renamed upstream to `aiomqtt`,
+# which installs a DIFFERENTLY named module -- swapping the two breaks
+# `from asyncio_mqtt import ...` in mqtt_service.py.
+asyncio-mqtt==0.13.0
+# Must stay at 1.x. asyncio-mqtt 0.13 references paho.mqtt.client.WebsocketWrapper,
+# which paho-mqtt 2.x renamed to _WebsocketWrapper -- installing 2.x makes
+# `import fastapi_app.main` fail with AttributeError. requirements.txt pins this
+# already; the pin has to be repeated here or pip resolves 2.x transitively.
+paho-mqtt==1.6.1
+httpx==0.27.0
+python-dotenv==1.0.0
+
+# --- tests ---
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-subtests==0.14.2
+# Used by the live-server suites (test_api_gateway.py, test_integration.py).
+requests==2.31.0
