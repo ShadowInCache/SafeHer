@@ -15,6 +15,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "1050083589372-dg2ukbvoqjohv671lre0rjmd92lc36tv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.safeher_app",
+            "certificate_hash": "2b27bd92d90fb0adf32b3b2ee8500024c2eaf78c"
+          }
+        },
+        {
           "client_id": "1050083589372-vrtqrufr5vg4l17j2s2ns93sn9f51bnc.apps.googleusercontent.com",
           "client_type": 3
         }
