@@ -38,7 +38,7 @@ Beyond the SRS's four, the repo also runs:
 
 | Check | Last measured | Status |
 |-------|---------------|--------|
-| `flutter test` (full suite) | 538 passing, 0 failing | ✅ |
+| `flutter test` (full suite) | 550 passing, 0 failing | ✅ |
 | `pytest tests/` (in-process suites) | 80 passing, 0 failing | ✅ |
 | Alembic from empty → head → downgrade → head | 14 migrations, reversible | ✅ |
 
@@ -326,3 +326,43 @@ and the `Semantics` label carry the meaning and a clipped bar costs a
 large-text user far more than a capped caption.
 
 Totals after this session: 538 Flutter tests, 80 backend tests, all green.
+
+### 2026-08-15 — three defects from a real run
+
+Reported from the running app: the Dashboard wouldn't load, error messages
+looked broken, and device pairing did nothing.
+
+**Dashboard.** Not a code fault — the dev backend process predated the
+`/dashboard/analytics` route and was 404ing it. Restarted with `--reload`
+(which `scripts/dev.ps1 backend` uses, and which would have prevented this
+outright). Verified end to end against the live server: register → login →
+SOS with a location → device register → `GET /dashboard/analytics` → 200
+with real aggregated data.
+
+**Toasts had no Material ancestor.** Inserted straight into the `Overlay`,
+so every line rendered with Flutter's debug double-underline and no default
+text style. Notable as a testing lesson: the component golden wrapped
+`SaToastCard` in a `Scaffold` that supplied the missing ancestor, so the
+suite was green while the only broken place was the real screen. The
+regression test now goes through `showSaToast` itself. Redesigned in the
+same pass — severity spine, badged icon, optional headline, dismiss target,
+swipe-to-dismiss, error haptic, and one-at-a-time replacement so a burst of
+failures can't bury the page.
+
+**Errors accused the wrong thing.** Screens rendered `error.toString()`
+directly, and the Dashboard's fixed copy said "Check your connection" for a
+404 served over a perfectly good connection — it sent a real debugging
+session after the wrong problem. New `describeError` maps any failure to a
+headline plus one actionable sentence, keeping "Not available" (404)
+distinct from a genuine network error.
+
+**BLE pairing hung instead of failing.** `startScan` caught only
+`BleFailure`, but the support check, permission request and adapter probe
+all cross a platform channel and can throw something else — a
+`MissingPluginException` on a target with no BLE implementation being the
+obvious one. Those escaped the controller entirely and left the sheet
+spinning on "Scanning…" with nothing on screen. Same hole in
+`_attemptConnect`. Unexpected throws now land in a visible failed state that
+names the cause.
+
+Totals: 550 Flutter tests, 80 backend tests, all green.
