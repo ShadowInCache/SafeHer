@@ -12,6 +12,7 @@ import '../../../shared/components/icons/sa_icon.dart';
 import '../../../shared/components/inputs/sa_password_field.dart';
 import '../../../shared/components/inputs/sa_text_field.dart';
 import '../../../shared/components/overlays/sa_toast.dart';
+import '../../../shared/utils/user_error.dart';
 import 'login_controller.dart';
 
 final _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
@@ -57,7 +58,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     ref.listen(loginControllerProvider, (previous, next) {
       if (next.hasError && !next.isLoading) {
-        showSaToast(context, message: next.error.toString(), type: SaToastType.error);
+        final failure = describeError(next.error, fallbackTitle: 'Couldn’t sign you in');
+        showSaToast(
+          context,
+          title: failure.title,
+          message: failure.message,
+          type: SaToastType.error,
+        );
       }
       final wasLoading = previous?.isLoading ?? false;
       if (wasLoading && !next.isLoading && !next.hasError) {

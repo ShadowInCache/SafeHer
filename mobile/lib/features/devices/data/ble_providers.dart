@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -117,7 +118,43 @@ class BlePairingController extends _$BlePairingController {
 
   /// Full entry point: checks support, permissions and adapter power
   /// before a single advertisement is requested.
+  ///
+  /// Every step is inside the guard below, not just the `startScan()` call.
+  /// The support check, the permission request and the adapter probe all
+  /// cross a platform channel, and any of them can throw something that is
+  /// not a [BleFailure] — a `MissingPluginException` on a platform with no
+  /// BLE implementation being the obvious one. Those used to escape this
+  /// method entirely, leaving the sheet spinning on `scanning` with nothing
+  /// on screen to explain it: "connecting devices doesn't work", with no
+  /// error to go on.
   Future<void> startScan() async {
+    try {
+      await _startScan();
+    } on BleFailure catch (failure) {
+      _emit(state.copyWith(stage: BlePairingStage.scanFailed, errorMessage: failure.message));
+    } catch (error) {
+      _emit(
+        state.copyWith(
+          stage: BlePairingStage.scanFailed,
+          errorMessage: _describeUnexpected(error),
+        ),
+      );
+    }
+  }
+
+  /// Bluetooth failures are mostly platform-channel noise. Translate the
+  /// one case a user can act on, and keep the raw text for the rest rather
+  /// than hiding it behind "something went wrong" — a developer reading a
+  /// bug report needs it, and it is not sensitive.
+  String _describeUnexpected(Object error) {
+    if (error is MissingPluginException) {
+      return 'Bluetooth pairing is not available on this platform. '
+          'Run SafeHer on an Android or iOS device to pair a wearable.';
+    }
+    return 'Bluetooth failed to start: $error';
+  }
+
+  Future<void> _startScan() async {
     _reconnectTimer?.cancel();
     _cancelScanSubscriptions();
     await _stopScanQuietly();
@@ -183,12 +220,7 @@ class BlePairingController extends _$BlePairingController {
 
     _listenToAdapter(service);
 
-    try {
-      await service.startScan();
-    } on BleFailure catch (failure) {
-      _emit(state.copyWith(stage: BlePairingStage.scanFailed, errorMessage: failure.message));
-      return;
-    }
+    await service.startScan();
 
     // Subscribed after startScan so the first `isScanning` value we see is
     // `true` rather than the pre-scan `false`.
@@ -302,6 +334,17 @@ class BlePairingController extends _$BlePairingController {
       _listenToConnectionState(device);
     } on BleFailure catch (failure) {
       _emit(state.copyWith(stage: BlePairingStage.connectionFailed, errorMessage: failure.message));
+    } catch (error) {
+      // Same reasoning as startScan: a platform-channel throw that isn't a
+      // BleFailure used to escape and strand the sheet on `connecting`
+      // forever, with no way for the user to tell a broken link from a hung
+      // app.
+      _emit(
+        state.copyWith(
+          stage: BlePairingStage.connectionFailed,
+          errorMessage: _describeUnexpected(error),
+        ),
+      );
     }
   }
 

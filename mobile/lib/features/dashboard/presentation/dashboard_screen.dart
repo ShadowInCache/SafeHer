@@ -23,6 +23,7 @@ import '../../../shared/components/icons/sa_icon.dart';
 import '../../../shared/components/navigation/sa_bottom_nav_bar.dart';
 import '../../../shared/components/overlays/sa_bottom_sheet.dart';
 import '../../../shared/models/threat_level.dart';
+import '../../../shared/utils/user_error.dart';
 import '../data/dashboard_providers.dart';
 import '../domain/models/dashboard_analytics.dart';
 
@@ -76,14 +77,26 @@ class DashboardScreen extends ConsumerWidget {
                   ),
                   sliver: analyticsAsync.when(
                     loading: () => const _DashboardSkeleton(),
+                    // The message comes from the failure itself. Hardcoding
+                    // "check your connection" here blamed the network for a
+                    // 404 served by a backend older than the app, and sent a
+                    // real debugging session after the wrong problem.
                     error: (error, _) => SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.only(top: AppSpacing.space10),
-                        child: SaEmptyState(
-                          title: 'Couldn’t load your dashboard',
-                          body: 'Check your connection and try again.',
-                          ctaLabel: 'Retry',
-                          onCtaTap: () => ref.invalidate(dashboardAnalyticsProvider),
+                        child: Builder(
+                          builder: (context) {
+                            final failure = describeError(
+                              error,
+                              fallbackTitle: 'Couldn’t load your dashboard',
+                            );
+                            return SaEmptyState(
+                              title: failure.title,
+                              body: failure.message,
+                              ctaLabel: 'Retry',
+                              onCtaTap: () => ref.invalidate(dashboardAnalyticsProvider),
+                            );
+                          },
                         ),
                       ),
                     ),

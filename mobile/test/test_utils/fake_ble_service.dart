@@ -66,13 +66,22 @@ class FakeBleService implements BleService {
   }) : _adapter = _ReplayController<BleAdapterStatus>(adapter);
 
   final bool supported;
+
+  /// When set, [isSupported] throws this — the platform-channel failure
+  /// mode on a target with no BLE implementation compiled in.
+  Object? supportCheckError;
+
   BlePermissionStatus permission;
 
   @override
   final bool canPromptToEnableBluetooth;
 
   /// When set, [connect] throws this instead of succeeding.
-  BleFailure? connectFailure;
+  ///
+  /// Deliberately `Object?` rather than `BleFailure?`: the interesting
+  /// regression is the *non*-BleFailure throw (a MissingPluginException,
+  /// say) that used to escape the controller and strand the pairing sheet.
+  Object? connectFailure;
 
   /// When set, [connect] blocks on it — lets a test hold the flow in its
   /// "Connecting" state for as long as it needs.
@@ -124,7 +133,11 @@ class FakeBleService implements BleService {
   // --- BleService ----------------------------------------------------
 
   @override
-  Future<bool> isSupported() async => supported;
+  Future<bool> isSupported() async {
+    final error = supportCheckError;
+    if (error != null) throw error;
+    return supported;
+  }
 
   @override
   BleAdapterStatus get adapterStatusNow => _adapter._latest;

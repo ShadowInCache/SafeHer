@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
@@ -118,6 +119,47 @@ void main() {
 
     setUp(() => ble = FakeBleService());
     tearDown(() => ble.dispose());
+
+    testWidgets('a platform-channel throw during the support check surfaces, not hangs', (tester) async {
+      // Regression: startScan only caught BleFailure, so a
+      // MissingPluginException from isSupported()/permissions/adapter probe
+      // escaped the controller entirely. The sheet sat on "Scanning…"
+      // forever with nothing to explain it — "connecting devices doesn't
+      // work", with no error to go on.
+      ble.supportCheckError = MissingPluginException('No implementation found');
+
+      await tester.pumpWidget(_harness(ble: ble));
+      await _settle(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Scanning for nearby devices…'), findsNothing);
+      expect(find.textContaining('not available on this platform'), findsOneWidget);
+    });
+
+    testWidgets('an unexpected scan failure names itself', (tester) async {
+      ble.supportCheckError = StateError('radio busy');
+
+      await tester.pumpWidget(_harness(ble: ble));
+      await _settle(tester);
+
+      // The raw text is kept rather than swallowed by "something went
+      // wrong": a bug report needs it and it is not sensitive.
+      expect(find.textContaining('radio busy'), findsOneWidget);
+    });
+
+    testWidgets('a non-BleFailure throw while connecting surfaces too', (tester) async {
+      ble.connectFailure = MissingPluginException('No implementation found');
+
+      await tester.pumpWidget(_harness(ble: ble));
+      await _settle(tester);
+      ble.emitDevices(const [_named]);
+      await _settle(tester);
+      await tester.tap(find.text('Connect'));
+      await _settle(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('not available on this platform'), findsOneWidget);
+    });
 
     testWidgets('renders_without_exception and starts a real scan', (tester) async {
       await tester.pumpWidget(_harness(ble: ble));
