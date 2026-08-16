@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../models/threat_level.dart';
 import '../charts/sa_threat_gauge.dart';
 import '../icons/sa_icon.dart';
 import 'sa_card.dart';
@@ -75,39 +76,65 @@ class SaThreatGaugeCard extends StatelessWidget {
       );
     }
 
+    final level = ThreatLevel.fromScore(currentScore);
+
     return SaCard(
       semanticsLabel: 'Threat status card, score ${(currentScore * 100).round()}',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // A header, so the gauge no longer has to caption itself. The old
+          // layout put "THREAT LEVEL" inside the dial, where it collided
+          // with the needle and the score.
           Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SaThreatGauge(score: currentScore, size: gaugeSize),
-              const SizedBox(width: AppSpacing.space4),
-              if (componentScores.isNotEmpty)
+              SaIcon(SaIconGlyph.shield, size: 18, color: level.color(context)),
+              const SizedBox(width: AppSpacing.space2),
+              Expanded(
+                child: Text(
+                  'Threat Level',
+                  style: AppTypography.labelL.copyWith(
+                    color: onSurface.withValues(alpha: 0.75),
+                  ),
+                ),
+              ),
+              if (lastUpdated != null)
+                Text(
+                  lastUpdated!,
+                  style: AppTypography.bodyS.copyWith(
+                    color: onSurface.withValues(alpha: 0.45),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          if (componentScores.isEmpty)
+            // Nothing to sit beside, so the gauge is centred rather than
+            // left-aligned against empty space — which is what made the card
+            // look lopsided with an orphaned timestamp underneath.
+            Center(child: SaThreatGauge(score: currentScore, size: gaugeSize))
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SaThreatGauge(score: currentScore, size: gaugeSize),
+                const SizedBox(width: AppSpacing.space5),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      for (final component in componentScores) ...[
-                        _MiniScore(component: component),
-                        const SizedBox(height: AppSpacing.space3),
+                      for (var i = 0; i < componentScores.length; i++) ...[
+                        _MiniScore(component: componentScores[i]),
+                        if (i != componentScores.length - 1)
+                          const SizedBox(height: AppSpacing.space3),
                       ],
                     ],
                   ),
                 ),
-            ],
-          ),
-          if (lastUpdated != null) ...[
-            const SizedBox(height: AppSpacing.space2),
-            Text(
-              'Last updated $lastUpdated',
-              style: AppTypography.monoDataS.copyWith(color: onSurface.withValues(alpha: 0.5)),
+              ],
             ),
-          ],
         ],
       ),
     );
@@ -122,18 +149,40 @@ class _MiniScore extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final onSurface = Theme.of(context).colorScheme.onSurface;
+    final value = component.score.clamp(0.0, 1.0);
+    // Coloured by its own reading rather than the theme's default indigo:
+    // a motion score of 0.9 and an audio score of 0.1 should not look alike
+    // on a card whose whole job is conveying severity at a glance.
+    final color = ThreatLevel.fromScore(value).color(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(component.label, style: AppTypography.labelM.copyWith(color: onSurface.withValues(alpha: 0.7))),
-        const SizedBox(height: 4),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                component.label,
+                style: AppTypography.labelM.copyWith(color: onSurface.withValues(alpha: 0.7)),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Text(
+              '${(value * 100).round()}',
+              style: AppTypography.monoDataS.copyWith(color: onSurface.withValues(alpha: 0.85)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
         ClipRRect(
           borderRadius: AppRadius.fullRadius,
           child: LinearProgressIndicator(
-            value: component.score.clamp(0.0, 1.0),
-            minHeight: 4,
-            backgroundColor: onSurface.withValues(alpha: 0.1),
+            value: value,
+            minHeight: 6,
+            color: color,
+            backgroundColor: onSurface.withValues(alpha: 0.10),
           ),
         ),
       ],
