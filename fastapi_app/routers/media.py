@@ -11,19 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_app.config import Settings, get_settings
 from fastapi_app.db import get_session
+from fastapi_app.deps import get_evidence_store
 from fastapi_app.models import Incident, Media
 from fastapi_app.schemas import UserPublic
 from fastapi_app.security import get_current_user
-from fastapi_app.services.evidence_store import EvidenceStore, EvidenceStoreError, derive_key
+from fastapi_app.services.evidence_store import EvidenceStore, EvidenceStoreError
 
 router = APIRouter(prefix="/api/v1/media", tags=["media"])
-
-
-def get_evidence_store(settings: Settings = Depends(get_settings)) -> EvidenceStore:
-    return EvidenceStore(
-        directory=settings.evidence_storage_dir,
-        key=derive_key(settings.jwt_secret_key, explicit_key=settings.evidence_encryption_key),
-    )
 
 
 # Recordings only. An emergency upload is audio or video captured by the

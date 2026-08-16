@@ -22,7 +22,7 @@ import httpx
 
 from fastapi_app.db import init_db
 from fastapi_app.main import app
-from fastapi_app.routers.media import get_evidence_store
+from fastapi_app.deps import get_evidence_store
 from fastapi_app.services.evidence_store import (
     EvidenceStore,
     EvidenceStoreError,

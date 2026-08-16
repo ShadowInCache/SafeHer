@@ -80,6 +80,30 @@ class Incident(Base):
     updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
 
 
+class IncidentShare(Base):
+    """A time-limited, revocable read-only link to one incident.
+
+    SRS FR-RPT-06. This is how an incident reaches someone who has no
+    SafeHer account -- a police officer, a lawyer, a parent -- without
+    handing them the owner's credentials.
+
+    Only the hash of the token is stored, for the same reason as every other
+    secret here: a leaked database must not yield working links to
+    recordings of people in danger.
+    """
+
+    __tablename__ = "incident_shares"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid4()))
+    incident_id = Column(String, ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash = Column(String, nullable=False, unique=True, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    # Set when the owner revokes the link early. Kept rather than deleted so
+    # a revoked link can be told apart from one that never existed.
+    revoked_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=_utcnow)
+
+
 class Device(Base):
     __tablename__ = "devices"
 

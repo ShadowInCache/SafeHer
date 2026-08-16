@@ -20,6 +20,7 @@ from fastapi_app.routers import (
     media,
     notifications,
     safety,
+    shares,
     users,
     ws,
 )
@@ -98,6 +99,7 @@ app.include_router(alerts.router)
 app.include_router(dashboard.router)
 app.include_router(safety.router)
 app.include_router(journeys.router)
+app.include_router(shares.router)
 
 
 @app.on_event("startup")
