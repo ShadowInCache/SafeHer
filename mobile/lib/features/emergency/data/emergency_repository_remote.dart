@@ -49,6 +49,7 @@ class EmergencyRepositoryRemote implements EmergencyRepository {
       contactsNotified: (data['contacts_notified'] as num?)?.toInt(),
       reachedContactIds:
           (data['contacts_reached'] as List<dynamic>? ?? const []).cast<String>(),
+      incidentId: data['id'] as String?,
     );
   }
 }

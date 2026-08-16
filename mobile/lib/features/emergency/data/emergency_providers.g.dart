@@ -25,6 +25,45 @@ final emergencyRepositoryProvider =
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef EmergencyRepositoryRef = AutoDisposeProviderRef<EmergencyRepository>;
+String _$evidenceRepositoryHash() =>
+    r'a5269010105b3cd4d0b8bd492c817199e471eec7';
+
+/// See also [evidenceRepository].
+@ProviderFor(evidenceRepository)
+final evidenceRepositoryProvider =
+    AutoDisposeProvider<EvidenceRepository>.internal(
+      evidenceRepository,
+      name: r'evidenceRepositoryProvider',
+      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+          ? null
+          : _$evidenceRepositoryHash,
+      dependencies: null,
+      allTransitiveDependencies: null,
+    );
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef EvidenceRepositoryRef = AutoDisposeProviderRef<EvidenceRepository>;
+String _$evidenceRecorderHash() => r'4de784eda0062e43f4ba2403bfa03d37492306a1';
+
+/// One recorder for the app: it owns a platform resource (the microphone)
+/// that must not be opened twice.
+///
+/// Copied from [evidenceRecorder].
+@ProviderFor(evidenceRecorder)
+final evidenceRecorderProvider = Provider<EvidenceRecorder>.internal(
+  evidenceRecorder,
+  name: r'evidenceRecorderProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$evidenceRecorderHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef EvidenceRecorderRef = ProviderRef<EvidenceRecorder>;
 String _$emergencyDispatchNotifierHash() =>
     r'25309c4c1b16dee190537c0d2bfd558e16657fc2';
 

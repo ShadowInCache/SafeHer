@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/emergency_providers.dart';
+import '../../domain/models/evidence_state.dart';
 import '../../../../core/animations/animation_helpers.dart';
 import '../../../../core/location/location_result.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -23,6 +24,7 @@ class EmergencyDispatchedStage extends StatelessWidget {
     required this.notifiedContactIds,
     required this.onMarkSafe,
     this.dispatchResult,
+    this.evidence = EvidenceState.idle,
     this.location,
     super.key,
   });
@@ -35,6 +37,8 @@ class EmergencyDispatchedStage extends StatelessWidget {
 
   /// Null until the dispatch call returns.
   final DispatchResult? dispatchResult;
+
+  final EvidenceState evidence;
 
   final VoidCallback onMarkSafe;
   final LocationResult? location;
@@ -129,6 +133,8 @@ class EmergencyDispatchedStage extends StatelessWidget {
           _CouldNotReachBanner(),
         ],
         const SizedBox(height: AppSpacing.space5),
+        _EvidencePanel(state: evidence),
+        const SizedBox(height: AppSpacing.space3),
         _LiveLocationPanel(location: location),
         const SizedBox(height: AppSpacing.space6),
         Text('Notifying', style: AppTypography.headingS.copyWith(color: Colors.white)),
@@ -204,6 +210,72 @@ class _CouldNotReachBanner extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Says what happened to the recording. A silent failure would leave the
+/// user believing evidence exists when none does — which matters later,
+/// when it is the difference between a report that stands up and one that
+/// does not.
+class _EvidencePanel extends StatelessWidget {
+  const _EvidencePanel({required this.state});
+
+  final EvidenceState state;
+
+  @override
+  Widget build(BuildContext context) {
+    if (state == EvidenceState.idle) return const SizedBox.shrink();
+
+    final (String message, Color color) = switch (state) {
+      EvidenceState.recording => ('Recording audio evidence', AppColors.coral500),
+      EvidenceState.uploading => ('Saving evidence securely…', AppColors.violet400),
+      EvidenceState.saved => ('Evidence saved and encrypted', AppColors.success500),
+      EvidenceState.uploadFailed => (
+        'Evidence recorded but not uploaded — it will be lost',
+        AppColors.warning500,
+      ),
+      EvidenceState.unavailable => (
+        'No audio evidence — microphone unavailable',
+        AppColors.warning500,
+      ),
+      EvidenceState.unsupported => (
+        'Audio evidence needs the SafeHer app on your phone',
+        AppColors.warning500,
+      ),
+      EvidenceState.discarded => ('Evidence discarded', Colors.white70),
+      EvidenceState.idle => ('', Colors.white70),
+    };
+
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.space3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: AppRadius.mdRadius,
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            if (state.isActive)
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2, color: color),
+              )
+            else
+              SaIcon(SaIconGlyph.mic, size: 16, color: color),
+            const SizedBox(width: AppSpacing.space3),
+            Expanded(
+              child: Text(
+                message,
+                style: AppTypography.bodyM.copyWith(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

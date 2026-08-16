@@ -20,6 +20,7 @@ class EmergencyRepositoryMock implements EmergencyRepository {
       contactsTotal: 3,
       contactsNotified: 2,
       reachedContactIds: ['1', '2'],
+      incidentId: 'mock-incident-1',
     );
   }
 }

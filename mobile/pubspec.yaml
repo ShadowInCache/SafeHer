@@ -68,6 +68,9 @@ dependencies:
   # Media
   camera: ^0.11.0
   record: ^6.1.2
+  # Temp directory for an in-progress evidence recording, before it is
+  # uploaded and the local copy deleted.
+  path_provider: ^2.1.3
   chewie: ^1.7.0
 
   # Data viz

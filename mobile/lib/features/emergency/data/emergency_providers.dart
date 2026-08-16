@@ -5,9 +5,14 @@ import '../../../core/config/app_config.dart';
 import '../../../core/connectivity/connectivity_notifier.dart';
 import '../../../core/network/network_providers.dart';
 import '../../../core/offline/offline_queue_providers.dart';
+import '../../../core/evidence/evidence_recorder.dart';
+import '../../../core/evidence/platform_evidence_recorder.dart';
 import '../domain/emergency_repository.dart';
+import '../domain/evidence_repository.dart';
 import 'emergency_repository_mock.dart';
 import 'emergency_repository_remote.dart';
+import 'evidence_repository_mock.dart';
+import 'evidence_repository_remote.dart';
 
 part 'emergency_providers.g.dart';
 
@@ -15,6 +20,21 @@ part 'emergency_providers.g.dart';
 EmergencyRepository emergencyRepository(Ref ref) {
   if (AppConfig.useMockApi) return EmergencyRepositoryMock();
   return EmergencyRepositoryRemote(apiClient: ref.watch(apiClientProvider));
+}
+
+@riverpod
+EvidenceRepository evidenceRepository(Ref ref) {
+  if (AppConfig.useMockApi) return EvidenceRepositoryMock();
+  return EvidenceRepositoryRemote(apiClient: ref.watch(apiClientProvider));
+}
+
+/// One recorder for the app: it owns a platform resource (the microphone)
+/// that must not be opened twice.
+@Riverpod(keepAlive: true)
+EvidenceRecorder evidenceRecorder(Ref ref) {
+  final recorder = PlatformEvidenceRecorder();
+  ref.onDispose(recorder.dispose);
+  return recorder;
 }
 
 /// Dispatches the SOS alert. If the device is offline when the countdown

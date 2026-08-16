@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/evidence/evidence_recorder.dart';
 import '../../../core/local/app_preferences.dart';
 import '../../../core/location/location_providers.dart';
 import '../../../core/location/location_result.dart';
@@ -16,6 +17,7 @@ import '../../contacts/data/contacts_providers.dart';
 import '../../safety/data/safety_providers.dart';
 import '../../safety/presentation/widgets/cancel_pin_prompt.dart';
 import '../data/emergency_providers.dart';
+import '../domain/models/evidence_state.dart';
 import 'widgets/emergency_cancelled_stage.dart';
 import 'widgets/emergency_countdown_stage.dart';
 import 'widgets/emergency_dispatched_stage.dart';
@@ -54,11 +56,22 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
   /// Null until the dispatch call comes back — the view shows contacts as
   /// still pending until then, rather than assuming either outcome.
   DispatchResult? _dispatchResult;
+
+  EvidenceState _evidence = EvidenceState.idle;
+  Timer? _recordingWindow;
+
+  /// Resolved eagerly in [initState], not lazily: dispose() has to tear the
+  /// recorder down and `ref` is unusable by then, so a `late final` that had
+  /// never been touched would throw on the way out. Leaving the microphone
+  /// open because teardown failed would be a live recording the user cannot
+  /// see or stop.
+  late final EvidenceRecorder _recorder;
   LocationResult? _location;
 
   @override
   void initState() {
     super.initState();
+    _recorder = ref.read(evidenceRecorderProvider);
     if (widget.autoStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _handleSosConfirmed();
@@ -69,6 +82,10 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _recordingWindow?.cancel();
+    // Not awaited: dispose cannot be async, and an abandoned recording must
+    // still be torn down rather than left holding the microphone.
+    unawaited(_recorder.cancel());
     super.dispose();
   }
 
@@ -80,6 +97,7 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
       _location = null;
     });
     _fetchLocation();
+    _startRecording();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
       if (_secondsRemaining <= 1) {
@@ -148,6 +166,63 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
     );
   }
 
+  /// Evidence capture begins with the countdown, not after dispatch.
+  ///
+  /// FR-EMG-06 asks for recording within a second of the trigger; starting
+  /// here beats that, and it means the recording covers the seconds the user
+  /// spent deciding — often the most telling part. Failure is deliberately
+  /// quiet: a missing microphone permission must never interrupt someone
+  /// mid-emergency with a dialog. The dispatched view reports the outcome
+  /// afterwards instead.
+  void _startRecording() {
+    unawaited(
+      _recorder.start().then((_) {
+        if (mounted) setState(() => _evidence = EvidenceState.recording);
+      }).catchError((Object error) {
+        if (!mounted) return;
+        setState(() {
+          _evidence = error is EvidenceRecorderException &&
+                  error.reason == EvidenceRecorderFailure.unsupported
+              ? EvidenceState.unsupported
+              : EvidenceState.unavailable;
+        });
+      }),
+    );
+  }
+
+  /// Stops the recording and uploads it against the incident the alert just
+  /// created.
+  ///
+  /// Runs after dispatch because the incident id does not exist until then.
+  /// An offline alert has no incident yet, so the recording is discarded
+  /// rather than held indefinitely — the queued alert will be re-sent
+  /// without it, which is honest about what was actually captured.
+  Future<void> _finishRecording(String? incidentId) async {
+    if (!_recorder.isRecording) return;
+
+    if (incidentId == null) {
+      await _recorder.cancel();
+      if (mounted) setState(() => _evidence = EvidenceState.discarded);
+      return;
+    }
+
+    final recording = await _recorder.stop();
+    if (recording == null) {
+      if (mounted) setState(() => _evidence = EvidenceState.unavailable);
+      return;
+    }
+
+    if (mounted) setState(() => _evidence = EvidenceState.uploading);
+    try {
+      await ref
+          .read(evidenceRepositoryProvider)
+          .upload(incidentId: incidentId, recording: recording);
+      if (mounted) setState(() => _evidence = EvidenceState.saved);
+    } catch (_) {
+      if (mounted) setState(() => _evidence = EvidenceState.uploadFailed);
+    }
+  }
+
   /// Not awaited by the countdown — the dispatched-stage UI appears
   /// immediately regardless of network state, so a slow request never
   /// leaves the user staring at nothing mid-emergency. The *result*,
@@ -174,6 +249,12 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
                 ..clear()
                 ..addAll(result.outcome.reachedContactIds);
             });
+            // Give the recording a moment to capture the aftermath before
+            // closing it; the alert has already gone out either way.
+            _recordingWindow = Timer(
+              const Duration(seconds: 20),
+              () => unawaited(_finishRecording(result.outcome.incidentId)),
+            );
           }),
     );
   }
@@ -191,7 +272,14 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
   }
 
   void _markSafe() {
-    setState(() => _stage = EmergencyStage.cancelled);
+    // A false alarm's recording is deleted, not uploaded: FR-EMG-08 says a
+    // cancelled alert is logged but not transmitted.
+    _recordingWindow?.cancel();
+    unawaited(_recorder.cancel());
+    setState(() {
+      _evidence = EvidenceState.discarded;
+      _stage = EmergencyStage.cancelled;
+    });
   }
 
   void _returnHome() => context.go('/home');
@@ -238,6 +326,7 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
                     contactsAsync: contactsAsync,
                     notifiedContactIds: _notifiedContactIds,
                     dispatchResult: _dispatchResult,
+                    evidence: _evidence,
                     onMarkSafe: _markSafe,
                     location: _location,
                   ),

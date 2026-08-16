@@ -8,6 +8,7 @@ import 'package:safeher_app/core/location/location_providers.dart';
 import 'package:safeher_app/core/location/location_result.dart';
 import 'package:safeher_app/core/offline/offline_queue_providers.dart';
 import 'package:safeher_app/core/offline/offline_queue_service.dart';
+import 'package:safeher_app/core/evidence/evidence_recorder.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
 import 'package:safeher_app/features/contacts/data/contacts_providers.dart';
 import 'package:safeher_app/features/contacts/domain/contacts_repository.dart';
@@ -15,6 +16,7 @@ import 'package:safeher_app/features/contacts/domain/models/alert_channels.dart'
 import 'package:safeher_app/features/contacts/domain/models/contact.dart';
 import 'package:safeher_app/features/emergency/data/emergency_providers.dart';
 import 'package:safeher_app/features/emergency/domain/emergency_repository.dart';
+import 'package:safeher_app/features/emergency/domain/evidence_repository.dart';
 import 'package:safeher_app/features/emergency/presentation/emergency_screen.dart';
 import 'package:safeher_app/features/auth/data/auth_providers.dart';
 import 'package:safeher_app/features/safety/data/safety_providers.dart';
@@ -24,6 +26,7 @@ import '../../../test_utils/fake_auth_repository.dart';
 import '../../../test_utils/fake_key_value_store.dart';
 import '../../../test_utils/fake_location_service.dart';
 import '../../../test_utils/fake_safety_repository.dart';
+import '../../../test_utils/fake_evidence_recorder.dart';
 import '../../../test_utils/offline_test_overrides.dart';
 import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
@@ -118,9 +121,13 @@ Widget _harness({
   bool offline = false,
   OfflineQueueService? queueService,
   EmergencyRepository? emergencyRepo,
+  FakeEvidenceRecorder? recorder,
+  EvidenceRepository? evidenceRepo,
 }) {
   return ProviderScope(
     overrides: [
+      evidenceRecorderProvider.overrideWithValue(recorder ?? FakeEvidenceRecorder()),
+      evidenceRepositoryProvider.overrideWithValue(evidenceRepo ?? FakeEvidenceRepository()),
       contactsRepositoryProvider.overrideWithValue(repo ?? _FakeContactsRepository()),
       localKeyValueStoreProvider.overrideWithValue(FakeKeyValueStore()),
       ...offlineTestOverrides(offline: offline, queueService: queueService),
@@ -238,6 +245,141 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.text('Help is on the way'), findsOneWidget);
       expect(find.text('Sharing live location'), findsOneWidget);
+    });
+
+    testWidgets('recording starts with the countdown, not after dispatch', (tester) async {
+      // FR-EMG-06 asks for capture within a second of the trigger. Starting
+      // at the countdown beats that, and it covers the seconds the user
+      // spent deciding — often the most telling part of a recording.
+      final recorder = FakeEvidenceRecorder();
+      await tester.pumpWidget(_harness(recorder: recorder));
+      await tester.pump(const Duration(milliseconds: 100));
+      await _holdSos(tester);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(recorder.startCalls, 1);
+      expect(recorder.isRecording, isTrue);
+    });
+
+    testWidgets('evidence is uploaded against the incident the alert created', (tester) async {
+      final recorder = FakeEvidenceRecorder();
+      final evidence = FakeEvidenceRepository();
+      final repo = _RecordingEmergencyRepository(
+        outcome: const DispatchOutcome(
+          contactsTotal: 1,
+          contactsNotified: 1,
+          reachedContactIds: ['1'],
+          incidentId: 'incident-42',
+        ),
+      );
+      await tester.pumpWidget(
+        _harness(recorder: recorder, evidenceRepo: evidence, emergencyRepo: repo),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await _holdSos(tester);
+      for (var i = 0; i < 11; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+      // The recorder keeps running for a window after dispatch.
+      await tester.pump(const Duration(seconds: 21));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(recorder.stopCalls, 1);
+      expect(evidence.uploads, ['incident-42']);
+      expect(find.text('Evidence saved and encrypted'), findsOneWidget);
+    });
+
+    testWidgets('a refused microphone never blocks the alert', (tester) async {
+      // The alert matters more than the recording, so a permission failure
+      // is reported afterwards rather than as a dialog mid-emergency.
+      final recorder = FakeEvidenceRecorder(
+        startFailure: const EvidenceRecorderException(
+          EvidenceRecorderFailure.permissionDenied,
+        ),
+      );
+      final repo = _RecordingEmergencyRepository();
+      await tester.pumpWidget(_harness(recorder: recorder, emergencyRepo: repo));
+      await tester.pump(const Duration(milliseconds: 100));
+      await _holdSos(tester);
+      for (var i = 0; i < 11; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(repo.dispatched, hasLength(1));
+      expect(find.text('Help is on the way'), findsOneWidget);
+      expect(find.text('No audio evidence \u2014 microphone unavailable'), findsOneWidget);
+    });
+
+    testWidgets('web says why it cannot record rather than failing silently', (tester) async {
+      final recorder = FakeEvidenceRecorder(
+        supported: false,
+        startFailure: const EvidenceRecorderException(EvidenceRecorderFailure.unsupported),
+      );
+      await tester.pumpWidget(_harness(recorder: recorder));
+      await tester.pump(const Duration(milliseconds: 100));
+      await _holdSos(tester);
+      for (var i = 0; i < 11; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        find.text('Audio evidence needs the SafeHer app on your phone'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a failed upload is admitted, not hidden', (tester) async {
+      final recorder = FakeEvidenceRecorder();
+      final evidence = FakeEvidenceRepository(shouldFail: true);
+      final repo = _RecordingEmergencyRepository(
+        outcome: const DispatchOutcome(
+          contactsTotal: 1,
+          contactsNotified: 1,
+          incidentId: 'incident-42',
+        ),
+      );
+      await tester.pumpWidget(
+        _harness(recorder: recorder, evidenceRepo: evidence, emergencyRepo: repo),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await _holdSos(tester);
+      for (var i = 0; i < 11; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(seconds: 21));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Believing evidence exists when it does not is worse than knowing it
+      // failed: it changes what she does next.
+      expect(
+        find.text('Evidence recorded but not uploaded \u2014 it will be lost'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('an offline alert discards the recording it cannot attach', (tester) async {
+      final queue = OfflineQueueService(FakeOfflineQueueBox());
+      final recorder = FakeEvidenceRecorder();
+      final evidence = FakeEvidenceRepository();
+      await tester.pumpWidget(
+        _harness(offline: true, queueService: queue, recorder: recorder, evidenceRepo: evidence),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await _holdSos(tester);
+      for (var i = 0; i < 11; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(seconds: 21));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // No incident id exists yet, so there is nothing to attach it to.
+      expect(evidence.uploads, isEmpty);
+      expect(recorder.cancelCalls, greaterThanOrEqualTo(1));
     });
 
     testWidgets('contacts are marked reached only when the server says so', (tester) async {
@@ -380,6 +522,8 @@ void main() {
       }
       await tester.pump(const Duration(milliseconds: 100));
 
+      await tester.ensureVisible(find.text("I'm Safe — Cancel Alert"));
+      await tester.pump();
       await tester.tap(find.text("I'm Safe — Cancel Alert"));
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.text('Tap again to confirm'), findsOneWidget);
@@ -398,6 +542,8 @@ void main() {
         await tester.pump(const Duration(seconds: 1));
       }
       await tester.pump(const Duration(milliseconds: 100));
+      await tester.ensureVisible(find.text("I'm Safe — Cancel Alert"));
+      await tester.pump();
       await tester.tap(find.text("I'm Safe — Cancel Alert"));
       await tester.pump(const Duration(milliseconds: 100));
       await tester.tap(find.text('Tap again to confirm'));

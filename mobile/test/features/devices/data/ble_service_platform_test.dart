@@ -48,18 +48,23 @@ void main() {
     });
   });
 
-  test('no library under lib/ imports dart:io', () {
+  test('no web-reachable library under lib/ imports dart:io', () {
     // The rule the crash taught us, enforced rather than remembered. SafeHer
     // ships to web as well as phones, and dart:io compiles there but throws
     // at runtime — so an accidental import is invisible to `flutter analyze`
     // and to every VM test, and only shows up as a red screen in a browser.
     //
-    // Platform-specific code belongs behind a conditional import (see
-    // lib/core/network/certificate_pinning.dart), and platform *questions*
-    // belong to defaultTargetPlatform / kIsWeb.
+    // Platform-specific code belongs behind a conditional import, and
+    // platform *questions* belong to defaultTargetPlatform / kIsWeb.
+    //
+    // `*_io.dart` files are exempt by convention: they are the native half
+    // of a conditional export (see core/evidence/platform_evidence_recorder
+    // .dart) and are never compiled into a web build. The convention is
+    // load-bearing, so it is asserted below rather than assumed.
     final offenders = <String>[];
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      if (entity.path.endsWith('_io.dart')) continue;
       final lines = entity.readAsLinesSync();
       for (var i = 0; i < lines.length; i++) {
         final line = lines[i].trimLeft();
@@ -74,6 +79,41 @@ void main() {
       isEmpty,
       reason: 'dart:io throws on web. Use a conditional import, or '
           'defaultTargetPlatform/kIsWeb for platform checks.',
+    );
+  });
+
+  test('every _io.dart library is reached only by conditional export', () {
+    // The exemption above is only safe while it holds: an `_io.dart` file
+    // that something imports directly would be compiled into the web build
+    // and throw there, with the guard staying green.
+    final ioLibraries = <String>[];
+    for (final entity in Directory('lib').listSync(recursive: true)) {
+      if (entity is File && entity.path.endsWith('_io.dart')) {
+        ioLibraries.add(entity.uri.pathSegments.last);
+      }
+    }
+    expect(ioLibraries, isNotEmpty, reason: 'the exemption should have subjects');
+
+    final directImports = <String>[];
+    for (final entity in Directory('lib').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      for (final line in entity.readAsLinesSync()) {
+        final trimmed = line.trimLeft();
+        final isConditional = trimmed.contains('if (dart.library.io)');
+        if (isConditional) continue;
+        for (final library in ioLibraries) {
+          if (trimmed.startsWith('import ') && trimmed.contains(library)) {
+            directImports.add('${entity.path} -> $library');
+          }
+        }
+      }
+    }
+
+    expect(
+      directImports,
+      isEmpty,
+      reason: 'an _io.dart library must only be reached via '
+          "export '...' if (dart.library.io) '..._io.dart';",
     );
   });
 }

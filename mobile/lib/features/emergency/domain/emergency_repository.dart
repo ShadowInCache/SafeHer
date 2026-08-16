@@ -32,6 +32,7 @@ class DispatchOutcome {
     this.contactsTotal,
     this.contactsNotified,
     this.reachedContactIds = const [],
+    this.incidentId,
   });
 
   /// The alert never left the device and is waiting in the offline queue.
@@ -39,7 +40,8 @@ class DispatchOutcome {
   const DispatchOutcome.queued()
     : contactsTotal = null,
       contactsNotified = null,
-      reachedContactIds = const [];
+      reachedContactIds = const [],
+      incidentId = null;
 
   final int? contactsTotal;
   final int? contactsNotified;
@@ -48,6 +50,10 @@ class DispatchOutcome {
   /// marks exactly these — anything else would be guessing which of her
   /// people know she needs help.
   final List<String> reachedContactIds;
+
+  /// The incident the alert created. Null when the alert was queued
+  /// offline — evidence has nothing to attach to until it actually sends.
+  final String? incidentId;
 
   /// True when the alert was recorded but reached none of the contacts —
   /// the case the user most needs to know about, because it means she
