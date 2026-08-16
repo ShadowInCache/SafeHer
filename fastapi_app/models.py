@@ -158,8 +158,25 @@ class EmergencyContact(Base):
     email = Column(String, nullable=True)
     relationship = Column(String, nullable=True)
     priority = Column(Integer, nullable=False, default=1)
+
+    # SRS FR-EMG-10. Null until someone at this address has proved they
+    # received a code. An unverified contact is still notified in an
+    # emergency -- see services/emergency_dispatch.py for why -- but the app
+    # flags it, because the commonest reason for a contact never hearing
+    # from SafeHer is a typo nobody noticed.
+    verified_at = Column(DateTime, nullable=True)
+    # Only the hash, matching email_verification_codes: a leaked database
+    # must not yield working codes.
+    verification_code_hash = Column(String, nullable=True)
+    verification_expires_at = Column(DateTime, nullable=True)
+    verification_attempts = Column(Integer, nullable=False, default=0)
+
     created_at = Column(DateTime, nullable=False, default=_utcnow)
     updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
+
+    @property
+    def is_verified(self) -> bool:
+        return self.verified_at is not None
 
 
 class SafeJourney(Base):

@@ -149,10 +149,17 @@ class EmergencyContactUpdate(BaseModel):
 class EmergencyContactPublic(EmergencyContactBase):
     id: str
     user_id: str
+    # SRS FR-EMG-10. Null means nobody at this address has confirmed a code
+    # — the contact is still notified, but the app flags it.
+    verified_at: Optional[datetime] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ContactVerifyRequest(BaseModel):
+    code: str = Field(min_length=4, max_length=10)
 
 
 class IncidentCreate(BaseModel):
