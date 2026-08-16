@@ -39,7 +39,7 @@ Beyond the SRS's four, the repo also runs:
 | Check | Last measured | Status |
 |-------|---------------|--------|
 | `flutter test` (full suite) | 584 passing, 0 failing | ✅ |
-| `pytest tests/` (in-process suites) | 174 passing, 0 failing | ✅ |
+| `pytest tests/` (in-process suites) | 195 passing, 0 failing | ✅ |
 | Alembic from empty → head → downgrade → head | 16 migrations, reversible | ✅ |
 
 Coverage by area — the thin spots are where next session's tests should go:
@@ -212,7 +212,7 @@ All 17 specified component groups exist under `lib/shared/components/`, at
 |----|-------------|--------|
 | FR-RPT-01 | AI incident summary | 🟡 |
 | FR-RPT-02 | Timeline ±100ms | ✅ |
-| FR-RPT-03 | PDF export, chain-of-custody hash | ⛔ **Gap** — no PDF code anywhere |
+| FR-RPT-03 | PDF export, chain-of-custody hash | ✅ SHA-256 per recording plus a document hash, stated as an integrity check rather than a signature |
 | FR-RPT-04 | Safety analytics heatmap | ✅ **new** — `SaHeatGrid` + `/dashboard/analytics` |
 | FR-RPT-05 | Threat history chart, tap for detail | ✅ **new** — 14-day chart, tap opens that day's breakdown |
 | FR-RPT-06 | Share report via 7-day expiring link | ✅ token-only, revocable, evidence streamed per request so expiry actually withdraws access |
@@ -254,28 +254,31 @@ battery". Drawing a trend from a single sample would be a fabricated chart.
 
 ## Ranked open gaps
 
-Ordered by what a user would miss first.
+Ordered by what a user would miss first. Full requirement-by-requirement
+mapping lives in [TRACEABILITY.md](TRACEABILITY.md), which is enforced by a
+test rather than maintained by hand.
 
 1. **SMS delivery** — the only channel that reaches a contact who does not
    check email, and the only one that reliably wakes someone at 2am. Costs
    money with every provider (OneSignal included, since its free-tier SMS
    wraps your own Twilio account). A deliberate deferral, not an oversight.
-2. **PDF export** (FR-RPT-03) — share links now cover getting a report to
-   someone; a forensic-grade PDF with a chain-of-custody hash is still
-   missing, and is what a court would actually want.
-3. **The alert email carries no evidence link** (FR-EMG-05, partial). The
-   alert dispatches immediately while the recording is still running, so a
-   link at send time would always be empty. The pieces now exist — a
-   follow-up email carrying a share link would close it.
-4. **Firmware OTA + device sets** (FR-DEV-04, FR-DEV-06).
-5. **Coverage in the thin areas** — `features/contacts` and `core/network`
+2. **Live monitoring is event-driven, not continuous** (FR-MON-01/03/06).
+   The components exist — waveform, motion chart, gauge — but no continuous
+   sensor feed reaches them, because the backend broadcasts discrete events
+   and no wearable has ever connected.
+3. **Coverage in the thin areas** — `features/contacts` and `core/network`
    are the weakest points in an otherwise healthy total.
-6. **iOS verification** — the `project.pbxproj` edit registering
+4. **iOS verification** — the `project.pbxproj` edit registering
    `GoogleService-Info.plist` is the one change in the repo nobody has
    compiled. Needs `flutter build ios --debug` on a Mac.
-7. **Real hardware** — BLE pairing has only ever run against a fake service;
+5. **Real hardware** — BLE pairing has only ever run against a fake service;
    no glove or glasses has been paired. Performance targets (60fps, cold
    start) also need a physical device to measure.
+
+**Genuinely not built** — four requirements, each needing something this
+project does not have: firmware OTA (FR-DEV-04), named device sets
+(FR-DEV-06), live video from the glasses (FR-MON-02), and AI-generated
+incident summaries (FR-RPT-01, needs a paid model API).
 
 ---
 
@@ -701,3 +704,32 @@ had it; the file is now additive-only. Read before writing, including files
 that look new.
 
 Totals: 584 Flutter tests, 174 backend tests, all green.
+
+### 2026-08-15 — PDF export, evidence follow-up, and a verifiable SRS
+
+**FR-RPT-03.** "Forensic-grade" is the load-bearing word: a PDF that merely
+restates what the app shows is a printout. Every evidence file is listed
+with the SHA-256 of the exact bytes SafeHer holds, plus a document hash over
+the report's facts, so a reader handed a recording separately can re-hash it
+and compare. The page says outright that this is an integrity check and not
+a signature — overstating what a hash proves is worse than omitting it. The
+recording itself is never embedded, and a recording that cannot be decrypted
+is omitted rather than given a placeholder hash, because a chain of custody
+with an invented link is worse than one that is honestly short.
+
+**FR-EMG-05, the half that could not travel in the alert.** The evidence URL
+does not exist when the alert fires — the recording is still being made.
+Holding the alert back until it did would trade the requirement that matters
+for one that does not, so the URL follows in a second email carrying a share
+link. Email only: a second SMS saying "there is also a recording" is not
+worth what the first one is worth.
+
+**A verifiable SRS.** Auditing compliance automatically for the first time
+reported 20 of 37 requirements as unimplemented — almost all of them built,
+just never linked to the requirement they satisfy. The gap was traceability,
+not code, and acting on the raw number would have sent a rewrite after
+features that already worked. `TRACEABILITY.md` now maps every requirement
+to its implementation, and a test enforces the map: nothing can go missing
+from it, no path can rot, and "not built" cannot sit next to a file path.
+
+Totals: 584 Flutter tests, 195 backend tests, all green.
