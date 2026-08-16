@@ -875,3 +875,78 @@ Recorded rather than silently resolved:
 analyze` clean. Three requirements remain genuinely unbuilt, all needing
 hardware: FR-DEV-04, FR-DEV-06, FR-MON-02.
 
+## 2026-08-17 (third session) — the ML pipeline, made ready
+
+The product design was described in full: XGBoost over the glove's
+accelerometer, gyroscope and a pulse sensor; CNN+LSTM over the glasses'
+microphone; YOLOv8 over its camera for weapons. Those three feed the §6.2
+fusion, cross a threshold, and trigger FR-EMG-02. **No model is trained
+yet**, so this session built everything around them rather than pretending
+to have them.
+
+### Built
+
+`fastapi_app/services/threat_models.py` declares the three models, what each
+consumes and produces, and — importantly — that none is trained.
+`POST /api/v1/alerts/analyze` accepts per-model scores and runs the whole
+§6.2 pipeline through to dispatch. `GET /api/v1/alerts/models` reports the
+state, including `scores_are_caller_supplied: true`, which is the honest
+description of every score the backend currently receives.
+
+The endpoint takes scores rather than frames on purpose. SRS §6.3 puts
+YOLOv8 on GPU Cloud Run and TFLite models in firmware, and an ESP32 cannot
+run YOLOv8 — so where each model executes must stay changeable without
+touching this contract.
+
+### The correctness problem worth recording
+
+Fusing a missing modality as 0.0 fails silently and dangerously. With the
+glasses off, `0.40*motion + 0.35*audio + 0.25*0` caps the achievable score
+at **0.75** — exactly the default threshold — so a woman screaming and
+struggling would only just trip it. With the glove alone the ceiling is
+**0.40**, and auto-SOS could never fire at all. A flat camera battery would
+have quietly disabled the alarm.
+
+`fuse_available` excludes absent modalities and renormalises the remaining
+weights, so the score answers "how threatening is what we can actually
+observe". A sensor reporting a genuine 0.0 is still honoured — absence and
+calm are different states, and the tests pin that they stay different.
+
+### Two deviations from the SRS
+
+* **Heart rate is not in the specification.** §6.2 has no weight for it, and
+  the §9.1 glove BOM lists no pulse sensor — the "heartbeat" in §7.3 is a
+  30-second MQTT keepalive, not a pulse. Implemented as a small additive
+  booster above 120 bpm rather than a fourth fusion weight, so §6.2's
+  arithmetic stays exactly as written and testable. An elevated pulse is
+  evidence of running for a bus; it may tip a score other sensors already
+  find alarming, and may not raise the alarm by itself. **Open for the
+  product owner to overrule.**
+* **`hour in range(22, 6)`** remains empty in Python; still implemented as
+  the 22:00–05:59 window it describes.
+
+### Not built, deliberately: notifying police or help centres
+
+`GET /api/v1/safety/nearby` already finds real police stations and
+hospitals. Nothing notifies them, and `routers/journeys.py` says so
+explicitly.
+
+This should stay unbuilt until a real integration exists. A safety app that
+implies it has called for help when it has not is worse than one that never
+claimed to — a woman who believes police are already on their way may not
+call them herself. That is the same reasoning that stopped the Firebase
+campaign yesterday. There is no public API for police dispatch in India and
+ERSS-112 has no third-party integration, so the realistic near-term options
+are a monitored helpline mailbox or a partner NGO channel — an agreement
+first, code second.
+
+### Also still missing for the report-with-evidence flow
+
+Video is not recorded at all (`evidence_recorder.dart` is audio-only, by an
+earlier deliberate decision). An incident report can therefore carry an AI
+summary, a timeline, location and **audio** — not video.
+
+### State
+
+266 backend tests pass (up from 245), 587 Flutter tests pass, analyze clean.
+

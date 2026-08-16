@@ -182,3 +182,65 @@ def evaluate(
         should_trigger=crossed and not suppressed,
         suppressed_by_dedup=suppressed,
     )
+
+# --- partial sensor coverage ---------------------------------------------
+#
+# The three modalities come from two different wearables. The glasses can be
+# off, out of battery or out of range while the glove is still transmitting,
+# so a score for every modality is the exception rather than the rule.
+#
+# Treating a missing modality as 0.0 is the dangerous reading, and it fails
+# silently: with no vision score the maximum reachable value is 0.40 + 0.35
+# = 0.75, so a woman with maximal motion *and* maximal audio distress only
+# just reaches the default threshold. With only the glove, the ceiling is
+# 0.40 and the alarm can never fire at all. A missing camera would quietly
+# disable auto-SOS.
+#
+# So absent modalities are excluded and the remaining weights renormalised:
+# the score means "how threatening is what we can actually observe", which
+# is the only question the available data can answer.
+
+# Heart rate is not in SRS §6.2, and the §9.1 glove BOM has no pulse sensor
+# -- the "heartbeat" in §7.3 is a 30-second MQTT keepalive, not a pulse. It
+# is carried here as a context booster rather than a fourth fusion weight,
+# so §6.2's arithmetic stays exactly as specified and verifiable. Revisit if
+# the requirement is amended to give it a weight.
+TACHYCARDIA_BPM = 120
+HEART_RATE_BOOST = 0.05
+
+
+def fuse_available(
+    *,
+    motion: Optional[float] = None,
+    audio: Optional[float] = None,
+    vision: Optional[float] = None,
+) -> Optional[float]:
+    """Weighted fusion over whichever modalities actually reported.
+
+    Returns None when nothing reported at all -- distinct from 0.0, which
+    would mean "all three sensors looked and saw calm".
+    """
+    present = [
+        (MOTION_WEIGHT, motion),
+        (AUDIO_WEIGHT, audio),
+        (VISION_WEIGHT, vision),
+    ]
+    present = [(weight, value) for weight, value in present if value is not None]
+    if not present:
+        return None
+
+    total_weight = sum(weight for weight, _ in present)
+    return sum(weight * value for weight, value in present) / total_weight
+
+
+def heart_rate_boost(bpm: Optional[float]) -> float:
+    """Additive booster for a racing pulse.
+
+    Deliberately small. An elevated heart rate is not evidence of an
+    assault -- it is evidence of running for a bus -- so it can nudge a
+    score that other sensors already find alarming, and cannot raise the
+    alarm by itself.
+    """
+    if bpm is None:
+        return 0.0
+    return HEART_RATE_BOOST if bpm >= TACHYCARDIA_BPM else 0.0

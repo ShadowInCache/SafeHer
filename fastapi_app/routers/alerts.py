@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,11 +17,12 @@ from fastapi_app.schemas import (
     EmergencyAlertRequest,
     HeartbeatRequest,
     IncidentPublic,
+    ModelScoresRequest,
     ProcessThreatRequest,
     UserPublic,
 )
 from fastapi_app.security import get_current_user
-from fastapi_app.services import threat_fusion
+from fastapi_app.services import threat_fusion, threat_models
 from fastapi_app.services.emergency_dispatch import dispatch_to_contacts
 from fastapi_app.services.notifications import send_fcm_notification
 from fastapi_app.services.processor_client import process_threat
@@ -48,6 +49,7 @@ async def _auto_dispatch_if_threatened(
     raw_score: float,
     incident: Optional[Incident] = None,
     weapon_confidence: float = 0.0,
+    in_high_risk_zone: bool = False,
 ) -> dict[str, Any]:
     """SRS FR-EMG-02 -- raise the alarm without being asked.
 
@@ -77,6 +79,7 @@ async def _auto_dispatch_if_threatened(
         previous_smoothed=_smoothed_scores.get(user_id),
         threshold=threshold,
         weapon_confidence=weapon_confidence,
+        in_high_risk_zone=in_high_risk_zone,
         last_alert_at=last_auto,
     )
     _smoothed_scores[user_id] = decision.smoothed_score
@@ -438,4 +441,96 @@ async def get_live_alert_state(
             }
             for item in incidents
         ],
+    }
+
+@router.get("/models")
+async def get_model_registry(
+    current_user: UserPublic = Depends(get_current_user),
+):
+    """What the threat pipeline is currently capable of.
+
+    Exists so "why did nothing trigger?" has an answer that does not require
+    reading the source. While no model is trained this reports
+    `scores_are_caller_supplied: true`, which is the honest description of
+    every score the backend currently receives.
+    """
+    return threat_models.registry_report()
+
+
+@router.post("/analyze", status_code=status.HTTP_202_ACCEPTED)
+async def analyze_model_scores(
+    payload: ModelScoresRequest,
+    current_user: UserPublic = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+):
+    """Run SRS §6.2 over one synchronised read from the wearables.
+
+    This is the entry point the three models feed once they are trained:
+    XGBoost over the glove's IMU, CNN+LSTM over the glasses' microphone and
+    YOLOv8 over its camera. It takes scores rather than frames so a model
+    can move between firmware, phone and server without this contract
+    changing (SRS §6.3 splits them across exactly that boundary).
+
+    A read with no modality at all is rejected. Scoring it would mean
+    inventing a number for a moment nothing observed, and that number would
+    then be smoothed into every reading after it.
+    """
+    scores = threat_models.ModalityScores(
+        motion=payload.motion_score,
+        audio=payload.audio_score,
+        vision=payload.vision_score,
+        weapon_confidence=payload.weapon_confidence,
+        heart_rate_bpm=payload.heart_rate_bpm,
+    )
+    if not scores.has_any:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "No modality reported. Send at least one of motion_score, "
+                "audio_score or vision_score."
+            ),
+        )
+
+    fused = threat_fusion.fuse_available(
+        motion=scores.motion, audio=scores.audio, vision=scores.vision
+    )
+    # The pulse is a nudge, not a verdict -- see `heart_rate_boost`.
+    fused = min(1.0, fused + threat_fusion.heart_rate_boost(scores.heart_rate_bpm))
+
+    if payload.location:
+        session.add(
+            Location(
+                user_id=current_user.id,
+                device_id=payload.device_id,
+                lat=float(payload.location.get("latitude", 0.0)),
+                lng=float(payload.location.get("longitude", 0.0)),
+                accuracy=payload.location.get("accuracy"),
+            )
+        )
+        await session.commit()
+
+    auto_sos = await _auto_dispatch_if_threatened(
+        session=session,
+        settings=settings,
+        user_id=current_user.id,
+        raw_score=fused,
+        weapon_confidence=scores.weapon_confidence,
+        in_high_risk_zone=payload.in_high_risk_zone,
+    )
+
+    _latest_scores[current_user.id] = {
+        "score": round(fused * 100, 2),
+        "level": _to_level(fused * 100),
+        "updated_at": (payload.timestamp or datetime.utcnow()).isoformat(),
+    }
+
+    return {
+        "fused_score": round(fused, 4),
+        # Which sensors this verdict actually rests on. A score fused from
+        # the glove alone means something different from one that also saw
+        # and heard, and a reader cannot tell them apart from the number.
+        "modalities_used": scores.reporting_modalities,
+        "live_score": _latest_scores[current_user.id],
+        "auto_sos": auto_sos,
     }

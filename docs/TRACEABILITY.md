@@ -102,6 +102,7 @@ because nothing else would catch them drifting.
 | §10.1 Flutter coverage > 70% | unmeasured | 587 tests pass; line coverage not measured |
 | §10.2 TC-EMG-01 auto-alert | done | `tests/test_threat_fusion.py` |
 | §10.2 TC-EMG-05 deduplication | done | `tests/test_threat_fusion.py` |
+| §6.1 three-model pipeline | scaffolded | `fastapi_app/services/threat_models.py` — contract, registry and `POST /alerts/analyze` ready; **no model trained**, so nothing produces these scores yet |
 
 ---
 
@@ -138,6 +139,60 @@ fired. Found by the boundary test, fixed with an epsilon.
   describes.
 
 ---
+
+## The ML pipeline — ready, not running
+
+The product design is three models feeding SRS §6.2's fusion:
+
+| Modality | Algorithm | Device | Sensor |
+|----------|-----------|--------|--------|
+| motion | XGBoost | glove | MPU6050 accelerometer + gyroscope |
+| audio | CNN + LSTM | glasses | microphone |
+| vision | YOLOv8 | glasses | camera (also yields `weapon_confidence`) |
+
+**No model is trained.** `POST /api/v1/alerts/analyze` accepts per-model
+scores and runs the full §6.2 pipeline — fuse, smooth, boost, threshold,
+deduplicate, dispatch — so training a model is a configuration change rather
+than an integration project. `GET /api/v1/alerts/models` reports the state
+honestly, including `scores_are_caller_supplied: true` while nothing is
+trained: every score the backend currently sees came from a caller, not from
+SafeHer's own inference.
+
+The endpoint takes *scores*, not frames, deliberately. SRS §6.3 splits
+inference across firmware and GPU-enabled Cloud Run, and an ESP32-WROOM-32E
+cannot run YOLOv8 whatever the ambition — so a model can move between
+firmware, phone and server without this contract changing.
+
+**Two deviations from the SRS, recorded rather than assumed:**
+
+- **Heart rate is not in the spec.** §6.2 has no weight for it and the §9.1
+  glove BOM has no pulse sensor; the "heartbeat" in §7.3 is a 30-second MQTT
+  keepalive. It is carried as a small additive booster above 120 bpm, not a
+  fourth fusion weight, so §6.2's arithmetic stays exactly as specified. An
+  elevated pulse is evidence of running for a bus, so it can nudge a score
+  other sensors already find alarming and cannot raise the alarm alone.
+- **A missing modality is excluded, not zeroed.** The glasses can be off
+  while the glove transmits. Zero-filling caps the achievable score at 0.75
+  with no camera, and at 0.40 with the glove alone — which would silently
+  disable auto-SOS. Weights are renormalised over whichever sensors
+  reported.
+
+## Notifying police or help centres — not built
+
+`GET /api/v1/safety/nearby` finds real nearby police stations and hospitals.
+Nothing **notifies** them, and `routers/journeys.py` states this explicitly.
+
+This is deliberate and should stay deliberate until a real integration
+exists. A safety app that implies it has called for help when it has not is
+worse than one that never claimed to — a woman who believes police are
+already coming may not call them herself. The same reasoning stopped a
+Firebase campaign on 2026-08-16 that broadcast exactly that claim.
+
+What it needs: an actual dispatch channel with someone accountable at the
+other end. There is no public API for police dispatch in India; ERSS-112 has
+no third-party integration. Realistic near-term options are a monitored
+helpline mailbox or an SMS/voice channel to a partner NGO — each of which is
+an agreement first and code second.
 
 ## What is genuinely not built
 

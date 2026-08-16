@@ -250,6 +250,38 @@ class ProcessThreatRequest(BaseModel):
     location: Optional[dict[str, float]] = None
 
 
+class ModelScoresRequest(BaseModel):
+    """One synchronised read from the wearables' models (SRS §6.2).
+
+    Every modality is optional and defaults to `None`, never 0.0. A missing
+    sensor is excluded from the fusion and the remaining weights are
+    renormalised; a zero would claim the sensor looked and saw calm, which
+    with no camera attached would cap the achievable score at 0.75 and
+    quietly disable the automatic alarm.
+    """
+
+    device_id: Optional[str] = None
+    timestamp: Optional[datetime] = None
+
+    motion_score: Optional[float] = Field(
+        default=None, ge=0.0, le=1.0, description="XGBoost over glove accel + gyro"
+    )
+    audio_score: Optional[float] = Field(
+        default=None, ge=0.0, le=1.0, description="CNN+LSTM over glasses microphone"
+    )
+    vision_score: Optional[float] = Field(
+        default=None, ge=0.0, le=1.0, description="YOLOv8 over glasses camera"
+    )
+    weapon_confidence: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="YOLOv8 weapon class; boosts above 0.70 per §6.2"
+    )
+    heart_rate_bpm: Optional[float] = Field(
+        default=None, ge=20.0, le=250.0, description="Glove pulse sensor; a booster, not a weight"
+    )
+    location: Optional[dict[str, float]] = None
+    in_high_risk_zone: bool = False
+
+
 class HeartbeatRequest(BaseModel):
     timestamp: datetime
     threat_score: float = Field(ge=0.0, le=100.0)
