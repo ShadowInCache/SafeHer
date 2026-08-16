@@ -30,6 +30,10 @@ class UserUpdate(BaseModel):
     sms_notifications: Optional[bool] = None
     email_notifications: Optional[bool] = None
     location_sharing: Optional[bool] = None
+    # SRS FR-EMG-02. Bounded because a threshold of 0 would auto-dispatch on
+    # every reading, and one above 1.0 could never be reached -- silently
+    # disabling the alarm the setting exists to control.
+    threat_threshold: Optional[float] = Field(default=None, ge=0.05, le=1.0)
 
 
 class UserPublic(UserBase):
@@ -42,6 +46,8 @@ class UserPublic(UserBase):
     email_notifications: bool = True
     location_sharing: bool = True
     is_verified: bool = True
+    # SRS FR-EMG-02 -- the score at which SafeHer raises the alarm unasked.
+    threat_threshold: float = 0.75
     deletion_requested_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None

@@ -30,10 +30,18 @@ class ProfileRepositoryRemote implements ProfileRepository {
   }
 
   @override
-  Future<UserProfile> updateProfile({String? name, String? phone}) async {
+  Future<UserProfile> updateProfile({
+    String? name,
+    String? phone,
+    double? threatThreshold,
+  }) async {
     final response = await _apiClient.dio.patch(
       '/users/me',
-      data: {if (name != null) 'full_name': name, if (phone != null) 'phone': phone},
+      data: {
+        if (name != null) 'full_name': name,
+        if (phone != null) 'phone': phone,
+        if (threatThreshold != null) 'threat_threshold': threatThreshold,
+      },
     );
     return _fromJson(response.data as Map<String, dynamic>);
   }

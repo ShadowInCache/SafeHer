@@ -18,7 +18,11 @@ class ProfileRepositoryMock implements ProfileRepository {
   }
 
   @override
-  Future<UserProfile> updateProfile({String? name, String? phone}) async {
+  Future<UserProfile> updateProfile({
+    String? name,
+    String? phone,
+    double? threatThreshold,
+  }) async {
     await Future.delayed(const Duration(milliseconds: 200));
     _profile = UserProfile(
       name: name ?? _profile.name,

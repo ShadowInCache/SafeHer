@@ -51,6 +51,7 @@ async def update_me(
         sms_notifications=payload.sms_notifications,
         email_notifications=payload.email_notifications,
         location_sharing=payload.location_sharing,
+        threat_threshold=payload.threat_threshold,
     )
     return UserPublic.model_validate(updated)
 

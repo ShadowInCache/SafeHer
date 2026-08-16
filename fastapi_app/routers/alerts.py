@@ -1,5 +1,6 @@
+import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, status
@@ -20,13 +21,108 @@ from fastapi_app.schemas import (
     UserPublic,
 )
 from fastapi_app.security import get_current_user
+from fastapi_app.services import threat_fusion
 from fastapi_app.services.emergency_dispatch import dispatch_to_contacts
 from fastapi_app.services.notifications import send_fcm_notification
 from fastapi_app.services.processor_client import process_threat
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/v1/alerts", tags=["alerts"])
 
 _latest_scores: dict[str, dict[str, Any]] = {}
+
+# SRS §6.2 smoothing needs the previous smoothed value. In memory, like
+# `_latest_scores`: losing it on restart costs one unsmoothed reading, which
+# errs towards raising an alarm rather than missing one. The deduplication
+# window is deliberately *not* kept here -- that one is read from the
+# database, because forgetting it would mean alerting every contact twice.
+_smoothed_scores: dict[str, float] = {}
+
+
+async def _auto_dispatch_if_threatened(
+    *,
+    session: AsyncSession,
+    settings: Settings,
+    user_id: str,
+    raw_score: float,
+    incident: Optional[Incident] = None,
+    weapon_confidence: float = 0.0,
+) -> dict[str, Any]:
+    """SRS FR-EMG-02 -- raise the alarm without being asked.
+
+    Until this existed, a detected threat pushed a notification to the
+    user's *own* phone and stopped there. Her emergency contacts were never
+    told unless she pressed SOS herself, which is precisely the case
+    FR-EMG-02 covers: the situations where she cannot.
+    """
+    owner = await session.get(User, user_id)
+    if owner is None:
+        return {"triggered": False, "reason": "no such user"}
+
+    threshold = getattr(owner, "threat_threshold", None) or threat_fusion.DEFAULT_THREAT_THRESHOLD
+
+    # The window is measured from the last alert SafeHer raised by itself.
+    # A manual SOS is deliberately not counted: if she pressed the button
+    # after an automatic alert, that is a second, deliberate call for help.
+    last_auto = await session.scalar(
+        select(Incident.created_at)
+        .where(Incident.user_id == user_id, Incident.auto_dispatched.is_(True))
+        .order_by(Incident.created_at.desc())
+        .limit(1)
+    )
+
+    decision = threat_fusion.evaluate(
+        raw_score=raw_score,
+        previous_smoothed=_smoothed_scores.get(user_id),
+        threshold=threshold,
+        weapon_confidence=weapon_confidence,
+        last_alert_at=last_auto,
+    )
+    _smoothed_scores[user_id] = decision.smoothed_score
+
+    if not decision.should_trigger:
+        if decision.suppressed_by_dedup:
+            logger.info("Auto-SOS suppressed for %s: %s", user_id, decision.reason)
+        return {
+            "triggered": False,
+            "reason": decision.reason,
+            "score": round(decision.boosted_score, 3),
+            "threshold": threshold,
+        }
+
+    if incident is None:
+        incident = Incident(
+            user_id=user_id,
+            title="Automatic SOS",
+            description=(
+                "Raised automatically by SafeHer: " + decision.reason
+            ),
+            threat_level="critical",
+        )
+        session.add(incident)
+
+    incident.auto_dispatched = True
+    session.add(incident)
+    await session.commit()
+    await session.refresh(incident)
+
+    logger.warning("Auto-SOS dispatched for %s: %s", user_id, decision.reason)
+    report = await dispatch_to_contacts(
+        session=session,
+        settings=settings,
+        user=owner,
+        incident_id=incident.id,
+        evidence_url=incident.evidence_url,
+    )
+    return {
+        "triggered": True,
+        "reason": decision.reason,
+        "score": round(decision.boosted_score, 3),
+        "threshold": threshold,
+        "incident_id": incident.id,
+        "contacts_notified": report.contacts_notified,
+    }
 
 
 def _to_level(score: float) -> str:
@@ -126,10 +222,23 @@ async def process_threat_alert(
         "updated_at": datetime.utcnow().isoformat(),
     }
 
+    # SRS FR-EMG-02. The push above reaches the user's own phone, which is
+    # no help if she cannot look at it -- this is what reaches the people
+    # who can come. `processor_confidence` is already on §6.2's 0-1 scale.
+    auto_sos = await _auto_dispatch_if_threatened(
+        session=session,
+        settings=settings,
+        user_id=current_user.id,
+        raw_score=processor_confidence,
+        incident=incident if threat_detected else None,
+        weapon_confidence=float(processor_result.get("weapon_confidence", 0.0) or 0.0),
+    )
+
     return {
         "processor": processor_result,
         "threat_detected": threat_detected,
         "live_score": _latest_scores[current_user.id],
+        "auto_sos": auto_sos,
     }
 
 
@@ -260,6 +369,7 @@ async def submit_heartbeat(
     payload: HeartbeatRequest,
     current_user: UserPublic = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
 ):
     location = payload.location
     lat = float(location.get("latitude", 0.0))
@@ -283,7 +393,23 @@ async def submit_heartbeat(
         "updated_at": payload.timestamp.isoformat(),
     }
 
-    return {"status": "accepted", "score": payload.threat_score, "level": level}
+    # SRS FR-EMG-02, for when firmware exists to post these. `threat_score`
+    # is validated 0-100 on this endpoint while §6.2 works in 0-1, so it is
+    # normalised here rather than letting a 100 read as far above threshold
+    # and a 0.8 read as far below it.
+    auto_sos = await _auto_dispatch_if_threatened(
+        session=session,
+        settings=settings,
+        user_id=current_user.id,
+        raw_score=payload.threat_score / 100.0,
+    )
+
+    return {
+        "status": "accepted",
+        "score": payload.threat_score,
+        "level": level,
+        "auto_sos": auto_sos,
+    }
 
 
 @router.get("/live")

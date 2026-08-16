@@ -58,3 +58,7 @@ secrets/
 *firebase-adminsdk*.json
 *service-account*.json
 *serviceaccount*.json
+
+# Coverage output (SRS §10.1 measurement; regenerate with pytest --cov)
+.coverage
+htmlcov/

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,10 +9,16 @@ import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/components/cards/sa_card.dart';
+import '../../data/profile_providers.dart';
 
 /// Profile > Preferences — AI sensitivity, countdown length, auto-record,
 /// and appearance, all persisted immediately on change via
 /// [AppPreferences].
+///
+/// The threat threshold is the exception: it is also sent to the server.
+/// SafeHer decides whether to raise an automatic alarm (SRS FR-EMG-02)
+/// backend-side, so a threshold living only in Hive was a control that
+/// moved and changed nothing.
 class ProfilePreferencesSection extends ConsumerWidget {
   const ProfilePreferencesSection({super.key});
 
@@ -48,8 +56,18 @@ class ProfilePreferencesSection extends ConsumerWidget {
                 activeColor: AppColors.violet500,
                 label: '${(prefs.threatThreshold * 100).round()}%',
                 onChanged: (value) {
+                  // Local first, so the slider never lags the finger.
                   prefsNotifier.setThreatThreshold(value);
                   ref.invalidate(appPreferencesProvider);
+                },
+                onChangeEnd: (value) {
+                  // Sent once the user lets go rather than on every frame
+                  // of the drag, which would be one PATCH per pixel.
+                  unawaited(
+                    ref
+                        .read(profileRepositoryProvider)
+                        .updateProfile(threatThreshold: value),
+                  );
                 },
               ),
               Row(

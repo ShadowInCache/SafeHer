@@ -70,7 +70,7 @@ class _FakeProfileRepository implements ProfileRepository {
   }
 
   @override
-  Future<UserProfile> updateProfile({String? name, String? phone}) => throw UnimplementedError();
+  Future<UserProfile> updateProfile({String? name, String? phone, double? threatThreshold}) => throw UnimplementedError();
 }
 
 class _FakeDeviceRepository implements DeviceRepository {

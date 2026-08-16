@@ -803,3 +803,75 @@ housekeeping, not SafeHer code. Receiving events from a device is the unbuilt
 firmware side (FR-DEV-04, FR-DEV-06) and needs real hardware to define its
 characteristics.
 
+## 2026-08-17 (second session) — full SRS audit
+
+Read `SRS.md` end to end and re-checked every row of `docs/TRACEABILITY.md`
+against the code rather than carrying the previous statuses forward. The
+audit found one requirement marked done that did not exist.
+
+### FR-EMG-02 (MUST) was recorded as done and was not implemented
+
+The traceability row pointed at `fastapi_app/routers/alerts.py`. That router
+accepted a threat score, mapped it to a colour band and stored it in a
+dictionary. Nothing compared it to a threshold. Nothing dispatched.
+
+The AI path told the wrong person. `/process-threat` created an incident,
+broadcast a WebSocket event and pushed a notification to the user's *own*
+phone — which is no help to someone who cannot look at it. Her emergency
+contacts were never told unless she pressed SOS herself, which is exactly
+the situation FR-EMG-02 exists to cover: "zero user interaction required".
+
+Compounding it, the app has shipped a **threat threshold slider** on the
+Profile screen that wrote to Hive and was read by nothing. A user could set
+it to 60% and reasonably believe SafeHer would raise the alarm for her.
+That is the same category of problem as the Firebase campaign stopped
+yesterday — a promise the software does not keep.
+
+**Built.** `fastapi_app/services/threat_fusion.py` implements §6.2 in full:
+the 0.40/0.35/0.25 fusion weights, 0.30/0.70 EMA smoothing, the three
+additive context boosters, the threshold comparison and the deduplication
+window. The decision now runs on both paths that carry a score. The
+threshold is stored per user (`users.threat_threshold`, migration 0011,
+default 0.75) and the Profile slider syncs to it on release. Incidents the
+system raises are marked `auto_dispatched`, which is what the dedup window
+is measured against — durable, so a restart mid-emergency cannot let a
+second alert reach every contact.
+
+### A float comparison would have suppressed a boundary alert
+
+Smoothing a constant 0.75 gives 0.7499999999999999, because 0.30x + 0.70x is
+not exactly x in binary floating point. Compared with `>=` that reads as
+*below* a 0.75 threshold, so a sustained threat sitting exactly at the
+user's own setting would never have fired. Found by the boundary test,
+fixed with an epsilon.
+
+### Two contradictions inside the SRS itself
+
+Recorded rather than silently resolved:
+
+* The deduplication window is **120s** in §6.2 but **60s** in §8.2 and
+  TC-EMG-05. The longer one is implemented — a suppressed duplicate is a
+  nuisance, a second dispatch spams every contact of a woman already in an
+  emergency.
+* §6.2 writes the night window as `hour in range(22, 6)`, which is empty in
+  Python and would boost nothing. Implemented as the 22:00–05:59 window it
+  plainly describes.
+
+### Other corrections to the matrix
+
+* **FR-DEV-01 / FR-DEV-02** now record that BLE scan, connect and service
+  discovery were verified on real hardware, and that the **6-digit PIN the
+  SRS specifies does not exist** — the previous note ("only against a fake
+  service") was both outdated and silent about the missing mechanism.
+* **FR-EMG-04** now says email *and* push are verified against live
+  services; only SMS remains unconfigured.
+* **§10.1 coverage targets** are tracked for the first time. Backend line
+  coverage is **62%** against a stated target of 80%. That gap is now
+  written down rather than unmeasured.
+
+### State
+
+245 backend tests pass (up from 224), 587 Flutter tests pass, `flutter
+analyze` clean. Three requirements remain genuinely unbuilt, all needing
+hardware: FR-DEV-04, FR-DEV-06, FR-MON-02.
+

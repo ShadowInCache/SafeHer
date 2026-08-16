@@ -47,7 +47,10 @@ async def update(
     sms_notifications: Optional[bool] = None,
     email_notifications: Optional[bool] = None,
     location_sharing: Optional[bool] = None,
+    threat_threshold: Optional[float] = None,
 ) -> User:
+    if threat_threshold is not None:
+        user.threat_threshold = threat_threshold
     if full_name is not None:
         user.full_name = full_name
     if phone is not None:

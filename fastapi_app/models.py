@@ -29,6 +29,11 @@ class User(Base):
     # SRS FR-AUTH-01 -- account is unverified until the emailed OTP is entered.
     is_verified = Column(Boolean, nullable=False, default=False)
 
+    # SRS FR-EMG-02 -- the smoothed threat score at which SafeHer raises the
+    # alarm without being asked. Lives here rather than only in the app: the
+    # decision is taken server-side, so the preference has to be too.
+    threat_threshold = Column(Float, nullable=False, default=0.75, server_default="0.75")
+
     # SRS FR-AUTH-07 -- 5 failed logins trigger a timed lockout.
     failed_login_attempts = Column(Integer, nullable=False, default=0)
     locked_until = Column(DateTime, nullable=True)
@@ -81,6 +86,11 @@ class Incident(Base):
     # shown -- it must never be mistaken for a human account or evidence.
     ai_summary = Column(Text, nullable=True)
     ai_summary_generated_at = Column(DateTime, nullable=True)
+
+    # SRS FR-EMG-02 -- raised by the system, not by a tap. Durable because
+    # the §6.2 deduplication window is measured against it, and a window
+    # held only in memory would not survive a restart mid-emergency.
+    auto_dispatched = Column(Boolean, nullable=False, default=False, server_default="0")
 
     created_at = Column(DateTime, nullable=False, default=_utcnow)
     updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
