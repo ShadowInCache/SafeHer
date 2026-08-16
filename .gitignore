@@ -50,3 +50,11 @@ mobile/.dart_tool/
 # of people in danger and must never enter version control regardless.
 evidence_store/
 *.enc
+
+# Service account private keys. A Firebase adminsdk JSON is a full
+# server-side credential for the project -- it was committed once, by a
+# `git add -A` that swept up a file dropped in the repo root.
+secrets/
+*firebase-adminsdk*.json
+*service-account*.json
+*serviceaccount*.json
