@@ -22,11 +22,8 @@ class Settings(BaseSettings):
     enable_mqtt_worker: bool = True
     event_processor_url: str = "http://localhost:8080"
 
-    # Database / Supabase
+    # Database
     database_url: str = "sqlite:///./safeher.db"
-    supabase_url: Optional[str] = None
-    supabase_publishable_key: Optional[str] = None
-    supabase_secret_key: Optional[str] = None
 
     # Redis / MQTT
     redis_host: str = "localhost"

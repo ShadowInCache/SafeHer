@@ -29,7 +29,11 @@ connect and [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full folder tou
   build), not a shortcut.
 - **Supabase is an archive layer, not the primary datastore** — Postgres/SQLite via
   SQLAlchemy is the transactional source of truth; Supabase's `events` table
-  (`supabase_setup.sql`) is a parallel, append-only archive.
+  (`supabase_setup.sql`) is a parallel, append-only archive. Written by
+  `deployment/docker/safeher_event_processor.py` **only**, over plain REST.
+  `fastapi_app` has no Supabase settings and no client — the `supabase`
+  package was in both requirements files and imported by nothing, and was
+  removed on 2026-08-17.
 
 - **Firebase Auth is the credential collector; `fastapi_app` owns the account**
   (2026-08-14). Every Firebase sign-in is exchanged for a backend JWT at

@@ -35,8 +35,22 @@ HTTP_PORT = int(os.getenv('HTTP_PORT', 8080))
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_PUBLISHABLE_KEY = os.getenv('SUPABASE_PUBLISHABLE_KEY')
 SUPABASE_SECRET_KEY = os.getenv('SUPABASE_SECRET_KEY')
-# Use the appropriate key - secret key for server-side, publishable for client-side
-SUPABASE_API_KEY = SUPABASE_SECRET_KEY or SUPABASE_PUBLISHABLE_KEY
+# Server-side only, so the secret (service_role) key is the correct one.
+#
+# This used to fall back to the publishable key. That key is meant to be
+# handed to clients, and `supabase_setup.sql` now denies it by default --
+# the events table holds raw safety data, and a policy readable by anyone
+# holding a distributable key is not an acceptable default. So the fallback
+# would produce an archiver that starts cleanly, reports itself connected,
+# and has every insert rejected. Requiring the secret key makes a
+# misconfiguration loud at boot instead of silent at write time.
+SUPABASE_API_KEY = SUPABASE_SECRET_KEY
+if not SUPABASE_SECRET_KEY and SUPABASE_PUBLISHABLE_KEY:
+    logger.warning(
+        "SUPABASE_PUBLISHABLE_KEY is set but SUPABASE_SECRET_KEY is not. "
+        "The events archive needs the secret (service_role) key; archiving "
+        "is disabled. Redis real-time processing is unaffected."
+    )
 
 # Supabase REST API endpoint
 SUPABASE_REST_URL = f"{SUPABASE_URL}/rest/v1" if SUPABASE_URL else None

@@ -20,7 +20,6 @@ actually needs each one.
 | `asyncpg` | Postgres async driver (prod) |
 | `asyncio-mqtt` | Device telemetry ingestion (`fastapi_app/mqtt_service.py`) |
 | `cloudinary` | Signed direct-upload URLs for incident evidence |
-| `supabase` | Events-archive client |
 | `google-auth` | Verifies Firebase ID tokens for `/auth/firebase/exchange` |
 | `python-dotenv` | Loads `.env` in `app.py` |
 | `requests` | Sync HTTP, used for the startup dependency-reachability check |

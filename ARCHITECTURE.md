@@ -39,7 +39,7 @@ flowchart TB
     Motion & Voice & Weapon --> Fusion
     Fusion -- "POST /api/v1/alerts/process-threat" --> Routers
     Routers <--> DB
-    Routers -- "archive events" --> Supabase
+    Processor -- "archive events (REST)" --> Supabase
     Routers -- "push on high threat" --> FCM
     Routers <--> WS
     WS -- "/api/v1/ws/alerts/{user_id}" --> Mobile
@@ -95,7 +95,7 @@ deletion. Full detail: [API.md](API.md#authentication), [SECURITY.md](SECURITY.m
 | Store | Holds | Written by |
 |---|---|---|
 | Postgres (prod) / SQLite (dev) | Users, incidents, devices, locations, media refs, notification logs, FCM tokens, emergency contacts, safe journeys, hashed safety PINs, safety-trigger preferences | `fastapi_app/repositories/*` via SQLAlchemy, schema owned by `alembic/` |
-| Supabase (`events` table, `supabase_setup.sql`) | Append-only archive of raw events, parallel to the transactional DB, not a replacement for it | `fastapi_app` (see `config.py` Supabase settings) |
+| Supabase (`events` table, `supabase_setup.sql`) | Append-only archive of raw events, parallel to the transactional DB, not a replacement for it | `deployment/docker/safeher_event_processor.py` **only**, over plain REST. `fastapi_app` never touches it — it has no Supabase settings and no client. |
 | Redis | Real-time pub/sub for the event-processing pipeline (`deployment/docker/docker-compose.yml`) | `deployment/docker/safeher_event_processor.py` |
 | Hive (mobile, on-device) | Auth/session state, onboarding flags, offline action queue | `mobile/lib/core/local/`, `mobile/lib/core/offline/` |
 | Mosquitto (MQTT broker) | Transport only, no persistence | Devices publish, `fastapi_app/mqtt_service.py` subscribes |

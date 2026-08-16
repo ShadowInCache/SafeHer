@@ -51,7 +51,6 @@ soundfile==0.12.1
 python-dotenv==1.0.0
 requests==2.31.0
 asyncio-mqtt==0.13.0
-supabase==2.0.2  # Cloud database REST API
 google-auth==2.38.0
 
 # Data handling

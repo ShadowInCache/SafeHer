@@ -60,7 +60,7 @@ This repo holds three things that share history but not a runtime:
 | Layer | Tech |
 |---|---|
 | Backend | Python 3, FastAPI, SQLAlchemy 2.0 (async), Alembic, python-jose, passlib |
-| Backend datastores | Postgres (prod) / SQLite (dev), Redis, Supabase (events archive) |
+| Backend datastores | Postgres (prod) / SQLite (dev), Redis. Supabase holds an optional events archive written by the event processor only — the API itself never reads or writes it. |
 | Realtime transport | MQTT (Mosquitto), WebSocket |
 | Mobile | Flutter, Riverpod (codegen), GoRouter, Hive, Dio, golden_toolkit |
 | ML | XGBoost, scikit-learn, PyTorch/ultralytics (weapon detection), librosa (voice) |
@@ -75,7 +75,7 @@ Full list with rationale: [DEPENDENCIES.md](DEPENDENCIES.md).
 flowchart LR
     Devices["ESP32 glove / glasses"] -- MQTT --> Backend["fastapi_app/"]
     Backend <--> DB[("Postgres/SQLite")]
-    Backend --> Supabase[("Supabase archive")]
+    Processor --> Supabase[("Supabase archive")]
     Backend -- WebSocket + FCM --> Mobile["mobile/ (Flutter)"]
     Mobile -- REST, JWT --> Backend
     CloudFn["cloud_functions/\n(motion/voice/weapon/fusion)"] --> Backend
@@ -226,7 +226,7 @@ SafeHer Team (see `git log` for current contributors).
 
 ## Acknowledgements
 
-Built on FastAPI, Flutter/Riverpod, SQLAlchemy, XGBoost, and Supabase. Historical
+Built on FastAPI, Flutter/Riverpod, SQLAlchemy and XGBoost. Historical
 project reports and an earlier architecture snapshot are preserved in
 [docs/archive/](docs/archive/) for context on how this codebase evolved.
 
