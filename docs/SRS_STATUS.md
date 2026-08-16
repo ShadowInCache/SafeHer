@@ -38,8 +38,8 @@ Beyond the SRS's four, the repo also runs:
 
 | Check | Last measured | Status |
 |-------|---------------|--------|
-| `flutter test` (full suite) | 560 passing, 0 failing | ✅ |
-| `pytest tests/` (in-process suites) | 115 passing, 0 failing | ✅ |
+| `flutter test` (full suite) | 564 passing, 0 failing | ✅ |
+| `pytest tests/` (in-process suites) | 118 passing, 0 failing | ✅ |
 | Alembic from empty → head → downgrade → head | 14 migrations, reversible | ✅ |
 
 Coverage by area — the thin spots are where next session's tests should go:
@@ -571,3 +571,32 @@ a different situation than the app's — and the first where the leak reached
 outside the process.
 
 Totals: 560 Flutter tests, 115 backend tests, all green.
+
+### 2026-08-15 — the contact an SOS could not reach
+
+Caught by the project owner, not by a test: with SMS unconfigured, email is
+the only channel that reaches an ordinary person — so a contact saved with
+only a phone number could not be reached at all. The app said nothing, and
+there was no way to add an address afterwards. A user would have seen a
+normal saved contact and believed her sister would be alerted.
+
+Fixed in three parts:
+
+- **`GET /api/v1/alerts/channels`.** The client cannot infer which channels
+  work; that depends on server-side credentials it never sees. The endpoint
+  reports `sms`/`email`/`push` plus `email_requires_address` — true when
+  email is the only channel reaching a contact, so an address is the
+  difference between reachable and not.
+- **A warning that names the cause and the remedy**, shown only on contacts
+  that genuinely cannot be reached. With SMS available a phone number is
+  enough and no warning appears; while the channel answer is loading the UI
+  assumes everything works, so nothing flashes and retracts.
+- **Contacts are editable.** Tapping a card reopens the sheet prefilled, so
+  adding a missing address is one field.
+
+Two test-fixture bugs surfaced on the way: the fake contacts repository
+stored whatever list it was handed, so a `const` list made every mutation
+throw inside an async gap and vanish; and the channels provider resolves a
+frame after the list mounts, which a single pump misses.
+
+Totals: 564 Flutter tests, 118 backend tests, all green.
