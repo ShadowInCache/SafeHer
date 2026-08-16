@@ -33,5 +33,6 @@ def fcm_credentials(settings) -> FcmCredentials:
     """
     return FcmCredentials(
         service_account_path=settings.fcm_service_account_file,
+        service_account_json=settings.fcm_service_account_json,
         project_id=settings.firebase_project_id,
     )

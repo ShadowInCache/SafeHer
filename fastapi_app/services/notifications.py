@@ -22,6 +22,7 @@ rejects numbers, which is an easy way to send a push that silently 400s.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 from pathlib import Path
@@ -54,39 +55,95 @@ class FcmCredentials:
     emergency fan-out.
     """
 
-    def __init__(self, *, service_account_path: Optional[str], project_id: Optional[str]) -> None:
+    def __init__(
+        self,
+        *,
+        service_account_path: Optional[str] = None,
+        service_account_json: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ) -> None:
         self._path = service_account_path
+        self._json = service_account_json
         self._project_id = project_id
         self._credentials = None
+        self._info_cache: Optional[Dict[str, Any]] = None
+
+    def _info(self) -> Optional[Dict[str, Any]]:
+        """The service account as a dict, from whichever source exists.
+
+        A path works on a developer machine, where the file is gitignored and
+        stays out of the repository. It does not work on a host with an
+        ephemeral filesystem and nothing to copy the file from -- which is
+        every managed platform -- so the same credential also travels as an
+        environment variable.
+
+        The variable is accepted raw or base64-encoded. Raw is readable in a
+        dashboard; base64 survives any UI that reflows or trims the private
+        key's embedded newlines, which is a corruption that surfaces much
+        later as an unhelpful signature error.
+        """
+        if self._info_cache is not None:
+            return self._info_cache
+
+        raw = (self._json or "").strip()
+        if raw:
+            try:
+                self._info_cache = json.loads(raw)
+            except ValueError:
+                try:
+                    self._info_cache = json.loads(base64.b64decode(raw).decode("utf-8"))
+                except Exception:
+                    # Deliberately says nothing about the value itself: this
+                    # is a private key, and the log is the wrong place for
+                    # even a fragment of it.
+                    logger.error(
+                        "FCM_SERVICE_ACCOUNT_JSON is set but is neither valid JSON "
+                        "nor valid base64-encoded JSON; push is disabled."
+                    )
+                    return None
+            return self._info_cache
+
+        if self._path and Path(self._path).is_file():
+            with open(self._path, encoding="utf-8") as handle:
+                self._info_cache = json.load(handle)
+            return self._info_cache
+
+        return None
 
     @property
     def is_configured(self) -> bool:
-        return bool(self._path and Path(self._path).is_file())
+        info = self._info()
+        # A file or variable that exists but is missing the fields Google
+        # needs is not configured, it is misconfigured -- and reporting it as
+        # configured would turn that into a failure inside a dispatch.
+        return bool(info and info.get("private_key") and info.get("client_email"))
 
     @property
     def project_id(self) -> str:
         if self._project_id:
             return self._project_id
-        # The service account file names its own project, so a separate
-        # setting is a convenience rather than a requirement.
-        with open(self._path, encoding="utf-8") as handle:
-            return json.load(handle)["project_id"]
+        # The service account names its own project, so a separate setting is
+        # a convenience rather than a requirement.
+        info = self._info() or {}
+        return info["project_id"]
 
     def _load(self):
         if self._credentials is None:
             from google.oauth2 import service_account
 
-            self._credentials = service_account.Credentials.from_service_account_file(
-                self._path, scopes=[FCM_SCOPE]
+            self._credentials = service_account.Credentials.from_service_account_info(
+                self._info(), scopes=[FCM_SCOPE]
             )
         return self._credentials
 
     def access_token(self) -> str:
         if not self.is_configured:
             raise FcmNotConfigured(
-                "FCM needs a service account JSON. Firebase Console -> Project "
+                "FCM needs a service account. Firebase Console -> Project "
                 "Settings -> Service Accounts -> Generate new private key, then "
-                "set FCM_SERVICE_ACCOUNT_FILE."
+                "either set FCM_SERVICE_ACCOUNT_FILE to the path (local "
+                "development) or paste the file's contents into "
+                "FCM_SERVICE_ACCOUNT_JSON (any deployed host)."
             )
         from google.auth.transport.requests import Request
 

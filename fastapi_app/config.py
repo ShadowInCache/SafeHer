@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     # its endpoint now 404s, so fcm_server_key is kept only so an existing
     # .env does not fail to load -- it is read by nothing.
     fcm_service_account_file: Optional[str] = None
+    # The same credential as the file above, carried as a value instead of
+    # a path -- the only form that works on a host with an ephemeral
+    # filesystem. Accepts raw JSON or base64. Takes precedence when both
+    # are set, so a deployed environment cannot be silently overridden by
+    # a stale path inherited from a developer's .env.
+    fcm_service_account_json: Optional[str] = None
     fcm_server_key: Optional[str] = None
     # SMS. Note that OneSignal is not an alternative here: its free-tier
     # SMS trial works by connecting your own Twilio account, and its paid
