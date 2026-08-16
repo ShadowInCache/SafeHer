@@ -950,3 +950,55 @@ summary, a timeline, location and **audio** — not video.
 
 266 backend tests pass (up from 245), 587 Flutter tests pass, analyze clean.
 
+## 2026-08-17 (fourth session) — video evidence
+
+Chosen as the next build because it was the single blocker sitting under two
+goals at once: "video attached to the report" was false without it, and
+YOLOv8 had no input path even in principle — the weapon model had nowhere to
+read frames from.
+
+### Built
+
+`video_recorder.dart` / `_io` / `_stub` mirror the audio recorder's shape,
+including the conditional export that keeps `dart:io` out of the web build.
+Video records alongside audio during an SOS and uploads to the same
+AES-256-GCM evidence store; the backend already accepted `video/mp4`.
+
+### The rule the design is built around
+
+**Video is captured in addition to audio, never instead of it.** A phone in
+a pocket films a pocket — the reason audio was built first and alone, and
+still true. So a camera that cannot open costs nothing:
+
+* Its failure is swallowed rather than surfaced. There is no action a user
+  could usefully take about a camera permission mid-emergency.
+* It never touches the audio recorder's state, so a denied camera cannot be
+  mistaken for a denied microphone.
+* `enableAudio: false` on the camera controller, because the audio recorder
+  already holds the microphone and two sessions competing for it ends with
+  one failing — and the one that must not fail is audio.
+* Audio uploads first. If the connection dies partway, the recording that
+  works regardless of where the phone was is the one already on the server.
+* The server caps evidence at 25 MB, roughly a minute at this preset, so an
+  overlong video degrades to a missing video rather than a lost recording.
+
+A test pins the property directly: a camera that throws on `start` leaves
+the audio path untouched.
+
+### Corrected while testing
+
+The first version of the video test double returned bytes from `stop()` even
+when nothing had been recording. The real implementation returns null
+correctly; the double was wrong, and a double that lenient would have let a
+genuine regression through. Fixed to mirror the real contract.
+
+### Still true
+
+The camera here is the *phone's*, not the glasses'. Video only helps when
+the lens happens to be pointed at something, which is why FR-EMG-06 is now
+recorded as **partial** rather than done. The glasses remain unbuilt.
+
+### State
+
+596 Flutter tests pass (up from 587), 266 backend tests pass, analyze clean.
+

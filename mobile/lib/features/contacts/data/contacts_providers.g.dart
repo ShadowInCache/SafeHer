@@ -48,7 +48,7 @@ final alertChannelsProvider = AutoDisposeFutureProvider<AlertChannels>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef AlertChannelsRef = AutoDisposeFutureProviderRef<AlertChannels>;
-String _$contactsNotifierHash() => r'68f785697131f5f1a41466b1028f48e717f5d42f';
+String _$contactsNotifierHash() => r'a8088be372e029f454eb000c175011c747ddb6ce';
 
 /// The single source of truth for the app's emergency contacts — Settings,
 /// Emergency, Search, and Profile all watch this instead of keeping their

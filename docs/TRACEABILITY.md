@@ -60,7 +60,7 @@ stated limitation), **not built**.
 | FR-EMG-03 | done | `mobile/lib/features/emergency/presentation/emergency_screen.dart` |
 | FR-EMG-04 | partial | `fastapi_app/services/emergency_dispatch.py` — email and push both verified against live services; 3 attempts per contact per spec; **SMS unconfigured** (Twilio is paid) |
 | FR-EMG-05 | partial | `fastapi_app/services/emergency_dispatch.py` — evidence URL follows in a second email, not the alert |
-| FR-EMG-06 | done | `mobile/lib/core/evidence/evidence_recorder_io.dart` — audio; video deliberately not attempted |
+| FR-EMG-06 | partial | `mobile/lib/core/evidence/evidence_recorder_io.dart` (audio), `video_recorder_io.dart` (video) — both capture on device; the camera is the phone's, not the glasses', so video only helps when the lens happens to be pointed at something |
 | FR-EMG-07 | done | `fastapi_app/services/evidence_store.py` — AES-256-GCM |
 | FR-EMG-08 | done | `mobile/lib/features/emergency/presentation/emergency_screen.dart` |
 | FR-EMG-09 | done | `mobile/lib/core/offline/offline_queue_service.dart` |
@@ -162,6 +162,19 @@ The endpoint takes *scores*, not frames, deliberately. SRS §6.3 splits
 inference across firmware and GPU-enabled Cloud Run, and an ESP32-WROOM-32E
 cannot run YOLOv8 whatever the ambition — so a model can move between
 firmware, phone and server without this contract changing.
+
+Video capture landed on 2026-08-17: `video_recorder_io.dart` records
+alongside audio during an SOS and uploads to the same encrypted evidence
+store. It also gives YOLOv8 an input path, which did not exist before —
+until then the weapon model had nowhere to read frames from even in
+principle.
+
+Video is captured *in addition to* audio and never instead of it. A phone in
+a pocket films a pocket, which is why audio was built first and alone, and
+that has not stopped being true. So a camera that cannot open costs nothing:
+its failure is swallowed, audio uploads first, and an oversized video (the
+server caps evidence at 25 MB, about a minute at this preset) degrades to a
+missing video rather than a lost recording.
 
 **Two deviations from the SRS, recorded rather than assumed:**
 

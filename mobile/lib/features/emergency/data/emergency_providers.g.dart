@@ -64,6 +64,29 @@ final evidenceRecorderProvider = Provider<EvidenceRecorder>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef EvidenceRecorderRef = ProviderRef<EvidenceRecorder>;
+String _$videoRecorderHash() => r'b35176791f38b19ce88025553ccc109adc6223fc';
+
+/// The camera, on the same terms as the microphone above.
+///
+/// Separate from [evidenceRecorder] on purpose: video is captured in
+/// addition to audio and never instead of it, so a camera that cannot open
+/// must not be able to take the audio recorder down with it.
+///
+/// Copied from [videoRecorder].
+@ProviderFor(videoRecorder)
+final videoRecorderProvider = Provider<VideoEvidenceRecorder>.internal(
+  videoRecorder,
+  name: r'videoRecorderProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$videoRecorderHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef VideoRecorderRef = ProviderRef<VideoEvidenceRecorder>;
 String _$emergencyDispatchNotifierHash() =>
     r'25309c4c1b16dee190537c0d2bfd558e16657fc2';
 

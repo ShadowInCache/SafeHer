@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/evidence/evidence_recorder.dart';
+import '../../../core/evidence/video_recorder.dart';
 import '../../../core/local/app_preferences.dart';
 import '../../../core/location/location_providers.dart';
 import '../../../core/location/location_result.dart';
@@ -66,12 +67,18 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
   /// open because teardown failed would be a live recording the user cannot
   /// see or stop.
   late final EvidenceRecorder _recorder;
+  late final VideoEvidenceRecorder _videoRecorder;
+
+  /// Whether the camera actually opened. Reported after dispatch so the
+  /// user knows what was captured, never prompted for mid-emergency.
+  bool _hasVideo = false;
   LocationResult? _location;
 
   @override
   void initState() {
     super.initState();
     _recorder = ref.read(evidenceRecorderProvider);
+    _videoRecorder = ref.read(videoRecorderProvider);
     if (widget.autoStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _handleSosConfirmed();
@@ -188,6 +195,25 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
         });
       }),
     );
+    _startVideo();
+  }
+
+  /// Video runs alongside audio, on its own failure path.
+  ///
+  /// Deliberately does not touch `_evidence`: that state describes the audio
+  /// recording, which is the one that works wherever the phone happens to
+  /// be. A phone in a pocket films a pocket, so a camera that cannot open —
+  /// no permission, no lens, already in use — is an ordinary outcome and
+  /// must cost nothing. It is swallowed here rather than surfaced, because
+  /// there is no action the user could usefully take mid-emergency.
+  void _startVideo() {
+    unawaited(
+      _videoRecorder.start().then((_) {
+        if (mounted) setState(() => _hasVideo = true);
+      }).catchError((Object _) {
+        // No video this time. The alert and the audio are unaffected.
+      }),
+    );
   }
 
   /// Stops the recording and uploads it against the incident the alert just
@@ -198,6 +224,10 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
   /// rather than held indefinitely — the queued alert will be re-sent
   /// without it, which is honest about what was actually captured.
   Future<void> _finishRecording(String? incidentId) async {
+    // Video is settled first and independently, so that an audio path that
+    // returns early below cannot strand a camera still recording.
+    final video = await _finishVideo(incidentId);
+
     if (!_recorder.isRecording) return;
 
     if (incidentId == null) {
@@ -214,12 +244,40 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
 
     if (mounted) setState(() => _evidence = EvidenceState.uploading);
     try {
-      await ref
-          .read(evidenceRepositoryProvider)
-          .upload(incidentId: incidentId, recording: recording);
+      final repository = ref.read(evidenceRepositoryProvider);
+      await repository.upload(incidentId: incidentId, recording: recording);
+      // Audio first, then video. If the connection dies partway, the
+      // recording that works regardless of where the phone was is the one
+      // already on the server.
+      if (video != null) {
+        try {
+          await repository.upload(incidentId: incidentId, recording: video);
+        } catch (_) {
+          // The audio is saved; a failed video upload does not undo that.
+        }
+      }
       if (mounted) setState(() => _evidence = EvidenceState.saved);
     } catch (_) {
       if (mounted) setState(() => _evidence = EvidenceState.uploadFailed);
+    }
+  }
+
+  /// Stops video and returns it for upload, or null if there is none.
+  ///
+  /// A discarded alert discards the video too: an incident that was never
+  /// created has nothing to attach it to, and holding footage of someone's
+  /// emergency on the device is exactly what the evidence path exists to
+  /// avoid.
+  Future<EvidenceRecording?> _finishVideo(String? incidentId) async {
+    if (!_videoRecorder.isRecording) return null;
+    if (incidentId == null) {
+      await _videoRecorder.cancel();
+      return null;
+    }
+    try {
+      return await _videoRecorder.stop();
+    } catch (_) {
+      return null;
     }
   }
 
@@ -327,6 +385,7 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
                     notifiedContactIds: _notifiedContactIds,
                     dispatchResult: _dispatchResult,
                     evidence: _evidence,
+                    hasVideo: _hasVideo,
                     onMarkSafe: _markSafe,
                     location: _location,
                   ),

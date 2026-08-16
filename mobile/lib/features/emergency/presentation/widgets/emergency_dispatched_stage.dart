@@ -25,6 +25,7 @@ class EmergencyDispatchedStage extends StatelessWidget {
     required this.onMarkSafe,
     this.dispatchResult,
     this.evidence = EvidenceState.idle,
+    this.hasVideo = false,
     this.location,
     super.key,
   });
@@ -39,6 +40,9 @@ class EmergencyDispatchedStage extends StatelessWidget {
   final DispatchResult? dispatchResult;
 
   final EvidenceState evidence;
+
+  /// True when the camera opened alongside the microphone.
+  final bool hasVideo;
 
   final VoidCallback onMarkSafe;
   final LocationResult? location;
@@ -133,7 +137,7 @@ class EmergencyDispatchedStage extends StatelessWidget {
           _CouldNotReachBanner(),
         ],
         const SizedBox(height: AppSpacing.space5),
-        _EvidencePanel(state: evidence),
+        _EvidencePanel(state: evidence, hasVideo: hasVideo),
         const SizedBox(height: AppSpacing.space3),
         _LiveLocationPanel(location: location),
         const SizedBox(height: AppSpacing.space6),
@@ -220,18 +224,32 @@ class _CouldNotReachBanner extends StatelessWidget {
 /// when it is the difference between a report that stands up and one that
 /// does not.
 class _EvidencePanel extends StatelessWidget {
-  const _EvidencePanel({required this.state});
+  const _EvidencePanel({required this.state, this.hasVideo = false});
 
   final EvidenceState state;
+
+  /// Whether the camera also opened. Audio is the recording that works
+  /// wherever the phone is; video is a bonus when the lens happened to be
+  /// pointed at something, so it qualifies the message rather than
+  /// replacing it.
+  final bool hasVideo;
 
   @override
   Widget build(BuildContext context) {
     if (state == EvidenceState.idle) return const SizedBox.shrink();
 
     final (String message, Color color) = switch (state) {
-      EvidenceState.recording => ('Recording audio evidence', AppColors.coral500),
+      EvidenceState.recording => (
+        hasVideo ? 'Recording audio and video evidence' : 'Recording audio evidence',
+        AppColors.coral500,
+      ),
       EvidenceState.uploading => ('Saving evidence securely…', AppColors.violet400),
-      EvidenceState.saved => ('Evidence saved and encrypted', AppColors.success500),
+      EvidenceState.saved => (
+        hasVideo
+            ? 'Audio and video saved and encrypted'
+            : 'Evidence saved and encrypted',
+        AppColors.success500,
+      ),
       EvidenceState.uploadFailed => (
         'Evidence recorded but not uploaded — it will be lost',
         AppColors.warning500,

@@ -7,6 +7,8 @@ import '../../../core/network/network_providers.dart';
 import '../../../core/offline/offline_queue_providers.dart';
 import '../../../core/evidence/evidence_recorder.dart';
 import '../../../core/evidence/platform_evidence_recorder.dart';
+import '../../../core/evidence/platform_video_recorder.dart';
+import '../../../core/evidence/video_recorder.dart';
 import '../domain/emergency_repository.dart';
 import '../domain/evidence_repository.dart';
 import 'emergency_repository_mock.dart';
@@ -33,6 +35,18 @@ EvidenceRepository evidenceRepository(Ref ref) {
 @Riverpod(keepAlive: true)
 EvidenceRecorder evidenceRecorder(Ref ref) {
   final recorder = PlatformEvidenceRecorder();
+  ref.onDispose(recorder.dispose);
+  return recorder;
+}
+
+/// The camera, on the same terms as the microphone above.
+///
+/// Separate from [evidenceRecorder] on purpose: video is captured in
+/// addition to audio and never instead of it, so a camera that cannot open
+/// must not be able to take the audio recorder down with it.
+@Riverpod(keepAlive: true)
+VideoEvidenceRecorder videoRecorder(Ref ref) {
+  final recorder = PlatformVideoRecorder();
   ref.onDispose(recorder.dispose);
   return recorder;
 }
