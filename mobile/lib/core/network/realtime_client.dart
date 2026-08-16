@@ -6,6 +6,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../config/app_config.dart';
 import 'api_client.dart';
 import 'auth_token_store.dart';
+import 'pinned_socket.dart';
 
 enum RealtimeConnectionStatus { connecting, connected, disconnected }
 
@@ -64,7 +65,7 @@ class RealtimeAlertsClient {
       // so "connected" here means "actively listening", not "handshake
       // confirmed" — a bad connection still flips back to disconnected
       // promptly once the platform channel reports it.
-      final channel = WebSocketChannel.connect(uri);
+      final channel = await connectPinnedWebSocket(uri);
       if (_disposed) {
         await channel.sink.close();
         return;

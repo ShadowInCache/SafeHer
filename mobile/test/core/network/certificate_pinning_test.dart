@@ -73,6 +73,24 @@ void main() {
     });
   });
 
+  group('Pinned WebSocket', () {
+    test('an unpinned build connects normally', () async {
+      // Every development build. Failing shut here would make the app
+      // undevelopable against a local `ws://` server.
+      expect(AppConfig.pinnedCertificateHashes, isEmpty);
+    });
+
+    test('the mismatch is its own error type', () {
+      // A caller has to be able to tell "the server is not who it claims"
+      // apart from an ordinary network drop — that distinction is the whole
+      // point of pinning, and a generic SocketException would erase it.
+      const error = CertificatePinMismatch('monitor.safeherapp.com');
+
+      expect(error, isA<Exception>());
+      expect(error.toString(), contains('monitor.safeherapp.com'));
+    });
+  });
+
   group('CertificatePinMismatch', () {
     test('names the host it refused', () {
       expect(

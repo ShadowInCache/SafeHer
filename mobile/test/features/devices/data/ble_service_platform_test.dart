@@ -97,6 +97,10 @@ void main() {
     final directImports = <String>[];
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      // An _io library importing another is safe: both are compiled only on
+      // native targets, so neither can reach a web build. The rule being
+      // enforced is that a *web-reachable* library must not import one.
+      if (entity.path.endsWith('_io.dart')) continue;
       for (final line in entity.readAsLinesSync()) {
         final trimmed = line.trimLeft();
         final isConditional = trimmed.contains('if (dart.library.io)');
