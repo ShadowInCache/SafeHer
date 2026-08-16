@@ -48,7 +48,7 @@ final deviceRegistrationRepositoryProvider =
 typedef DeviceRegistrationRepositoryRef =
     ProviderRef<DeviceRegistrationRepository>;
 String _$blePairingControllerHash() =>
-    r'6d39c51e45f075b545c39c100b7eb31ac6274972';
+    r'9fd055c402319a478f45254937ef20d99a14152b';
 
 /// Drives the BLE pairing sheet: permissions → adapter state → live scan →
 /// connect + service discovery → backend registration, plus bounded

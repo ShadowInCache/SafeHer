@@ -538,6 +538,33 @@ class TestEmergencyDispatch(unittest.IsolatedAsyncioTestCase):
 
     # ------------------------------------------------------ the HTTP contract
 
+    # ------------------------------------------------------ channel report
+
+    async def test_channels_endpoint_says_sms_is_unavailable(self):
+        # The app cannot infer this: whether SMS works depends on server-side
+        # credentials the client never sees. Without it, a phone-only contact
+        # would show as ready in the UI and let a user believe her sister
+        # will be called.
+        response = await self.client.get("/api/v1/alerts/channels", headers=self.headers)
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertFalse(body["sms"])
+        self.assertIn("email", body)
+        self.assertIn("push", body)
+
+    async def test_email_requires_address_is_true_when_email_is_the_only_channel(self):
+        response = await self.client.get("/api/v1/alerts/channels", headers=self.headers)
+        body = response.json()
+
+        # Exactly the state this deployment ships in, and the flag the
+        # contacts screen keys its warning off.
+        self.assertEqual(body["email_requires_address"], body["email"] and not body["sms"])
+
+    async def test_channels_endpoint_requires_authentication(self):
+        response = await self.client.get("/api/v1/alerts/channels")
+        self.assertIn(response.status_code, (401, 403), response.text)
+
     async def test_the_sos_endpoint_reports_how_many_contacts_it_reached(self):
         await self._add_contact(name="Anika", phone="+911111111111")
 

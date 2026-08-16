@@ -11,6 +11,7 @@ import 'package:safeher_app/core/offline/offline_queue_service.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
 import 'package:safeher_app/features/contacts/data/contacts_providers.dart';
 import 'package:safeher_app/features/contacts/domain/contacts_repository.dart';
+import 'package:safeher_app/features/contacts/domain/models/alert_channels.dart';
 import 'package:safeher_app/features/contacts/domain/models/contact.dart';
 import 'package:safeher_app/features/emergency/data/emergency_providers.dart';
 import 'package:safeher_app/features/emergency/domain/emergency_repository.dart';
@@ -60,6 +61,22 @@ List<Contact> _sampleContacts() => const [
 ];
 
 class _FakeContactsRepository implements ContactsRepository {
+  /// Defaults to "everything works" so existing tests are unaffected by the
+  /// unreachable-contact warning; the settings tests override it.
+  AlertChannels channels = const AlertChannels(sms: true, email: true, push: true);
+
+  @override
+  Future<AlertChannels> getAlertChannels() async => channels;
+
+  @override
+  Future<List<Contact>> updateContact(
+    String id, {
+    String? name,
+    String? phone,
+    String? relationship,
+    String? email,
+  }) async => getContacts();
+
   _FakeContactsRepository({this.shouldFail = false});
   final bool shouldFail;
 

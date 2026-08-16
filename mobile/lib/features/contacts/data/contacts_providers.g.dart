@@ -25,7 +25,30 @@ final contactsRepositoryProvider =
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef ContactsRepositoryRef = AutoDisposeProviderRef<ContactsRepository>;
-String _$contactsNotifierHash() => r'346fe2c124204cfac5aa32ba03dacf7158427e31';
+String _$alertChannelsHash() => r'2e3c8d8c3940830d216ad77c9058fb399e6d3c4a';
+
+/// Which emergency channels the server can deliver on.
+///
+/// Falls back to optimistic on failure: a wrongly-shown "can't be reached"
+/// warning would train users to ignore a warning that only helps if it is
+/// rare and true.
+///
+/// Copied from [alertChannels].
+@ProviderFor(alertChannels)
+final alertChannelsProvider = AutoDisposeFutureProvider<AlertChannels>.internal(
+  alertChannels,
+  name: r'alertChannelsProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$alertChannelsHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef AlertChannelsRef = AutoDisposeFutureProviderRef<AlertChannels>;
+String _$contactsNotifierHash() => r'68f785697131f5f1a41466b1028f48e717f5d42f';
 
 /// The single source of truth for the app's emergency contacts — Settings,
 /// Emergency, Search, and Profile all watch this instead of keeping their

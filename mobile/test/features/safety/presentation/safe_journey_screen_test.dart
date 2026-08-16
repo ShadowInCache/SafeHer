@@ -6,6 +6,7 @@ import 'package:safeher_app/core/location/location_providers.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
 import 'package:safeher_app/features/contacts/data/contacts_providers.dart';
 import 'package:safeher_app/features/contacts/domain/contacts_repository.dart';
+import 'package:safeher_app/features/contacts/domain/models/alert_channels.dart';
 import 'package:safeher_app/features/contacts/domain/models/contact.dart';
 import 'package:safeher_app/features/safety/data/safety_providers.dart';
 import 'package:safeher_app/features/safety/domain/models/safe_journey.dart';
@@ -17,6 +18,22 @@ import '../../../test_utils/fake_safety_repository.dart';
 import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
 class _StubContactsRepository implements ContactsRepository {
+  /// Defaults to "everything works" so existing tests are unaffected by the
+  /// unreachable-contact warning; the settings tests override it.
+  AlertChannels channels = const AlertChannels(sms: true, email: true, push: true);
+
+  @override
+  Future<AlertChannels> getAlertChannels() async => channels;
+
+  @override
+  Future<List<Contact>> updateContact(
+    String id, {
+    String? name,
+    String? phone,
+    String? relationship,
+    String? email,
+  }) async => getContacts();
+
   @override
   Future<List<Contact>> getContacts() async => const [
     Contact(

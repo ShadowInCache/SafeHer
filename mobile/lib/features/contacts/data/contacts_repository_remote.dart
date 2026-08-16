@@ -1,5 +1,6 @@
 import '../../../core/network/api_client.dart';
 import '../domain/contacts_repository.dart';
+import '../domain/models/alert_channels.dart';
 import '../domain/models/contact.dart';
 
 /// `fastapi_app`-backed [ContactsRepository] — `/api/v1/users/me/emergency-contacts`.
@@ -31,6 +32,12 @@ class ContactsRepositoryRemote implements ContactsRepository {
   }
 
   @override
+  Future<AlertChannels> getAlertChannels() async {
+    final response = await _apiClient.dio.get('/alerts/channels');
+    return AlertChannels.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  @override
   Future<List<Contact>> addContact(
     String name,
     String phone,
@@ -50,6 +57,25 @@ class ContactsRepositoryRemote implements ContactsRepository {
         if (email != null && email.isNotEmpty) 'email': email,
       },
     );
+    return getContacts();
+  }
+
+  @override
+  Future<List<Contact>> updateContact(
+    String id, {
+    String? name,
+    String? phone,
+    String? relationship,
+    String? email,
+  }) async {
+    await _apiClient.dio.put('$_basePath/$id', data: {
+      if (name != null) 'name': name,
+      if (phone != null) 'phone': phone,
+      if (relationship != null) 'relationship': relationship,
+      // Same rule as addContact: the backend validates this as an EmailStr,
+      // so an empty string is a 422 rather than a way to clear the field.
+      if (email != null && email.isNotEmpty) 'email': email,
+    });
     return getContacts();
   }
 

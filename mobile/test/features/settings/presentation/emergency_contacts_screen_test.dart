@@ -6,6 +6,7 @@ import 'package:golden_toolkit/golden_toolkit.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
 import 'package:safeher_app/features/contacts/data/contacts_providers.dart';
 import 'package:safeher_app/features/contacts/domain/contacts_repository.dart';
+import 'package:safeher_app/features/contacts/domain/models/alert_channels.dart';
 import 'package:safeher_app/features/contacts/domain/models/contact.dart';
 import 'package:safeher_app/features/settings/presentation/emergency_contacts_screen.dart';
 
@@ -18,8 +19,41 @@ List<Contact> _sampleContacts() => [
 ];
 
 class _FakeContactsRepository implements ContactsRepository {
+  /// Defaults to "everything works" so existing tests are unaffected by the
+  /// unreachable-contact warning; the settings tests override it.
+  AlertChannels channels = const AlertChannels(sms: true, email: true, push: true);
+
+  @override
+  Future<AlertChannels> getAlertChannels() async => channels;
+
+  @override
+  @override
+  Future<List<Contact>> updateContact(
+    String id, {
+    String? name,
+    String? phone,
+    String? relationship,
+    String? email,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 50));
+    final index = _contacts.indexWhere((c) => c.id == id);
+    if (index != -1) {
+      final existing = _contacts[index];
+      _contacts[index] = Contact(
+        id: existing.id,
+        name: name ?? existing.name,
+        phone: phone ?? existing.phone,
+        relationship: relationship ?? existing.relationship,
+        priority: existing.priority,
+        confirmed: existing.confirmed,
+        email: (email != null && email.isNotEmpty) ? email : existing.email,
+      );
+    }
+    return List.unmodifiable(_contacts);
+  }
+
   _FakeContactsRepository({this.shouldFail = false, List<Contact>? initialContacts})
-    : _contacts = initialContacts ?? _sampleContacts();
+    : _contacts = List.of(initialContacts ?? _sampleContacts());
   final bool shouldFail;
   final List<Contact> _contacts;
   var _nextId = 3;
@@ -103,6 +137,14 @@ Widget _harness({Brightness brightness = Brightness.dark, ContactsRepository? re
 /// Opens sequence for a modal sheet: one frame to insert the route, then
 /// its entrance animation. A single 300ms pump leaves the sheet still fully
 /// below the viewport, where its controls cannot be tapped.
+/// The contacts future resolves first; only then does `_ContactsList` mount
+/// and begin watching `alertChannelsProvider`, so its answer lands a frame
+/// later again.
+Future<void> _settleChannels(WidgetTester tester) async {
+  await tester.pump(const Duration(milliseconds: 200));
+  await tester.pump(const Duration(milliseconds: 100));
+}
+
 Future<void> _settleSheet(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
@@ -290,6 +332,119 @@ void main() {
 
       final saved = repo.contacts.firstWhere((c) => c.name == 'Kabir Rao');
       expect(saved.email, isNull);
+    });
+
+    testWidgets('warns when an SOS cannot reach a contact', (tester) async {
+      // The situation this whole feature exists for: SMS costs money and is
+      // unconfigured, so a contact saved with only a phone number cannot be
+      // reached at all. Showing them as a normal saved contact would let a
+      // user believe her sister will be alerted.
+      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final repo = _FakeContactsRepository(
+        initialContacts: const [
+          Contact(
+            id: '1',
+            name: 'No Email',
+            phone: '+15550101000',
+            relationship: 'Sister',
+            priority: 1,
+            confirmed: true,
+          ),
+        ],
+      )..channels = const AlertChannels(sms: false, email: true, push: false);
+
+      await tester.pumpWidget(_harness(repo: repo));
+      await _settleChannels(tester);
+
+      expect(find.text('An alert can’t reach this contact'), findsOneWidget);
+      expect(find.text('Add an email address'), findsOneWidget);
+    });
+
+    testWidgets('a contact with an email is not flagged', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final repo = _FakeContactsRepository(
+        initialContacts: const [
+          Contact(
+            id: '1',
+            name: 'Has Email',
+            phone: '+15550101000',
+            relationship: 'Sister',
+            priority: 1,
+            confirmed: true,
+            email: 'has@example.com',
+          ),
+        ],
+      )..channels = const AlertChannels(sms: false, email: true, push: false);
+
+      await tester.pumpWidget(_harness(repo: repo));
+      await _settleChannels(tester);
+
+      expect(find.text('An alert can’t reach this contact'), findsNothing);
+    });
+
+    testWidgets('no warning while SMS is available', (tester) async {
+      // With SMS working a phone number is enough, and a warning here would
+      // be false. A warning only helps if it is rare and true.
+      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final repo = _FakeContactsRepository(
+        initialContacts: const [
+          Contact(
+            id: '1',
+            name: 'No Email',
+            phone: '+15550101000',
+            relationship: 'Sister',
+            priority: 1,
+            confirmed: true,
+          ),
+        ],
+      )..channels = const AlertChannels(sms: true, email: true, push: false);
+
+      await tester.pumpWidget(_harness(repo: repo));
+      await _settleChannels(tester);
+
+      expect(find.text('An alert can’t reach this contact'), findsNothing);
+    });
+
+    testWidgets('editing a contact adds the email that makes it reachable', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final repo = _FakeContactsRepository(
+        initialContacts: const [
+          Contact(
+            id: '1',
+            name: 'No Email',
+            phone: '+15550101000',
+            relationship: 'Sister',
+            priority: 1,
+            confirmed: true,
+          ),
+        ],
+      )..channels = const AlertChannels(sms: false, email: true, push: false);
+
+      await tester.pumpWidget(_harness(repo: repo));
+      await _settleChannels(tester);
+
+      await tester.tap(find.text('Add an email address'));
+      await _settleSheet(tester);
+
+      // The sheet opens in edit mode, prefilled — the user should only have
+      // to type the missing field.
+      expect(find.text('Edit Emergency Contact'), findsOneWidget);
+      expect(find.text('Save Changes'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField).at(3), 'sister@example.com');
+      await tester.pump();
+      await tester.ensureVisible(find.text('Save Changes'));
+      await tester.pump();
+      await tester.tap(find.text('Save Changes'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(repo.contacts.single.email, 'sister@example.com');
+      expect(find.text('An alert can’t reach this contact'), findsNothing);
     });
 
     testGoldens('golden - light', (tester) async {

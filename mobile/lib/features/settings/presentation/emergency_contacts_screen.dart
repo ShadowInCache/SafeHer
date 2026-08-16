@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/platform/external_actions.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -15,6 +16,7 @@ import '../../../shared/components/icons/sa_icon.dart';
 import '../../../shared/components/overlays/sa_bottom_sheet.dart';
 import '../../../shared/components/overlays/sa_toast.dart';
 import '../../contacts/data/contacts_providers.dart';
+import '../../contacts/domain/models/alert_channels.dart';
 import '../../contacts/domain/models/contact.dart';
 import 'widgets/add_contact_sheet.dart';
 
@@ -33,6 +35,27 @@ class EmergencyContactsScreen extends ConsumerWidget {
     await ref
         .read(contactsNotifierProvider.notifier)
         .addContact(result.$1, result.$2, result.$3, email: email.isEmpty ? null : email);
+  }
+
+  Future<void> _handleEdit(BuildContext context, WidgetRef ref, Contact contact) async {
+    final result = await showSaBottomSheet<(String, String, String, String)>(
+      context,
+      builder: (context) => AddContactSheet(
+        initialName: contact.name,
+        initialPhone: contact.phone,
+        initialRelationship: contact.relationship,
+        initialEmail: contact.email,
+      ),
+    );
+    if (result == null) return;
+    final email = result.$4.trim();
+    await ref.read(contactsNotifierProvider.notifier).updateContact(
+      contact.id,
+      name: result.$1,
+      phone: result.$2,
+      relationship: result.$3,
+      email: email.isEmpty ? null : email,
+    );
   }
 
   @override
@@ -71,7 +94,10 @@ class EmergencyContactsScreen extends ConsumerWidget {
             ),
             Expanded(
               child: contactsAsync.when(
-                data: (contacts) => _ContactsList(contacts: contacts),
+                data: (contacts) => _ContactsList(
+                  contacts: contacts,
+                  onEdit: (contact) => _handleEdit(context, ref, contact),
+                ),
                 loading: () => const _ContactsLoading(),
                 error: (error, stackTrace) => SaEmptyState(
                   title: "Couldn't load your contacts",
@@ -89,12 +115,19 @@ class EmergencyContactsScreen extends ConsumerWidget {
 }
 
 class _ContactsList extends ConsumerWidget {
-  const _ContactsList({required this.contacts});
+  const _ContactsList({required this.contacts, required this.onEdit});
+
+  final void Function(Contact contact) onEdit;
 
   final List<Contact> contacts;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Optimistic until the real answer arrives, so a warning never flashes
+    // on screen and then retracts itself.
+    final channels =
+        ref.watch(alertChannelsProvider).valueOrNull ?? const AlertChannels.optimistic();
+
     if (contacts.isEmpty) {
       return const SaEmptyState(
         title: 'No emergency contacts yet',
@@ -122,6 +155,7 @@ class _ContactsList extends ConsumerWidget {
       },
       itemBuilder: (context, index) {
         final contact = contacts[index];
+        final unreachable = channels.emailRequiresAddress && !contact.hasEmail;
         return Padding(
           key: ValueKey(contact.id),
           padding: const EdgeInsets.only(bottom: AppSpacing.space3),
@@ -138,7 +172,9 @@ class _ContactsList extends ConsumerWidget {
                   priority: index + 1,
                   confirmed: contact.confirmed,
                   dragHandle: const SaIcon(SaIconGlyph.refresh, size: 18),
+                  onTap: () => onEdit(contact),
                 ),
+                if (unreachable) _UnreachableNotice(onAddEmail: () => onEdit(contact)),
                 _ContactActions(contact: contact),
               ],
             ),
@@ -215,6 +251,76 @@ class _DeleteBackground extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space5),
       decoration: BoxDecoration(color: saColors.threatDanger, borderRadius: AppRadius.lgRadius),
       child: const SaIcon(SaIconGlyph.close, color: Colors.white),
+    );
+  }
+}
+
+/// Shown under a contact that an SOS cannot currently reach.
+///
+/// Deliberately specific about the cause and the remedy. A generic
+/// "incomplete contact" badge would leave the user guessing, and the whole
+/// point is that she can fix this in ten seconds by adding an address.
+class _UnreachableNotice extends StatelessWidget {
+  const _UnreachableNotice({required this.onAddEmail});
+
+  final VoidCallback onAddEmail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        margin: const EdgeInsets.only(top: AppSpacing.space2),
+        padding: const EdgeInsets.all(AppSpacing.space3),
+        decoration: BoxDecoration(
+          color: AppColors.warning500.withValues(alpha: 0.12),
+          borderRadius: AppRadius.mdRadius,
+          border: Border.all(color: AppColors.warning500.withValues(alpha: 0.45)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SaIcon(SaIconGlyph.bell, size: 16, color: AppColors.warning500),
+            const SizedBox(width: AppSpacing.space2),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'An alert can’t reach this contact',
+                    style: AppTypography.labelM.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'SafeHer alerts by email, and this contact has no email '
+                    'address. Text messaging isn’t available yet.',
+                    style: AppTypography.bodyS.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.space2),
+                  GestureDetector(
+                    onTap: onAddEmail,
+                    behavior: HitTestBehavior.opaque,
+                    child: Semantics(
+                      button: true,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: AppSpacing.space1),
+                        child: Text(
+                          'Add an email address',
+                          style: AppTypography.labelM.copyWith(color: AppColors.violet400),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

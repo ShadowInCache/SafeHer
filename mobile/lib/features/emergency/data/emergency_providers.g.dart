@@ -26,7 +26,7 @@ final emergencyRepositoryProvider =
 // ignore: unused_element
 typedef EmergencyRepositoryRef = AutoDisposeProviderRef<EmergencyRepository>;
 String _$emergencyDispatchNotifierHash() =>
-    r'975a0b1e825dd3fc1a25efe486b538221ce8e322';
+    r'25309c4c1b16dee190537c0d2bfd558e16657fc2';
 
 /// Dispatches the SOS alert. If the device is offline when the countdown
 /// completes, the alert is queued via [OfflineQueueService] instead of

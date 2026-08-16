@@ -1,4 +1,5 @@
 import '../domain/contacts_repository.dart';
+import '../domain/models/alert_channels.dart';
 import '../domain/models/contact.dart';
 
 /// Single in-memory contacts list shared by every feature that reads or
@@ -31,6 +32,13 @@ class ContactsRepositoryMock implements ContactsRepository {
   }
 
   @override
+  Future<AlertChannels> getAlertChannels() async =>
+      // Mirrors the shipping configuration: email works, SMS costs money and
+      // is not set up. Mock mode therefore exercises the warning path by
+      // default rather than the happy one.
+      const AlertChannels(sms: false, email: true, push: false);
+
+  @override
   Future<List<Contact>> addContact(
     String name,
     String phone,
@@ -53,6 +61,31 @@ class ContactsRepositoryMock implements ContactsRepository {
     _contacts
       ..clear()
       ..addAll(updated);
+    return List.unmodifiable(_contacts);
+  }
+
+  @override
+  Future<List<Contact>> updateContact(
+    String id, {
+    String? name,
+    String? phone,
+    String? relationship,
+    String? email,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 150));
+    final index = _contacts.indexWhere((c) => c.id == id);
+    if (index != -1) {
+      final existing = _contacts[index];
+      _contacts[index] = Contact(
+        id: existing.id,
+        name: name ?? existing.name,
+        phone: phone ?? existing.phone,
+        relationship: relationship ?? existing.relationship,
+        priority: existing.priority,
+        confirmed: existing.confirmed,
+        email: (email != null && email.isNotEmpty) ? email : existing.email,
+      );
+    }
     return List.unmodifiable(_contacts);
   }
 

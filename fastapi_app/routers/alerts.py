@@ -132,6 +132,38 @@ async def process_threat_alert(
     }
 
 
+@router.get("/channels")
+async def get_alert_channels(
+    current_user: UserPublic = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+):
+    """Which emergency channels this deployment can actually deliver on.
+
+    The app needs this to tell the truth in the contacts screen. A contact
+    with only a phone number is unreachable when SMS is unconfigured, and
+    the client has no other way to know that — it would otherwise show a
+    saved contact as ready and let a user believe her sister will be called.
+
+    `email_requires_address` states the consequence plainly so the client
+    does not have to re-derive the rule.
+    """
+    sms_configured = bool(
+        settings.twilio_account_sid and settings.twilio_auth_token and settings.twilio_from_number
+    )
+    email_configured = bool(settings.smtp_configured) or bool(
+        settings.onesignal_app_id and settings.onesignal_api_key
+    )
+
+    return {
+        "sms": sms_configured,
+        "email": email_configured,
+        "push": bool(settings.fcm_server_key),
+        # True when email is the only channel that can reach an ordinary
+        # contact, so a contact without an address cannot be reached at all.
+        "email_requires_address": email_configured and not sms_configured,
+    }
+
+
 @router.post("/emergency", status_code=status.HTTP_201_CREATED, response_model=IncidentPublic)
 async def trigger_emergency_alert(
     payload: EmergencyAlertRequest,

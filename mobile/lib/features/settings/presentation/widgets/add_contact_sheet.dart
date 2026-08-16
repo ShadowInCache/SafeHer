@@ -15,17 +15,36 @@ import '../../../../shared/components/inputs/sa_text_field.dart';
 /// tier covers 10,000 emails a month. A contact with no email address can
 /// only be reached if SMS credit exists.
 class AddContactSheet extends StatefulWidget {
-  const AddContactSheet({super.key});
+  const AddContactSheet({
+    super.key,
+    this.initialName,
+    this.initialPhone,
+    this.initialRelationship,
+    this.initialEmail,
+  });
+
+  /// When supplied, the sheet edits an existing contact instead of adding
+  /// one. Editing exists mainly so a contact saved without an email can be
+  /// given one: while SMS is unconfigured, an address is the only thing
+  /// that makes them reachable, and the previous alternative was deleting
+  /// the contact and retyping it.
+  final String? initialName;
+  final String? initialPhone;
+  final String? initialRelationship;
+  final String? initialEmail;
+
+  bool get isEditing => initialName != null;
 
   @override
   State<AddContactSheet> createState() => _AddContactSheetState();
 }
 
 class _AddContactSheetState extends State<AddContactSheet> {
-  final _nameController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _relationshipController = TextEditingController();
-  final _emailController = TextEditingController();
+  late final _nameController = TextEditingController(text: widget.initialName ?? '');
+  late final _phoneController = TextEditingController(text: widget.initialPhone ?? '');
+  late final _relationshipController =
+      TextEditingController(text: widget.initialRelationship ?? '');
+  late final _emailController = TextEditingController(text: widget.initialEmail ?? '');
 
   @override
   void dispose() {
@@ -70,7 +89,10 @@ class _AddContactSheetState extends State<AddContactSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Add Emergency Contact', style: AppTypography.headingM.copyWith(color: onSurface)),
+          Text(
+            widget.isEditing ? 'Edit Emergency Contact' : 'Add Emergency Contact',
+            style: AppTypography.headingM.copyWith(color: onSurface),
+          ),
           const SizedBox(height: AppSpacing.space4),
           SaTextField(label: 'Name', controller: _nameController, onChanged: (_) => setState(() {})),
           const SizedBox(height: AppSpacing.space4),
@@ -103,7 +125,11 @@ class _AddContactSheetState extends State<AddContactSheet> {
             style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.6)),
           ),
           const SizedBox(height: AppSpacing.space5),
-          SaButton(label: 'Add Contact', fullWidth: true, onPressed: _canSave ? _submit : null),
+          SaButton(
+            label: widget.isEditing ? 'Save Changes' : 'Add Contact',
+            fullWidth: true,
+            onPressed: _canSave ? _submit : null,
+          ),
         ],
       ),
     );
