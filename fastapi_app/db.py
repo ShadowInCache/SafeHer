@@ -51,18 +51,30 @@ def _build_async_database_url(raw_url: str) -> str:
         url = url.set(drivername="sqlite+aiosqlite")
 
     if url.drivername.startswith("postgresql"):
-        # Supabase hands out `...?sslmode=require`, but that is a libpq spelling.
-        # asyncpg rejects it as an unexpected keyword, so translate it into the
-        # `ssl` argument asyncpg actually understands. Dropping it silently is
-        # not an option: Supabase refuses unencrypted connections.
+        # Managed Postgres providers hand out libpq-style connection strings.
+        # asyncpg is not libpq and rejects those spellings as unexpected
+        # keyword arguments, so they are translated here rather than left to
+        # fail at the first connection -- which, on a deploy, means the whole
+        # API failing to start.
         query = dict(url.query)
+
+        # `sslmode=require` (Supabase, Neon, most hosts). Dropping it silently
+        # is not an option: these providers refuse unencrypted connections.
         sslmode = query.pop("sslmode", None)
         if sslmode is not None:
             if sslmode in {"disable", "allow"}:
                 query.pop("ssl", None)
             else:
                 query["ssl"] = "require"
-            url = url.set(query=query)
+
+        # `channel_binding=require` ships in Neon's default copy-paste string,
+        # so this is the likeliest URL anyone will actually paste. asyncpg has
+        # no such parameter; it negotiates SCRAM channel binding itself when
+        # the server asks for it, so the guarantee is kept by dropping the
+        # hint rather than by honouring it.
+        query.pop("channel_binding", None)
+
+        url = url.set(query=query)
 
     # Ensure SQLite file directory exists for relative paths
     if url.drivername.startswith("sqlite") and url.database and url.database != ":memory":
@@ -71,7 +83,16 @@ def _build_async_database_url(raw_url: str) -> str:
             db_path = Path.cwd() / db_path
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    return str(url)
+    # `str(url)` is NOT usable here. SQLAlchemy's `URL.__str__` masks the
+    # password as literal `***` -- excellent for logs, fatal for a connection
+    # string. Returning it produced a URL that authenticates as the password
+    # "***", so every password-protected Postgres refused the connection with
+    # "password authentication failed", pointing the operator at their
+    # credentials rather than at this line.
+    #
+    # It never showed up in development because SQLite has no password, and
+    # it would have surfaced on the first production deploy.
+    return url.render_as_string(hide_password=False)
 
 
 def _resolve_sqlite_path(raw_url: str) -> Path | None:

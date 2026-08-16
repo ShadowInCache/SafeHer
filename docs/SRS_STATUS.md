@@ -1002,3 +1002,60 @@ recorded as **partial** rather than done. The glasses remain unbuilt.
 
 596 Flutter tests pass (up from 587), 266 backend tests pass, analyze clean.
 
+## 2026-08-17 (fifth session) — Postgres, verified against a real server
+
+Preparing to move production off SQLite. Running the migrations against an
+actual Postgres — rather than reading the code and believing it — found two
+bugs that would each have broken the first deploy.
+
+### The connection string had a masked password
+
+`_build_async_database_url` ended in `return str(url)`. SQLAlchemy's
+`URL.__str__` masks the password as a literal `***`, which is exactly right
+for a log line and fatal for a connection string. The URL handed to
+`create_async_engine` — and to Alembic — therefore authenticated as the
+password `***`, and every password-protected Postgres refused it with
+"password authentication failed for user ...".
+
+The error names the credentials, so the debugging would have started in the
+provider's dashboard and not in this function. It never appeared in
+development because SQLite has no password. Now
+`render_as_string(hide_password=False)`.
+
+### A migration only worked on SQLite
+
+`0007_auth_hardening` ran `UPDATE users SET is_verified = 1 WHERE
+is_verified = 0`. SQLite stores booleans as integers and compares them
+happily; Postgres raises `operator does not exist: boolean = integer`. The
+deploy would have aborted **midway through the migration chain**, leaving
+the schema half-applied. Rewritten with real boolean literals, and the rest
+of the migrations scanned for the same shape (none).
+
+### Neon's default connection string carries a parameter asyncpg rejects
+
+Neon's dashboard hands out `?sslmode=require&channel_binding=require`.
+`sslmode` was already translated; `channel_binding` was not, and asyncpg has
+no such parameter — verified against `inspect.signature(asyncpg.connect)`
+rather than assumed. Since asyncpg negotiates SCRAM channel binding itself
+when the server asks, the guarantee survives dropping the hint.
+
+`tests/test_database_url.py` now pins all three provider shapes, and the
+suite was confirmed to fail with each fix disabled.
+
+### Verified end to end
+
+All 11 migrations applied to a clean Postgres 16, reaching head
+`0011_auto_sos_threshold`. The API then ran against it: register, login,
+`users/me`, incident creation, `/alerts/analyze` and the dashboard all
+answered correctly. The fusion returned 0.815 for motion 0.9, audio 0.8,
+vision 0.7 — exactly SRS §6.2's `0.40·0.9 + 0.35·0.8 + 0.25·0.7`, which is
+the first time those weights have been confirmed against a real database
+rather than a fixture.
+
+The test Postgres deliberately used a password containing `%`, so Alembic's
+interpolation escaping was exercised at the same time.
+
+### State
+
+279 backend tests pass (up from 266), 596 Flutter tests pass.
+

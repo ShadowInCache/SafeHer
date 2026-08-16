@@ -40,7 +40,14 @@ def upgrade() -> None:
         batch_op.add_column(sa.Column("deletion_requested_at", sa.DateTime(), nullable=True))
 
     # Existing accounts predate verification -- treat them as already verified.
-    op.execute("UPDATE users SET is_verified = 1 WHERE is_verified = 0")
+    #
+    # `is_verified = 1` is a SQLite-ism: SQLite stores booleans as integers
+    # and compares them happily, Postgres does not and raises "operator does
+    # not exist: boolean = integer". This migration therefore ran fine in
+    # development and would have aborted the first production deploy midway
+    # through, leaving the schema half-migrated. Written with real boolean
+    # literals, which both databases accept.
+    op.execute(sa.text("UPDATE users SET is_verified = true WHERE is_verified = false"))
     op.execute("UPDATE users SET tokens_valid_from = created_at WHERE tokens_valid_from IS NULL")
 
     with op.batch_alter_table("users") as batch_op:
