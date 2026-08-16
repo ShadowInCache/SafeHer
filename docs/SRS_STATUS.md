@@ -38,8 +38,8 @@ Beyond the SRS's four, the repo also runs:
 
 | Check | Last measured | Status |
 |-------|---------------|--------|
-| `flutter test` (full suite) | 564 passing, 0 failing | ✅ |
-| `pytest tests/` (in-process suites) | 118 passing, 0 failing | ✅ |
+| `flutter test` (full suite) | 576 passing, 0 failing | ✅ |
+| `pytest tests/` (in-process suites) | 140 passing, 0 failing | ✅ |
 | Alembic from empty → head → downgrade → head | 14 migrations, reversible | ✅ |
 
 Coverage by area — the thin spots are where next session's tests should go:
@@ -189,8 +189,8 @@ All 17 specified component groups exist under `lib/shared/components/`, at
 | FR-EMG-03 | 10s countdown, cancellable | ✅ |
 | FR-EMG-04 | FCM + SMS to all contacts | ✅ email **verified end to end**; SMS ⛔ unconfigured (paid). `emergency_dispatch.py` — priority order, per-contact isolation, 3 attempts. Channels: email (SMTP, working), SMS (Twilio, paid), push (when a contact is a SafeHer user) |
 | FR-EMG-05 | Alert payload contents | ✅ name, time, maps link, within the 160-char budget. Evidence URL is carried when one exists (see FR-EMG-06) |
-| FR-EMG-06 | Auto-start evidence recording | ⛔ **Gap.** No recording code exists; the `record` package is declared in `pubspec.yaml` and imported nowhere |
-| FR-EMG-07 | AES-256 at rest + TLS 1.3 | ⛔ **Gap.** No evidence is captured or uploaded, so there is nothing yet to encrypt; `/api/v1/media` is dead code from the client's side |
+| FR-EMG-06 | Auto-start evidence recording | ✅ audio, starting with the countdown (ahead of the 1s requirement). Video deliberately not attempted — see the log |
+| FR-EMG-07 | AES-256 at rest + TLS 1.3 | ✅ AES-256-GCM at rest, owner-only retrieval, 22 tests. TLS in transit is the deployment's job (cert pinning is done client-side) |
 | FR-EMG-08 | False-alarm cancellation logged | ✅ |
 | FR-EMG-09 | Offline emergency queue | ✅ `core/offline` |
 | FR-EMG-10 | Up to 10 contacts, drag priority, OTP per contact | 🟡 drag + limit done; per-contact OTP confirmation missing |
@@ -600,3 +600,42 @@ throw inside an async gap and vanish; and the channels provider resolves a
 frame after the list mounts, which a single pump misses.
 
 Totals: 564 Flutter tests, 118 backend tests, all green.
+
+### 2026-08-15 — evidence capture, end to end
+
+Gap #2 closed. An SOS now records audio and stores it encrypted.
+
+**Storage.** The existing media router only signed Cloudinary uploads, which
+needs an account this project does not have — so evidence stores on the
+project's own backend instead, the same reasoning that put emergency email
+on plain SMTP. AES-256-GCM at rest, with the key derived from
+`JWT_SECRET_KEY` when no dedicated one is set: deriving rather than falling
+back to plaintext, because an "encryption optional if unconfigured" path
+means the one deployment nobody configured is the one storing assault
+recordings in the clear. GCM authenticates too, so an altered file is
+refused rather than served. Nothing is reachable by URL — retrieval is
+authenticated and ownership-checked, and unknown vs. someone-else's ids both
+return 404 so a stranger cannot probe for real incidents.
+
+**Capture.** Audio only. Video needs a camera pointed at something useful,
+which a phone in a pocket is not, and it costs battery and upload time an
+emergency cannot spare. Recording starts with the countdown, ahead of
+FR-EMG-06's one-second requirement, and covers the seconds spent deciding.
+
+**Honest failure.** A refused microphone never interrupts someone
+mid-emergency; the alert goes out regardless and the outcome is reported
+afterwards, with a distinct state for each case. Marking safe deletes the
+recording (FR-EMG-08), as does an offline alert with no incident to attach
+to. The local file is deleted as soon as its bytes are read.
+
+Three defects found on the way: `python-multipart` was missing from
+`requirements.txt` so every upload would have failed on a fresh install; the
+evidence directory was not gitignored; and the recorder was read through
+`ref` inside `dispose()`, which throws and would have left the microphone
+open on any screen exit during a recording.
+
+The `dart:io` guard was extended rather than weakened: `*_io.dart` files are
+exempt as the native half of a conditional export, with a second test
+asserting nothing imports one directly.
+
+Totals: 576 Flutter tests, 140 backend tests, all green.
