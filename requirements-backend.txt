@@ -43,6 +43,9 @@ asyncpg==0.29.0
 # Imported unconditionally by routers/media.py, so the app fails to import
 # without it even when Cloudinary is unconfigured.
 cloudinary==1.37.0
+# Forensic incident report (FR-RPT-03). Pure Python, no system
+# dependencies -- unlike reportlab it needs nothing installed alongside.
+fpdf2==2.7.9
 redis[hiredis]==5.0.1
 # Module name is `asyncio_mqtt`. The project was renamed upstream to `aiomqtt`,
 # which installs a DIFFERENTLY named module -- swapping the two breaks

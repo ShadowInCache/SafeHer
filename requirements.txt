@@ -19,6 +19,9 @@ redis[hiredis]==5.0.1
 asyncpg==0.29.0
 alembic==1.13.1  # Database migrations
 cloudinary==1.37.0
+# Forensic incident report (FR-RPT-03). Pure Python, no system
+# dependencies -- unlike reportlab it needs nothing installed alongside.
+fpdf2==2.7.9
 
 # Event Processing
 paho-mqtt==1.6.1

@@ -1,4 +1,6 @@
-from datetime import datetime
+import logging
+import secrets
+from datetime import datetime, timedelta
 from typing import Optional
 
 import cloudinary
@@ -12,10 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi_app.config import Settings, get_settings
 from fastapi_app.db import get_session
 from fastapi_app.deps import get_evidence_store
-from fastapi_app.models import Incident, Media
+from fastapi_app.models import Incident, IncidentShare, Media
 from fastapi_app.schemas import UserPublic
 from fastapi_app.security import get_current_user
 from fastapi_app.services.evidence_store import EvidenceStore, EvidenceStoreError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/media", tags=["media"])
 
@@ -50,6 +54,7 @@ async def _owned_incident(
 async def upload_evidence(
     incident_id: str,
     file: UploadFile = File(...),
+    notify_contacts: bool = False,
     current_user: UserPublic = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
     settings: Settings = Depends(get_settings),
@@ -102,13 +107,63 @@ async def upload_evidence(
     await session.commit()
     await session.refresh(media)
 
+    followup = {"contacts_notified": 0, "share_expires_at": None}
+    if notify_contacts:
+        followup = await _send_evidence_followup(
+            session=session, settings=settings, user_id=current_user.id, incident=incident
+        )
+
     return {
         "id": media.id,
         "incident_id": incident.id,
         "media_type": media.media_type,
         "size_bytes": media.size_bytes,
         "created_at": media.created_at,
+        # FR-EMG-05's evidence URL, delivered as a follow-up rather than in
+        # the alert itself -- see services/emergency_dispatch.py for why.
+        "followup": followup,
     }
+
+
+async def _send_evidence_followup(
+    *, session: AsyncSession, settings: Settings, user_id: str, incident: Incident
+) -> dict:
+    """Mints a share link for the incident and emails it to the contacts.
+
+    Failures are swallowed into the response rather than raised: the
+    recording is already stored, and losing an upload because a follow-up
+    email bounced would be the wrong trade entirely.
+    """
+    from fastapi_app.models import User
+    from fastapi_app.routers.shares import DEFAULT_SHARE_DAYS, _hash_token, _utcnow
+    from fastapi_app.services.emergency_dispatch import send_evidence_followup
+
+    try:
+        token = secrets.token_urlsafe(32)
+        share = IncidentShare(
+            incident_id=incident.id,
+            token_hash=_hash_token(token),
+            expires_at=_utcnow() + timedelta(days=DEFAULT_SHARE_DAYS),
+        )
+        session.add(share)
+        await session.commit()
+        await session.refresh(share)
+
+        owner = await session.get(User, user_id)
+        report = await send_evidence_followup(
+            session=session,
+            settings=settings,
+            user=owner,
+            incident_id=incident.id,
+            share_url=f"{settings.public_base_url.rstrip('/')}/share/{token}",
+        )
+        return {
+            "contacts_notified": report.contacts_notified,
+            "share_expires_at": share.expires_at,
+        }
+    except Exception as exc:  # noqa: BLE001 - never lose a stored recording
+        logger.warning("Evidence follow-up failed for incident %s: %s", incident.id, exc)
+        return {"contacts_notified": 0, "share_expires_at": None}
 
 
 @router.get("/evidence/{media_id}")

@@ -346,3 +346,83 @@ async def _log(
         )
     )
     await session.commit()
+
+
+async def send_evidence_followup(
+    *,
+    session: AsyncSession,
+    settings: Settings,
+    user: User,
+    incident_id: str,
+    share_url: str,
+    email_sender=None,
+) -> DispatchReport:
+    """Tells the contacts already alerted that evidence is now available.
+
+    FR-EMG-05 wants the evidence URL in the alert itself. It cannot be: the
+    alert goes out the instant the countdown ends, while the recording is
+    still being made. Holding the alert back until the audio existed would
+    trade the requirement that matters (speed) for the one that does not.
+
+    So the URL follows in a second message. Only contacts with an email are
+    written to -- SMS is a per-message cost and a second text saying
+    "there is also a recording" is not worth what the first one is worth.
+    """
+    contacts = await contacts_repo.list_by_user(session, user_id=user.id)
+    report = DispatchReport()
+    if not contacts:
+        return report
+
+    emailer = email_sender or build_email_sender(
+        settings,
+        onesignal_sender=OneSignalEmailSender(
+            app_id=settings.onesignal_app_id,
+            api_key=settings.onesignal_api_key,
+        ),
+    )
+
+    display_name = (user.full_name or user.email or "A SafeHer user").strip()
+    subject = f"Evidence from {display_name}'s SafeHer alert"
+
+    for contact in contacts:
+        result = ContactDispatchResult(contact_id=contact.id, contact_name=contact.name)
+        if contact.email and emailer is not None and emailer.is_configured:
+            body = build_evidence_followup_email(
+                user_name=display_name, contact_name=contact.name, share_url=share_url
+            )
+            error = await _with_retries(
+                lambda: emailer.send(to=contact.email, subject=subject, html_body=body)
+            )
+            if error is None:
+                result.delivered_channels.append("email")
+                await _log(session, user.id, "email", "evidence_sent", incident_id, contact.id)
+            else:
+                result.failures["email"] = error
+                await _log(session, user.id, "email", "evidence_failed", incident_id, contact.id)
+        else:
+            result.failures["email"] = "No email address for this contact"
+        report.results.append(result)
+
+    return report
+
+
+def build_evidence_followup_email(
+    *, user_name: str, contact_name: str, share_url: str
+) -> str:
+    import html as _html
+
+    safe_user = _html.escape(user_name)
+    safe_contact = _html.escape(contact_name)
+    safe_url = _html.escape(share_url)
+    return f"""<html><body style="font-family:system-ui,-apple-system,sans-serif;
+line-height:1.5;color:#18181B">
+<p style="margin:0 0 12px">Hi {safe_contact},</p>
+<p style="margin:0 0 12px">A recording was captured during {safe_user}'s
+SafeHer alert. You can listen to it and see the full report here:</p>
+<p style="margin:16px 0"><a href="{safe_url}"
+style="background:#7C3AED;color:#fff;padding:12px 20px;border-radius:8px;
+text-decoration:none;display:inline-block">Open the report</a></p>
+<p style="margin:16px 0;color:#666">This link expires in 7 days and can be
+revoked at any time. If {safe_user} has not been in touch, contact your
+local emergency services.</p>
+</body></html>"""

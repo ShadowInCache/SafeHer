@@ -1,11 +1,15 @@
+from fastapi.responses import Response
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_app.db import get_session
+from fastapi_app.deps import get_evidence_store
 from fastapi_app.models import Incident, Location, Media
 from fastapi_app.schemas import IncidentCreate, IncidentPublic, UserPublic
 from fastapi_app.security import get_current_user
+from fastapi_app.services.evidence_store import EvidenceStore, EvidenceStoreError
+from fastapi_app.services.incident_pdf import build_incident_pdf
 from fastapi_app.services.notifications import send_fcm_notification
 from fastapi_app.config import get_settings
 
@@ -109,3 +113,73 @@ async def get_incident(
         await session.execute(select(Location).where(Location.incident_id == incident_id))
     ).scalar_one_or_none()
     return _with_location(incident, location)
+
+
+@router.get("/{incident_id}/report.pdf")
+async def export_incident_pdf(
+    incident_id: str,
+    current_user: UserPublic = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    store: EvidenceStore = Depends(get_evidence_store),
+):
+    """Forensic incident report (SRS FR-RPT-03).
+
+    Evidence is decrypted here only to hash it -- the recording itself never
+    enters the PDF. A report is routinely forwarded to people who should see
+    the summary rather than hear the audio, and the hash is what lets them
+    verify a copy they are given separately.
+    """
+    incident = await session.get(Incident, incident_id)
+    if incident is None or incident.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
+
+    location = (
+        (
+            await session.execute(
+                select(Location)
+                .where(Location.incident_id == incident.id)
+                .order_by(Location.captured_at)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    media_rows = (
+        (
+            await session.execute(
+                select(Media).where(Media.incident_id == incident.id).order_by(Media.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    evidence = []
+    for row in media_rows:
+        try:
+            evidence.append((row.id, row.media_type, store.read(row.url)))
+        except EvidenceStoreError:
+            # A recording that cannot be read is omitted rather than faked
+            # with a placeholder hash -- a chain of custody with an invented
+            # link in it is worse than one that is honestly short.
+            continue
+
+    pdf = build_incident_pdf(
+        incident_title=incident.title,
+        incident_description=incident.description,
+        threat_level=incident.threat_level,
+        occurred_at=incident.created_at,
+        reported_by=current_user.full_name or current_user.email,
+        latitude=location.lat if location else None,
+        longitude=location.lng if location else None,
+        evidence=evidence,
+    )
+
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="safeher-incident-{incident.id}.pdf"',
+            "Cache-Control": "no-store, private",
+        },
+    )
