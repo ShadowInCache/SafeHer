@@ -38,9 +38,9 @@ Beyond the SRS's four, the repo also runs:
 
 | Check | Last measured | Status |
 |-------|---------------|--------|
-| `flutter test` (full suite) | 580 passing, 0 failing | ✅ |
-| `pytest tests/` (in-process suites) | 159 passing, 0 failing | ✅ |
-| Alembic from empty → head → downgrade → head | 15 migrations, reversible | ✅ |
+| `flutter test` (full suite) | 584 passing, 0 failing | ✅ |
+| `pytest tests/` (in-process suites) | 174 passing, 0 failing | ✅ |
+| Alembic from empty → head → downgrade → head | 16 migrations, reversible | ✅ |
 
 Coverage by area — the thin spots are where next session's tests should go:
 
@@ -110,7 +110,7 @@ Coverage by area — the thin spots are where next session's tests should go:
 |-----------|--------|------|
 | No credentials in source or committed `.env` | ✅ | CI fails the build if `.env`, `*.db`, `__pycache__` or a browser profile is ever tracked. |
 | JWT in `flutter_secure_storage`, not Hive | ✅ | `core/network/auth_token_store.dart`. |
-| Certificate pinning for production | ✅ HTTP / ⛔ WebSocket | `core/network/certificate_pinning.dart` pins the leaf certificate on both the API and refresh clients, with pins supplied at build time via `--dart-define=PINNED_CERT_SHA256`. The live-monitoring WebSocket is **not** pinned — see gaps. |
+| Certificate pinning for production | ✅ HTTP **and** WebSocket | `core/network/certificate_pinning.dart` pins the leaf certificate on both the API and refresh clients, with pins supplied at build time via `--dart-define=PINNED_CERT_SHA256`. The live-monitoring socket is pinned too, via a no-trusted-roots `HttpClient` with validity and pin checks re-applied by hand. |
 | No sensitive data logged in release | 🟡 | No `print()` in the network layer; not audited app-wide. |
 
 ---
@@ -215,7 +215,7 @@ All 17 specified component groups exist under `lib/shared/components/`, at
 | FR-RPT-03 | PDF export, chain-of-custody hash | ⛔ **Gap** — no PDF code anywhere |
 | FR-RPT-04 | Safety analytics heatmap | ✅ **new** — `SaHeatGrid` + `/dashboard/analytics` |
 | FR-RPT-05 | Threat history chart, tap for detail | ✅ **new** — 14-day chart, tap opens that day's breakdown |
-| FR-RPT-06 | Share report via 7-day expiring link | ⛔ **Gap** |
+| FR-RPT-06 | Share report via 7-day expiring link | ✅ token-only, revocable, evidence streamed per request so expiry actually withdraws access |
 
 ---
 
@@ -260,26 +260,20 @@ Ordered by what a user would miss first.
    check email, and the only one that reliably wakes someone at 2am. Costs
    money with every provider (OneSignal included, since its free-tier SMS
    wraps your own Twilio account). A deliberate deferral, not an oversight.
-2. **PDF export + share link** (FR-RPT-03, FR-RPT-06) — an incident report
-   that cannot leave the phone is of limited use to police or a lawyer.
-   Evidence is now captured and stored, so there is finally something worth
-   exporting.
+2. **PDF export** (FR-RPT-03) — share links now cover getting a report to
+   someone; a forensic-grade PDF with a chain-of-custody hash is still
+   missing, and is what a court would actually want.
 3. **The alert email carries no evidence link** (FR-EMG-05, partial). The
    alert dispatches immediately while the recording is still running, so a
-   link at send time would always be empty. Needs the incident report to
-   expose evidence, and the email to point at that rather than at a file.
-4. **WebSocket certificate pinning** — the HTTP API is pinned; the live
-   monitoring socket (`realtime_client.dart`) still uses the platform
-   default. `WebSocketChannel.connect` offers no leaf-certificate hook, so
-   this needs an `IOWebSocketChannel` with a custom `HttpClient` and a
-   `SecureSocket`-level check.
-5. **Firmware OTA + device sets** (FR-DEV-04, FR-DEV-06).
-6. **Coverage in the thin areas** — `features/contacts` and `core/network`
+   link at send time would always be empty. The pieces now exist — a
+   follow-up email carrying a share link would close it.
+4. **Firmware OTA + device sets** (FR-DEV-04, FR-DEV-06).
+5. **Coverage in the thin areas** — `features/contacts` and `core/network`
    are the weakest points in an otherwise healthy total.
-7. **iOS verification** — the `project.pbxproj` edit registering
+6. **iOS verification** — the `project.pbxproj` edit registering
    `GoogleService-Info.plist` is the one change in the repo nobody has
    compiled. Needs `flutter build ios --debug` on a Mac.
-8. **Real hardware** — BLE pairing has only ever run against a fake service;
+7. **Real hardware** — BLE pairing has only ever run against a fake service;
    no glove or glasses has been paired. Performance targets (60fps, cold
    start) also need a physical device to measure.
 
@@ -668,3 +662,42 @@ later:
 Also enforced the ten-contact cap the SRS specifies and nothing implemented.
 
 Totals: 580 Flutter tests, 159 backend tests, all green.
+
+### 2026-08-15 — share links and the last unpinned channel
+
+Two gaps closed, plus a fix for the error message that had been misleading
+me for three sessions.
+
+**Share links (FR-RPT-06).** An incident can now reach someone with no
+SafeHer account — a police officer, a lawyer, a parent — through a
+token-only link that expires in seven days and can be revoked sooner. The
+token is 32 bytes of randomness, shown once, stored only as a hash. The
+shared view carries the incident, its location and its evidence and nothing
+about the account. Evidence still streams through the server, decrypted per
+request, precisely so that revocation and expiry can actually withdraw
+access; a permanent URL handed out once never could. Unknown, revoked and
+expired links answer identically, because telling them apart would confirm
+to a stranger that a link was once real.
+
+**WebSocket pinning.** The HTTP API had been pinned for a while; the socket
+carrying threat scores and emergency broadcasts was still on plain CA trust,
+which left the easier target unpinned. `WebSocketChannel.connect` exposes no
+certificate, so the socket is now built from an `HttpClient` with no trusted
+roots — every chain fails, every certificate reaches
+`badCertificateCallback`, and the pin becomes the sole trust anchor. That
+discards the CA's checks, so validity-window and pin checks are re-applied
+by hand.
+
+**A 404 meant two different things.** FastAPI answers an unknown *route*
+with a generic `{"detail": "Not Found"}`, while every handler here answers a
+missing *record* specifically. The app rendered both as "That couldn't be
+found", which sent a real debugging session after a contact that existed
+perfectly well; the truth was a backend nobody had restarted. Now the
+generic form reads as "Server needs updating — restart the backend".
+
+**A mistake worth recording:** I overwrote `fastapi_app/deps.py` while
+extracting a shared dependency, destroying its existing `SettingsDep`. Git
+had it; the file is now additive-only. Read before writing, including files
+that look new.
+
+Totals: 584 Flutter tests, 174 backend tests, all green.
