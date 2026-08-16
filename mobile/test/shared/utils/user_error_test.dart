@@ -4,22 +4,40 @@ import 'package:safeher_app/core/network/api_exception.dart';
 import 'package:safeher_app/features/auth/domain/auth_repository.dart';
 import 'package:safeher_app/shared/utils/user_error.dart';
 
-DioException _badResponse(int statusCode) {
+DioException _badResponse(int statusCode, {Object? data}) {
   final options = RequestOptions(path: '/dashboard/analytics');
   return DioException(
     requestOptions: options,
     type: DioExceptionType.badResponse,
-    response: Response(requestOptions: options, statusCode: statusCode),
+    response: Response(requestOptions: options, statusCode: statusCode, data: data),
   );
 }
 
 void main() {
   group('describeError', () {
+    test('an unknown endpoint reads as an outdated server, not a missing record', () {
+      // FastAPI answers an unknown route with the generic {"detail": "Not
+      // Found"}. Rendering that as "that couldn't be found" sent a real
+      // debugging session after a contact that existed perfectly well; the
+      // truth was a backend nobody had restarted.
+      final failure = describeError(_badResponse(404, data: {'detail': 'Not Found'}));
+
+      expect(failure.title, 'Server needs updating');
+      expect(failure.message.toLowerCase(), contains('restart the backend'));
+    });
+
+    test('a missing record still reads as a missing record', () {
+      final failure = describeError(_badResponse(404, data: {'detail': 'Contact not found'}));
+
+      expect(failure.title, 'Not available');
+      expect(failure.message.toLowerCase(), isNot(contains('restart the backend')));
+    });
+
     test('a 404 is not blamed on the network', () {
       // This is the case that cost real debugging time: a backend older
       // than the app 404s the new route, and the screen told the user to
       // check a connection that was working perfectly.
-      final failure = describeError(_badResponse(404));
+      final failure = describeError(_badResponse(404, data: {'detail': 'Contact not found'}));
 
       expect(failure.title, 'Not available');
       expect(failure.message.toLowerCase(), isNot(contains('connection')));

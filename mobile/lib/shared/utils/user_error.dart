@@ -22,6 +22,7 @@ class UserError {
 /// of failures it had nothing to do with — a 404 from a backend that had not
 /// been restarted sent exactly that message, and it cost real debugging time.
 UserError describeError(Object? error, {String fallbackTitle = 'Something went wrong'}) {
+  if (error is DioException && _isUnknownEndpoint(error)) return _outdatedServer;
   if (error is ApiException) {
     return UserError(title: _titleForStatus(error.statusCode, fallbackTitle), message: error.message);
   }
@@ -37,6 +38,28 @@ UserError describeError(Object? error, {String fallbackTitle = 'Something went w
     message: 'Please try again. If it keeps happening, restart the app.',
   );
 }
+
+/// A 404 has two very different meanings and the app kept conflating them.
+///
+/// FastAPI answers an unknown *route* with the generic `{"detail": "Not
+/// Found"}`; every handler in this project answers a missing *record* with
+/// something specific ("Contact not found"). Telling a user "that couldn't
+/// be found" when the truth is "this server is older than your app" sends
+/// her looking for a record that was never the problem — which has now cost
+/// three separate debugging sessions, all of them ending at a backend
+/// nobody had restarted.
+bool _isUnknownEndpoint(DioException error) {
+  if (error.response?.statusCode != 404) return false;
+  final data = error.response?.data;
+  final detail = data is Map ? data['detail'] : null;
+  return detail == null || detail.toString().trim().toLowerCase() == 'not found';
+}
+
+const _outdatedServer = UserError(
+  title: 'Server needs updating',
+  message: 'This feature is missing from the server you are connected to. '
+      'If you are running SafeHer locally, restart the backend.',
+);
 
 String _titleForStatus(int? statusCode, String fallback) {
   if (statusCode == null) return fallback;
