@@ -1112,3 +1112,25 @@ the three is one `.env` line away.
 279 backend tests pass, 596 Flutter tests pass. The LAN backend the phone
 talks to now runs on local Postgres.
 
+## 2026-08-17 (seventh session) — first deploy attempt
+
+Render's first build failed. Root cause was not the code: Render defaults
+new services to **Python 3.14.3**, and `asyncpg==0.29.0` publishes wheels
+for cp38 through cp312 only. With no wheel, pip compiled it from source, and
+its Cython-generated C calls `_PyLong_AsByteArray` with a signature that
+changed in 3.14 — `error: too few arguments to function`.
+
+Development runs 3.12.5 and CI already pinned 3.12, so this was purely a
+third environment disagreeing with the other two. `.python-version` now pins
+3.12 for Render, which is the shortened form Render accepts (it resolves to
+the latest 3.12 patch). All three environments now agree.
+
+Verified against PyPI rather than assumed: asyncpg 0.29.0 does publish a
+`cp312 manylinux x86_64` wheel and does **not** publish cp314, which is
+exactly the difference between a two-second install and a failed compile.
+
+The remaining backend dependencies were checked the same way. `cloudinary`
+and `paho-mqtt` publish no wheel at all, only an sdist — but both are pure
+Python and built in seconds in the failing log, so they are not a concern.
+Everything else is either pure Python or has a cp312 wheel.
+
