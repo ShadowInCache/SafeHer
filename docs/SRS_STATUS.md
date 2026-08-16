@@ -38,9 +38,9 @@ Beyond the SRS's four, the repo also runs:
 
 | Check | Last measured | Status |
 |-------|---------------|--------|
-| `flutter test` (full suite) | 576 passing, 0 failing | ✅ |
-| `pytest tests/` (in-process suites) | 140 passing, 0 failing | ✅ |
-| Alembic from empty → head → downgrade → head | 14 migrations, reversible | ✅ |
+| `flutter test` (full suite) | 580 passing, 0 failing | ✅ |
+| `pytest tests/` (in-process suites) | 159 passing, 0 failing | ✅ |
+| Alembic from empty → head → downgrade → head | 15 migrations, reversible | ✅ |
 
 Coverage by area — the thin spots are where next session's tests should go:
 
@@ -193,7 +193,7 @@ All 17 specified component groups exist under `lib/shared/components/`, at
 | FR-EMG-07 | AES-256 at rest + TLS 1.3 | ✅ AES-256-GCM at rest, owner-only retrieval, 22 tests. TLS in transit is the deployment's job (cert pinning is done client-side) |
 | FR-EMG-08 | False-alarm cancellation logged | ✅ |
 | FR-EMG-09 | Offline emergency queue | ✅ `core/offline` |
-| FR-EMG-10 | Up to 10 contacts, drag priority, OTP per contact | 🟡 drag + limit done; per-contact OTP confirmation missing |
+| FR-EMG-10 | Up to 10 contacts, drag priority, OTP per contact | ✅ all three. Ten-contact cap enforced server-side; per-contact code emailed to the contact and read back by the user |
 
 ### §4.4 Live Monitoring
 
@@ -639,3 +639,28 @@ exempt as the native half of a conditional export, with a second test
 asserting nothing imports one directly.
 
 Totals: 576 Flutter tests, 140 backend tests, all green.
+
+### 2026-08-15 — contact verification
+
+FR-EMG-10 closed. `confirmed` had been a hardcoded `true` in the client's
+JSON mapping, so the app displayed a confirmation nobody had performed.
+
+SafeHer now emails the contact a six-digit code and asks them to pass it to
+the person who added them. The contact needs no account and no app — asking
+a sister to install software before she can be an emergency contact is how
+contact lists end up empty — and the email explains who added them and why,
+because an unexplained code from an unknown sender reads as phishing.
+
+Two decisions pinned as contract, since both are easy to "fix" the wrong way
+later:
+
+- **An unverified contact is still notified.** Verification says which
+  entries to double-check; it is not a gate on getting help, because a
+  possibly-wrong address beats no address when someone is in danger.
+- **Changing an address drops its verification.** A tick earned at one
+  address says nothing about another, and keeping it would hide exactly the
+  typo this catches.
+
+Also enforced the ten-contact cap the SRS specifies and nothing implemented.
+
+Totals: 580 Flutter tests, 159 backend tests, all green.
