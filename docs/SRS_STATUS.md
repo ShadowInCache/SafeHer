@@ -256,28 +256,32 @@ battery". Drawing a trend from a single sample would be a fabricated chart.
 
 Ordered by what a user would miss first.
 
-1. **No evidence is captured** (FR-EMG-06, FR-EMG-07). No recording starts on
-   SOS; the `record` package is declared but imported nowhere, and nothing in
-   the app calls `/api/v1/media`. Without this there is no evidence URL for
-   FR-EMG-05 to carry and nothing for FR-EMG-07 to encrypt.
-2. **SMS delivery** — still unconfigured, and still the only channel that
-   reaches a contact who does not check email. Costs money with every
-   provider; a deliberate deferral, not an oversight.
-3. **PDF export + share link** (FR-RPT-03, FR-RPT-06) — an incident report
+1. **SMS delivery** — the only channel that reaches a contact who does not
+   check email, and the only one that reliably wakes someone at 2am. Costs
+   money with every provider (OneSignal included, since its free-tier SMS
+   wraps your own Twilio account). A deliberate deferral, not an oversight.
+2. **PDF export + share link** (FR-RPT-03, FR-RPT-06) — an incident report
    that cannot leave the phone is of limited use to police or a lawyer.
-4. **Per-contact OTP confirmation** (FR-EMG-10) — an unconfirmed contact may
-   be a wrong number that silently absorbs every alert.
-5. **WebSocket certificate pinning** — the HTTP API is pinned; the live
+   Evidence is now captured and stored, so there is finally something worth
+   exporting.
+3. **The alert email carries no evidence link** (FR-EMG-05, partial). The
+   alert dispatches immediately while the recording is still running, so a
+   link at send time would always be empty. Needs the incident report to
+   expose evidence, and the email to point at that rather than at a file.
+4. **WebSocket certificate pinning** — the HTTP API is pinned; the live
    monitoring socket (`realtime_client.dart`) still uses the platform
    default. `WebSocketChannel.connect` offers no leaf-certificate hook, so
    this needs an `IOWebSocketChannel` with a custom `HttpClient` and a
    `SecureSocket`-level check.
-6. **Firmware OTA + device sets** (FR-DEV-04, FR-DEV-06).
-7. **Coverage in the thin areas** — `features/contacts` and `core/network`
+5. **Firmware OTA + device sets** (FR-DEV-04, FR-DEV-06).
+6. **Coverage in the thin areas** — `features/contacts` and `core/network`
    are the weakest points in an otherwise healthy total.
-8. **iOS verification** 🚧 — the `project.pbxproj` edit registering
+7. **iOS verification** — the `project.pbxproj` edit registering
    `GoogleService-Info.plist` is the one change in the repo nobody has
    compiled. Needs `flutter build ios --debug` on a Mac.
+8. **Real hardware** — BLE pairing has only ever run against a fake service;
+   no glove or glasses has been paired. Performance targets (60fps, cold
+   start) also need a physical device to measure.
 
 ---
 
