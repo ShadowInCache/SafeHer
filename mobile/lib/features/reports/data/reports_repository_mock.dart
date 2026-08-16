@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'dart:math';
 
 import '../../../shared/components/charts/sa_motion_chart.dart';
@@ -61,6 +63,24 @@ const _locations = {
 };
 
 class ReportsRepositoryMock implements ReportsRepository {
+  @override
+  Future<Uint8List> exportPdf(String incidentId) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    // A real, if tiny, PDF: mock mode should exercise the same "hand these
+    // bytes to the share sheet" path as production, not a placeholder that
+    // every viewer rejects.
+    return Uint8List.fromList(
+      '%PDF-1.4\\n1 0 obj<</Type/Catalog>>endobj\\ntrailer<</Root 1 0 R>>\\n%%EOF'
+          .codeUnits,
+    );
+  }
+
+  @override
+  Future<String> createShareLink(String incidentId) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    return 'https://example.invalid/api/v1/share/mock-token-$incidentId';
+  }
+
   @override
   Future<List<ReportSummary>> getReports() async {
     await Future.delayed(const Duration(milliseconds: 300));

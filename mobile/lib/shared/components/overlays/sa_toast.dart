@@ -181,7 +181,15 @@ void showSaToast(
   Duration duration = const Duration(seconds: 4),
 }) {
   final overlay = Overlay.of(context);
-  _activeToast?.remove();
+
+  // `mounted` guard, not a bare remove(): the previous entry may belong to
+  // an Overlay that has since been torn down — navigating away and showing
+  // another toast is enough — and OverlayEntry.remove() asserts when it is
+  // called twice. That threw before the replacement toast could be shown,
+  // so the user saw nothing at all.
+  final previous = _activeToast;
+  if (previous != null && previous.mounted) previous.remove();
+  _activeToast = null;
 
   late final OverlayEntry entry;
   entry = OverlayEntry(

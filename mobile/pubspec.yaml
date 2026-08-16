@@ -91,6 +91,9 @@ dependencies:
   # Dialling helplines / nearby places and handing a destination to the
   # device's own maps app. No embedded third-party SDK.
   url_launcher: ^6.3.0
+  # Hands the exported incident report to the system share sheet, which
+  # is how a report actually reaches a lawyer or a police officer.
+  share_plus: ^10.0.2
 
   # Biometric unlock (FR-AUTH-05) — Face ID / Fingerprint, Profile > Security
   local_auth: ^2.3.0

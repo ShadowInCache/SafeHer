@@ -62,11 +62,22 @@ class ReportBreadcrumbMap extends StatelessWidget {
 /// Export actions row — PDF export and a shareable secure link, plus a
 /// truncated chain-of-custody hash for display.
 class ReportExportActions extends StatelessWidget {
-  const ReportExportActions({required this.onExportPdf, required this.onShareLink, this.chainOfCustodyHash, super.key});
+  const ReportExportActions({
+    required this.onExportPdf,
+    required this.onShareLink,
+    this.chainOfCustodyHash,
+    this.busy = false,
+    super.key,
+  });
 
   final VoidCallback onExportPdf;
   final VoidCallback onShareLink;
   final String? chainOfCustodyHash;
+
+  /// An export fetches a PDF over the network and a link mints a token, so
+  /// both take long enough to need saying. Without this the buttons looked
+  /// inert and invited a second tap.
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -79,7 +90,8 @@ class ReportExportActions extends StatelessWidget {
           variant: SaButtonVariant.secondary,
           fullWidth: true,
           icon: const SaIcon(SaIconGlyph.download, size: 18),
-          onPressed: onExportPdf,
+          isLoading: busy,
+          onPressed: busy ? null : onExportPdf,
         ),
         const SizedBox(height: AppSpacing.space3),
         SaButton(
@@ -87,7 +99,7 @@ class ReportExportActions extends StatelessWidget {
           variant: SaButtonVariant.ghost,
           fullWidth: true,
           icon: const SaIcon(SaIconGlyph.link, size: 18),
-          onPressed: onShareLink,
+          onPressed: busy ? null : onShareLink,
         ),
         if (chainOfCustodyHash != null) ...[
           const SizedBox(height: AppSpacing.space3),

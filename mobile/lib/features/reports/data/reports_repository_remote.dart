@@ -1,3 +1,9 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+
+import '../../../core/config/app_config.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../shared/models/threat_level.dart';
 import '../../../core/network/api_client.dart';
 import '../domain/models/report_detail.dart';
@@ -43,6 +49,31 @@ class ReportsRepositoryRemote implements ReportsRepository {
   Future<List<ReportSummary>> getReports() async {
     final response = await _apiClient.dio.get('/incidents/');
     return (response.data as List).cast<Map<String, dynamic>>().map(_summaryFromJson).toList();
+  }
+
+  @override
+  Future<Uint8List> exportPdf(String incidentId) async {
+    final response = await _apiClient.dio.get<List<int>>(
+      '/incidents/$incidentId/report.pdf',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data ?? const []);
+  }
+
+  @override
+  Future<String> createShareLink(String incidentId) async {
+    final response = await _apiClient.dio.post<Map<String, dynamic>>(
+      '/incidents/$incidentId/share',
+    );
+    final token = response.data?['token'] as String?;
+    if (token == null) {
+      throw const ApiException(message: 'The server returned no link. Please try again.');
+    }
+    // Built from the API base so the link points at the same deployment the
+    // app is talking to, rather than a hardcoded host that would be wrong
+    // on every environment but one.
+    final base = AppConfig.apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
+    return '$base/share/$token';
   }
 
   @override

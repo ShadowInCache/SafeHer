@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +31,26 @@ List<ReportSummary> _sampleReports() => const [
 ];
 
 class _FakeReportsRepository implements ReportsRepository {
+  var exportCalls = <String>[];
+  var shareCalls = <String>[];
+
+  /// Set to make both actions fail, as a network error would.
+  bool actionsFail = false;
+
+  @override
+  Future<Uint8List> exportPdf(String incidentId) async {
+    exportCalls.add(incidentId);
+    if (actionsFail) throw Exception('export failed');
+    return Uint8List.fromList('%PDF-1.4 fake'.codeUnits);
+  }
+
+  @override
+  Future<String> createShareLink(String incidentId) async {
+    shareCalls.add(incidentId);
+    if (actionsFail) throw Exception('share failed');
+    return 'https://example.invalid/api/v1/share/token-$incidentId';
+  }
+
   _FakeReportsRepository({this.shouldFail = false, this.empty = false});
   final bool shouldFail;
   final bool empty;

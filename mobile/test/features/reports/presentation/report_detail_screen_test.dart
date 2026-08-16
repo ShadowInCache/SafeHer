@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -56,6 +57,26 @@ ReportDetail _sampleDetail(String id) => ReportDetail(
 );
 
 class _FakeReportsRepository implements ReportsRepository {
+  var exportCalls = <String>[];
+  var shareCalls = <String>[];
+
+  /// Set to make both actions fail, as a network error would.
+  bool actionsFail = false;
+
+  @override
+  Future<Uint8List> exportPdf(String incidentId) async {
+    exportCalls.add(incidentId);
+    if (actionsFail) throw Exception('export failed');
+    return Uint8List.fromList('%PDF-1.4 fake'.codeUnits);
+  }
+
+  @override
+  Future<String> createShareLink(String incidentId) async {
+    shareCalls.add(incidentId);
+    if (actionsFail) throw Exception('share failed');
+    return 'https://example.invalid/api/v1/share/token-$incidentId';
+  }
+
   _FakeReportsRepository({this.shouldFail = false});
   final bool shouldFail;
 
@@ -148,21 +169,6 @@ void main() {
       expect(find.text('Photo not available'), findsOneWidget);
     });
 
-    testWidgets('Export PDF and Share Secure Link show confirmation toasts', (tester) async {
-      await tester.pumpWidget(_harness());
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.scrollUntilVisible(find.text('Export PDF'), 300, scrollable: find.byType(Scrollable).first);
-      await tester.tap(find.text('Export PDF'));
-      await tester.pump();
-      expect(find.text('Preparing PDF export…'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 5));
-
-      await tester.tap(find.text('Share Secure Link'));
-      await tester.pump();
-      expect(find.text('Secure link copied. Expires in 7 days.'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 5));
-    });
-
     testWidgets('renders_empty_state (error + retry)', (tester) async {
       await tester.pumpWidget(_harness(repo: _FakeReportsRepository(shouldFail: true)));
       await tester.pump(const Duration(milliseconds: 100));
@@ -210,5 +216,97 @@ void main() {
         customPump: (tester) async => tester.pump(const Duration(milliseconds: 100)),
       );
     });
+
+    testWidgets('Export PDF actually fetches a report', (tester) async {
+      // Regression: this button was a toast reading "Preparing PDF export…"
+      // and nothing else. A message claiming an action that did not happen
+      // is worse here than no button at all — a user who believes she has a
+      // copy of her own evidence stops trying to get one.
+      final repo = _FakeReportsRepository();
+      await tester.pumpWidget(_harness(repo: repo));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.scrollUntilVisible(
+        find.text('Export PDF'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Export PDF'));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(repo.exportCalls, ['1']);
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(milliseconds: 300));
+    });
+
+    testWidgets('Share Secure Link actually mints one', (tester) async {
+      // Clipboard is a platform channel with no handler in the test
+      // binding, so the await never completes and the code never reaches
+      // its toast. Mocked rather than worked around, because the product
+      // behaviour under test is "link minted, then confirmed".
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async => null,
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+
+      // The same button used to claim "Secure link copied" when no link had
+      // been created and the clipboard was untouched.
+      final repo = _FakeReportsRepository();
+      await tester.pumpWidget(_harness(repo: repo));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.scrollUntilVisible(
+        find.text('Share Secure Link'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Share Secure Link'));
+      // One frame to run the async handler, then the toast's slide-in.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(repo.shareCalls, ['1']);
+      // Either title is correct: the clipboard is a platform channel and
+      // whether it answers in a test binding is not what this test is for.
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Text && (w.data == 'Link copied' || w.data == 'Link created'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(milliseconds: 300));
+    });
+
+    testWidgets('a failed export says so instead of going quiet', (tester) async {
+      final repo = _FakeReportsRepository()..actionsFail = true;
+      await tester.pumpWidget(_harness(repo: repo));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.scrollUntilVisible(
+        find.text('Export PDF'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Export PDF'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Couldn’t export the report'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(milliseconds: 300));
+    });
+
   });
 }

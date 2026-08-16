@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../../shared/utils/user_error.dart';
+import '../../../core/platform/report_export.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -50,7 +53,7 @@ class ReportDetailScreen extends ConsumerWidget {
             ),
             Expanded(
               child: detailAsync.when(
-                data: (detail) => _ReportDetailContent(detail: detail),
+                data: (detail) => _ReportDetailContent(detail: detail, incidentId: reportId),
                 loading: () => const _ReportDetailLoading(),
                 error: (error, stackTrace) => SaEmptyState(
                   title: "Couldn't load this report",
@@ -67,13 +70,109 @@ class ReportDetailScreen extends ConsumerWidget {
   }
 }
 
-class _ReportDetailContent extends StatelessWidget {
-  const _ReportDetailContent({required this.detail});
+class _ReportDetailContent extends ConsumerStatefulWidget {
+  const _ReportDetailContent({required this.detail, required this.incidentId});
 
   final ReportDetail detail;
+  final String incidentId;
+
+  @override
+  ConsumerState<_ReportDetailContent> createState() => _ReportDetailContentState();
+}
+
+class _ReportDetailContentState extends ConsumerState<_ReportDetailContent> {
+  static const _export = ReportExport();
+
+  bool _busy = false;
+
+  /// Fetches the PDF and hands it to the share sheet.
+  ///
+  /// These two buttons used to be toasts and nothing else — "Preparing PDF
+  /// export…" that prepared nothing, and "Secure link copied" when no link
+  /// had been made and the clipboard was untouched. A message claiming an
+  /// action that did not happen is worse on this screen than no button at
+  /// all: a user who believes she has a copy of her own evidence stops
+  /// trying to get one.
+  Future<void> _exportPdf() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final bytes = await ref
+          .read(reportsRepositoryProvider)
+          .exportPdf(widget.incidentId);
+      final shared = await _export.sharePdf(
+        bytes: bytes,
+        filename: 'safeher-incident-${widget.incidentId}.pdf',
+      );
+      if (!mounted) return;
+      if (!shared) {
+        showSaToast(
+          context,
+          title: 'Couldn’t open the share sheet',
+          message: 'Exporting a report needs the SafeHer app on your phone.',
+          type: SaToastType.error,
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      final failure = describeError(error, fallbackTitle: 'Couldn’t export the report');
+      showSaToast(
+        context,
+        title: failure.title,
+        message: failure.message,
+        type: SaToastType.error,
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _shareLink() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final url = await ref
+          .read(reportsRepositoryProvider)
+          .createShareLink(widget.incidentId);
+
+      // The clipboard is a separate failure from minting the link, and
+      // conflating them would report "couldn't create the link" for a link
+      // that exists — leaving the user with a live share she doesn't know
+      // about and can't revoke.
+      var copied = true;
+      try {
+        await Clipboard.setData(ClipboardData(text: url));
+      } catch (_) {
+        copied = false;
+      }
+
+      if (!mounted) return;
+      showSaToast(
+        context,
+        title: copied ? 'Link copied' : 'Link created',
+        message: copied
+            ? 'Anyone with this link can read the report for 7 days. '
+                  'You can revoke it any time.'
+            : 'Copy it from the report list. It expires in 7 days.',
+        type: SaToastType.success,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final failure = describeError(error, fallbackTitle: 'Couldn’t create the link');
+      showSaToast(
+        context,
+        title: failure.title,
+        message: failure.message,
+        type: SaToastType.error,
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final detail = widget.detail;
     final onSurface = Theme.of(context).colorScheme.onSurface;
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -159,8 +258,9 @@ class _ReportDetailContent extends StatelessWidget {
         const SizedBox(height: AppSpacing.space6),
         ReportExportActions(
           chainOfCustodyHash: detail.chainOfCustodyHash,
-          onExportPdf: () => showSaToast(context, message: 'Preparing PDF export…'),
-          onShareLink: () => showSaToast(context, message: 'Secure link copied. Expires in 7 days.'),
+          busy: _busy,
+          onExportPdf: _exportPdf,
+          onShareLink: _shareLink,
         ),
       ],
     );

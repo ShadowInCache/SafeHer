@@ -143,6 +143,40 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
     });
 
+    testWidgets('survives a toast whose overlay has been torn down', (tester) async {
+      // The one-at-a-time bookkeeping is a module-level global, so it
+      // outlives the screen that created it. Removing an entry twice
+      // asserts, which used to throw *before* the replacement could be
+      // shown — the user got no toast at all, on a different screen.
+      Widget screen(String label) => MaterialApp(
+        theme: AppTheme.dark,
+        home: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () => showSaToast(context, message: label),
+            child: Text(label),
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(screen('first'));
+      await tester.tap(find.text('first'));
+      await tester.pump();
+
+      // Replace the whole app, disposing the overlay the toast lives in.
+      await tester.pumpWidget(screen('second'));
+      await tester.pump();
+
+      await tester.tap(find.text('second'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('second'), findsWidgets);
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(milliseconds: 300));
+    });
+
     testWidgets('a second toast replaces the first rather than stacking', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
