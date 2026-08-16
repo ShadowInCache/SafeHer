@@ -45,3 +45,8 @@ mobile/.dart_tool/
 # JetBrains IDE
 .idea/
 *.iml
+
+# Emergency evidence recordings. Encrypted at rest, but they are recordings
+# of people in danger and must never enter version control regardless.
+evidence_store/
+*.enc

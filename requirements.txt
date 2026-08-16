@@ -7,6 +7,9 @@
 flask==3.0.0
 flask-cors==4.0.0
 fastapi==0.110.0
+# Required for multipart/form-data, i.e. every file upload -- evidence
+# uploads 400 without it. Was only in requirements-backend.txt.
+python-multipart==0.0.9
 uvicorn[standard]==0.27.1
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4

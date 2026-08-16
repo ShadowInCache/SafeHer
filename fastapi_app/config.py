@@ -98,6 +98,15 @@ class Settings(BaseSettings):
     cloudinary_upload_preset: Optional[str] = None
     media_max_size_bytes: int = 10 * 1024 * 1024
 
+    # Emergency evidence (SRS FR-EMG-06/07). Stored on the project's own
+    # infrastructure by default -- no third-party account required -- and
+    # always encrypted at rest. See services/evidence_store.py.
+    evidence_storage_dir: str = "./evidence_store"
+    # Optional. Unset, a key is derived from JWT_SECRET_KEY, so evidence is
+    # never written in the clear just because nobody configured this.
+    evidence_encryption_key: Optional[str] = None
+    evidence_max_size_bytes: int = 25 * 1024 * 1024
+
     # AI
     openai_api_key: Optional[str] = None
 

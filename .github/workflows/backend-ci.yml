@@ -87,7 +87,7 @@ jobs:
         run: |
           set -e
           fail=0
-          for pattern in '__pycache__' '\.db$' 'chrome_fresh_profile' '(^|/)\.env$'; do
+          for pattern in '__pycache__' '\.db$' 'chrome_fresh_profile' '(^|/)\.env$' '\.enc$' 'evidence_store/'; do
             count=$(git ls-files | grep -cE "$pattern" || true)
             if [ "$count" -ne 0 ]; then
               echo "::error::$count tracked file(s) match '$pattern'"

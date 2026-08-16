@@ -3,14 +3,175 @@ from typing import Optional
 
 import cloudinary
 from cloudinary.utils import api_sign_request
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_app.config import Settings, get_settings
+from fastapi_app.db import get_session
+from fastapi_app.models import Incident, Media
 from fastapi_app.schemas import UserPublic
 from fastapi_app.security import get_current_user
+from fastapi_app.services.evidence_store import EvidenceStore, EvidenceStoreError, derive_key
 
 router = APIRouter(prefix="/api/v1/media", tags=["media"])
+
+
+def get_evidence_store(settings: Settings = Depends(get_settings)) -> EvidenceStore:
+    return EvidenceStore(
+        directory=settings.evidence_storage_dir,
+        key=derive_key(settings.jwt_secret_key, explicit_key=settings.evidence_encryption_key),
+    )
+
+
+# Recordings only. An emergency upload is audio or video captured by the
+# app, never a document or an archive, so the accepted set is a short
+# allow-list rather than anything the client cares to send.
+_ALLOWED_EVIDENCE_TYPES = {
+    "audio/aac",
+    "audio/mp4",
+    "audio/mpeg",
+    "audio/ogg",
+    "audio/wav",
+    "audio/webm",
+    "video/mp4",
+    "video/webm",
+}
+
+
+async def _owned_incident(
+    session: AsyncSession, *, incident_id: str, user_id: str
+) -> Incident:
+    incident = await session.get(Incident, incident_id)
+    # Same 404 whether the incident is missing or belongs to someone else:
+    # distinguishing them would let anyone probe for valid incident ids.
+    if incident is None or incident.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
+    return incident
+
+
+@router.post("/evidence/{incident_id}", status_code=status.HTTP_201_CREATED)
+async def upload_evidence(
+    incident_id: str,
+    file: UploadFile = File(...),
+    current_user: UserPublic = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    store: EvidenceStore = Depends(get_evidence_store),
+):
+    """Stores one evidence recording against an incident, encrypted at rest.
+
+    Returns the id the owner can fetch it back with. No public URL is ever
+    minted: a link that leaks must not be enough to play a recording of an
+    assault.
+    """
+    incident = await _owned_incident(
+        session, incident_id=incident_id, user_id=current_user.id
+    )
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type not in _ALLOWED_EVIDENCE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Evidence must be an audio or video recording.",
+        )
+
+    # Read with a cap rather than trusting Content-Length, which a client
+    # controls. One byte over the limit is enough to reject.
+    data = await file.read(settings.evidence_max_size_bytes + 1)
+    if len(data) > settings.evidence_max_size_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Recording is too large.",
+        )
+    if not data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Recording is empty."
+        )
+
+    try:
+        storage_id = store.write(data)
+    except EvidenceStoreError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+
+    media = Media(
+        incident_id=incident.id,
+        # Not a URL despite the column name: an internal reference the
+        # retrieval endpoint resolves. The column predates this feature.
+        url=storage_id,
+        media_type=content_type,
+        size_bytes=len(data),
+    )
+    session.add(media)
+    await session.commit()
+    await session.refresh(media)
+
+    return {
+        "id": media.id,
+        "incident_id": incident.id,
+        "media_type": media.media_type,
+        "size_bytes": media.size_bytes,
+        "created_at": media.created_at,
+    }
+
+
+@router.get("/evidence/{media_id}")
+async def download_evidence(
+    media_id: str,
+    current_user: UserPublic = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    store: EvidenceStore = Depends(get_evidence_store),
+):
+    """Streams one recording back to the person it belongs to."""
+    media = await session.get(Media, media_id)
+    if media is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence not found")
+
+    await _owned_incident(session, incident_id=media.incident_id, user_id=current_user.id)
+
+    try:
+        data = store.read(media.url)
+    except EvidenceStoreError as exc:
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail=str(exc))
+
+    return Response(
+        content=data,
+        media_type=media.media_type,
+        headers={
+            # Never rendered inline and never cached by an intermediary.
+            "Content-Disposition": f'attachment; filename="evidence-{media.id}"',
+            "Cache-Control": "no-store, private",
+        },
+    )
+
+
+@router.get("/evidence/incident/{incident_id}/list")
+async def list_incident_evidence(
+    incident_id: str,
+    current_user: UserPublic = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    await _owned_incident(session, incident_id=incident_id, user_id=current_user.id)
+    rows = (
+        (
+            await session.execute(
+                select(Media).where(Media.incident_id == incident_id).order_by(Media.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        {
+            "id": row.id,
+            "media_type": row.media_type,
+            "size_bytes": row.size_bytes,
+            "created_at": row.created_at,
+        }
+        for row in rows
+    ]
 
 
 class SignUploadRequest(BaseModel):
