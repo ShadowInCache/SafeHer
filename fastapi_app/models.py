@@ -76,6 +76,12 @@ class Incident(Base):
     description = Column(String, nullable=True)
     threat_level = Column(String, nullable=True)
     evidence_url = Column(String, nullable=True)
+
+    # SRS FR-RPT-01. Machine-written, and labelled as such everywhere it is
+    # shown -- it must never be mistaken for a human account or evidence.
+    ai_summary = Column(Text, nullable=True)
+    ai_summary_generated_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, nullable=False, default=_utcnow)
     updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
 

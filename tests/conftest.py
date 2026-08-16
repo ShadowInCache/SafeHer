@@ -34,6 +34,10 @@ os.environ.setdefault("TWILIO_FROM_NUMBER", "")
 os.environ.setdefault("ONESIGNAL_APP_ID", "")
 os.environ.setdefault("ONESIGNAL_API_KEY", "")
 os.environ.setdefault("FCM_SERVER_KEY", "")
+# Added after a summary test reached the live Gemini API and came back with
+# a real 503 from Google. Every new outbound credential has to be listed
+# here or the suite starts spending someone's quota.
+os.environ.setdefault("GEMINI_API_KEY", "")
 
 # Blanking SMTP would switch this off by itself, but stating it means a test
 # never depends on that inference holding.

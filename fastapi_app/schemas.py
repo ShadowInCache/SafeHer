@@ -193,6 +193,11 @@ class IncidentPublic(BaseModel):
     # user's emergency contacts (FR-EMG-04). None on every other endpoint
     # that returns an incident, where no dispatch was attempted — which is
     # a different fact from "attempted and reached nobody" (0).
+    # SRS FR-RPT-01. Machine-written; the client labels it as such so it is
+    # never read as a human account of what happened.
+    ai_summary: Optional[str] = None
+    ai_summary_generated_at: Optional[datetime] = None
+
     contacts_total: Optional[int] = None
     contacts_notified: Optional[int] = None
     # Ids of the contacts a channel actually accepted. The client marks

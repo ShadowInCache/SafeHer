@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi.responses import Response
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import desc, select
@@ -10,8 +11,14 @@ from fastapi_app.schemas import IncidentCreate, IncidentPublic, UserPublic
 from fastapi_app.security import get_current_user
 from fastapi_app.services.evidence_store import EvidenceStore, EvidenceStoreError
 from fastapi_app.services.incident_pdf import build_incident_pdf
+from fastapi_app.services.incident_summary import (
+    IncidentSummarizer,
+    SummaryGenerationError,
+    SummaryNotConfigured,
+    build_prompt,
+)
 from fastapi_app.services.notifications import send_fcm_notification
-from fastapi_app.config import get_settings
+from fastapi_app.config import Settings, get_settings
 
 router = APIRouter(prefix="/api/v1/incidents", tags=["incidents"])
 
@@ -173,6 +180,7 @@ async def export_incident_pdf(
         latitude=location.lat if location else None,
         longitude=location.lng if location else None,
         evidence=evidence,
+        ai_summary=incident.ai_summary,
     )
 
     return Response(
@@ -183,3 +191,89 @@ async def export_incident_pdf(
             "Cache-Control": "no-store, private",
         },
     )
+
+
+@router.post("/{incident_id}/summary")
+async def generate_incident_summary(
+    incident_id: str,
+    force: bool = False,
+    current_user: UserPublic = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+):
+    """Writes a plain-language summary of the incident (SRS FR-RPT-01).
+
+    Cached after the first run: a summary whose wording changes every time
+    the report is opened is not something anyone can cite, and regenerating
+    on every read would spend the free tier on nothing. `force=true` rewrites
+    it, which is what the client uses once evidence has finished uploading
+    and the fact sheet is finally complete.
+    """
+    incident = await session.get(Incident, incident_id)
+    if incident is None or incident.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
+
+    if incident.ai_summary and not force:
+        return {
+            "summary": incident.ai_summary,
+            "generated_at": incident.ai_summary_generated_at,
+            "regenerated": False,
+        }
+
+    summarizer = IncidentSummarizer(
+        api_key=settings.gemini_api_key, model=settings.gemini_model
+    )
+    if not summarizer.is_configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Summaries are not available: no model is configured.",
+        )
+
+    location = (
+        (
+            await session.execute(
+                select(Location)
+                .where(Location.incident_id == incident.id)
+                .order_by(Location.captured_at)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    evidence_count = len(
+        (
+            await session.execute(select(Media).where(Media.incident_id == incident.id))
+        )
+        .scalars()
+        .all()
+    )
+
+    prompt = build_prompt(
+        title=incident.title,
+        severity=incident.threat_level,
+        occurred_at=incident.created_at.isoformat(),
+        latitude=location.lat if location else None,
+        longitude=location.lng if location else None,
+        evidence_count=evidence_count,
+        contacts_notified=None,
+        trigger=incident.description or "not recorded",
+    )
+
+    try:
+        summary = await summarizer.summarise(prompt)
+    except SummaryNotConfigured as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+    except SummaryGenerationError as exc:
+        # No summary rather than a guessed one: this text sits at the top of
+        # a report and will be read as a record of events.
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+
+    incident.ai_summary = summary
+    incident.ai_summary_generated_at = datetime.utcnow()
+    await session.commit()
+
+    return {
+        "summary": summary,
+        "generated_at": incident.ai_summary_generated_at,
+        "regenerated": True,
+    }

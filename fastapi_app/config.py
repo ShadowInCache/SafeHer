@@ -114,6 +114,15 @@ class Settings(BaseSettings):
     # AI
     openai_api_key: Optional[str] = None
 
+    # AI incident summaries (FR-RPT-01). Gemini has a usable free tier,
+    # which is what makes this requirement reachable at all here.
+    gemini_api_key: Optional[str] = None
+    # An alias rather than a pinned version: gemini-2.5-flash was retired
+    # for new keys mid-project and started answering 404. An alias moves
+    # with Google; the cost is that behaviour can shift under you, which is
+    # acceptable for a summary and would not be for anything load-bearing.
+    gemini_model: str = "gemini-flash-latest"
+
     # Maps
     google_maps_api_key: Optional[str] = None
 

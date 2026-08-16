@@ -74,7 +74,7 @@ stated limitation), **not built**.
 
 | ID | Status | Implementation |
 |----|--------|----------------|
-| FR-RPT-01 | not built | AI-generated incident summaries have no implementation; `openai_api_key` exists in config and is unused |
+| FR-RPT-01 | partial | `fastapi_app/services/incident_summary.py` — generated in ~40s, over the SRS's 30s target |
 | FR-RPT-02 | done | `mobile/lib/features/reports/domain/models/timeline_event.dart` |
 | FR-RPT-03 | done | `fastapi_app/services/incident_pdf.py` |
 | FR-RPT-04 | done | `mobile/lib/shared/components/charts/sa_heat_grid.dart`, `fastapi_app/routers/dashboard.py` |
@@ -85,12 +85,11 @@ stated limitation), **not built**.
 
 ## What is genuinely not built
 
-Four requirements, all of which need something this project does not have:
+Three requirements, all of which need hardware this project does not have:
 
 - **FR-DEV-04** firmware OTA — needs real device firmware to update.
 - **FR-DEV-06** named device sets — needs more than one device set to exist.
 - **FR-MON-02** live video from the glasses — needs the glasses.
-- **FR-RPT-01** AI incident summaries — needs a paid model API.
 
 Everything else is at least partial, with the limitation stated rather than
 implied.

@@ -63,6 +63,7 @@ def build_incident_pdf(
     longitude: Optional[float],
     evidence: Sequence[tuple[str, str, bytes]],
     contacts_notified: Optional[int] = None,
+    ai_summary: Optional[str] = None,
 ) -> bytes:
     """Renders the report.
 
@@ -99,6 +100,25 @@ def build_incident_pdf(
         field("Contacts alerted", str(contacts_notified))
     if incident_description:
         field("Summary", incident_description)
+
+    if ai_summary:
+        heading("Summary")
+        pdf.set_font("Helvetica", "", 10)
+        pdf.multi_cell(0, 6, ai_summary, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(1)
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_text_color(*MUTED)
+        # Labelled on the page itself, not only in the app. A reader who
+        # takes this for a human account would weigh it as testimony.
+        pdf.multi_cell(
+            0,
+            5,
+            "Written automatically from the recorded facts below. It is a "
+            "convenience, not a statement by the person involved.",
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
+        pdf.set_text_color(*INK)
 
     heading("Location")
     if latitude is not None and longitude is not None:
