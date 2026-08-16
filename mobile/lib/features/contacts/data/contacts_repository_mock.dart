@@ -32,6 +32,31 @@ class ContactsRepositoryMock implements ContactsRepository {
   }
 
   @override
+  Future<bool> sendVerificationCode(String id) async {
+    await Future.delayed(const Duration(milliseconds: 150));
+    return false;
+  }
+
+  @override
+  Future<List<Contact>> confirmVerificationCode(String id, String code) async {
+    await Future.delayed(const Duration(milliseconds: 150));
+    final index = _contacts.indexWhere((c) => c.id == id);
+    if (index != -1 && code == '123456') {
+      final existing = _contacts[index];
+      _contacts[index] = Contact(
+        id: existing.id,
+        name: existing.name,
+        phone: existing.phone,
+        relationship: existing.relationship,
+        priority: existing.priority,
+        confirmed: true,
+        email: existing.email,
+      );
+    }
+    return List.unmodifiable(_contacts);
+  }
+
+  @override
   Future<AlertChannels> getAlertChannels() async =>
       // Mirrors the shipping configuration: email works, SMS costs money and
       // is not set up. Mock mode therefore exercises the warning path by

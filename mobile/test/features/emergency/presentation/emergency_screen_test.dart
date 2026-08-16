@@ -64,6 +64,25 @@ List<Contact> _sampleContacts() => const [
 ];
 
 class _FakeContactsRepository implements ContactsRepository {
+  var verificationSends = <String>[];
+  var verificationCodes = <String>[];
+
+  /// Set to make [confirmVerificationCode] throw, as a wrong code does.
+  bool verificationFails = false;
+
+  @override
+  Future<bool> sendVerificationCode(String id) async {
+    verificationSends.add(id);
+    return false;
+  }
+
+  @override
+  Future<List<Contact>> confirmVerificationCode(String id, String code) async {
+    verificationCodes.add(code);
+    if (verificationFails) throw Exception('wrong code');
+    return getContacts();
+  }
+
   /// Defaults to "everything works" so existing tests are unaffected by the
   /// unreachable-contact warning; the settings tests override it.
   AlertChannels channels = const AlertChannels(sms: true, email: true, push: true);

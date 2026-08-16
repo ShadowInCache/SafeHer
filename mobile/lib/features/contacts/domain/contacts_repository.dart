@@ -27,6 +27,13 @@ abstract class ContactsRepository {
     String? email,
   });
 
+  /// Emails the contact a confirmation code (SRS FR-EMG-10). Returns true
+  /// if they were already verified and nothing was sent.
+  Future<bool> sendVerificationCode(String id);
+
+  /// Confirms [code] against the contact, returning the refreshed list.
+  Future<List<Contact>> confirmVerificationCode(String id, String code);
+
   Future<List<Contact>> removeContact(String id);
   Future<List<Contact>> reorderContacts(List<Contact> newOrder);
 }

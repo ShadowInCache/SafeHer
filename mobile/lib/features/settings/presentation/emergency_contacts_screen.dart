@@ -19,6 +19,7 @@ import '../../contacts/data/contacts_providers.dart';
 import '../../contacts/domain/models/alert_channels.dart';
 import '../../contacts/domain/models/contact.dart';
 import 'widgets/add_contact_sheet.dart';
+import 'widgets/verify_contact_sheet.dart';
 
 /// Manage emergency contacts: reorder by drag (priority), add, and
 /// swipe-to-remove.
@@ -56,6 +57,21 @@ class EmergencyContactsScreen extends ConsumerWidget {
       relationship: result.$3,
       email: email.isEmpty ? null : email,
     );
+  }
+
+  Future<void> _handleVerify(BuildContext context, WidgetRef ref, Contact contact) async {
+    final verified = await showSaBottomSheet<bool>(
+      context,
+      builder: (context) => VerifyContactSheet(contact: contact),
+    );
+    if (verified == true && context.mounted) {
+      showSaToast(
+        context,
+        title: 'Contact confirmed',
+        message: '${contact.name} will receive your emergency alerts.',
+        type: SaToastType.success,
+      );
+    }
   }
 
   @override
@@ -97,6 +113,7 @@ class EmergencyContactsScreen extends ConsumerWidget {
                 data: (contacts) => _ContactsList(
                   contacts: contacts,
                   onEdit: (contact) => _handleEdit(context, ref, contact),
+                  onVerify: (contact) => _handleVerify(context, ref, contact),
                 ),
                 loading: () => const _ContactsLoading(),
                 error: (error, stackTrace) => SaEmptyState(
@@ -115,9 +132,14 @@ class EmergencyContactsScreen extends ConsumerWidget {
 }
 
 class _ContactsList extends ConsumerWidget {
-  const _ContactsList({required this.contacts, required this.onEdit});
+  const _ContactsList({
+    required this.contacts,
+    required this.onEdit,
+    required this.onVerify,
+  });
 
   final void Function(Contact contact) onEdit;
+  final void Function(Contact contact) onVerify;
 
   final List<Contact> contacts;
 
@@ -174,7 +196,10 @@ class _ContactsList extends ConsumerWidget {
                   dragHandle: const SaIcon(SaIconGlyph.refresh, size: 18),
                   onTap: () => onEdit(contact),
                 ),
-                if (unreachable) _UnreachableNotice(onAddEmail: () => onEdit(contact)),
+                if (unreachable)
+                  _UnreachableNotice(onAddEmail: () => onEdit(contact))
+                else if (!contact.confirmed && contact.hasEmail)
+                  _UnverifiedNotice(onVerify: () => onVerify(contact)),
                 _ContactActions(contact: contact),
               ],
             ),
@@ -320,6 +345,52 @@ class _UnreachableNotice extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Shown on a contact nobody at that address has confirmed (FR-EMG-10).
+///
+/// Quieter than the unreachable notice on purpose: an unverified contact
+/// still gets alerted, so this is a "worth checking", not a "this will
+/// fail". Ranking them the same would flatten the difference between a
+/// contact who might not hear and one who definitely won't.
+class _UnverifiedNotice extends StatelessWidget {
+  const _UnverifiedNotice({required this.onVerify});
+
+  final VoidCallback onVerify;
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.space2, left: AppSpacing.space1),
+      child: Row(
+        children: [
+          SaIcon(SaIconGlyph.bell, size: 14, color: onSurface.withValues(alpha: 0.45)),
+          const SizedBox(width: AppSpacing.space2),
+          Expanded(
+            child: Text(
+              'Not confirmed yet',
+              style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.55)),
+            ),
+          ),
+          Semantics(
+            button: true,
+            child: GestureDetector(
+              onTap: onVerify,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.space1),
+                child: Text(
+                  'Confirm',
+                  style: AppTypography.labelM.copyWith(color: AppColors.violet400),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

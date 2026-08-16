@@ -160,6 +160,22 @@ class ContactsNotifier extends _$ContactsNotifier {
     );
   }
 
+  /// Emails the contact a code. Returns true when they were already
+  /// verified and nothing was sent.
+  ///
+  /// Not queued when offline: a code the server never issued cannot be
+  /// confirmed, so pretending to send one would leave the user waiting for
+  /// an email that does not exist.
+  Future<bool> sendVerificationCode(String id) {
+    return ref.read(contactsRepositoryProvider).sendVerificationCode(id);
+  }
+
+  Future<void> confirmVerificationCode(String id, String code) async {
+    state = AsyncData(
+      await ref.read(contactsRepositoryProvider).confirmVerificationCode(id, code),
+    );
+  }
+
   Future<void> removeContact(String id) async {
     if (_isOffline) {
       final current = state.valueOrNull ?? const [];

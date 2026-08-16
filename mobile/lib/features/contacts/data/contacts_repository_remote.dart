@@ -16,10 +16,10 @@ class ContactsRepositoryRemote implements ContactsRepository {
     id: json['id'] as String,
     name: json['name'] as String,
     phone: json['phone'] as String,
-    // The backend has no contact-confirmation workflow (no per-contact OTP
-    // invite, unlike the aspirational SRS FR-EMG-10) — a contact existing
-    // on the server is the only "confirmed" state there is today.
-    confirmed: true,
+    // Real now: null `verified_at` means nobody at that address has ever
+    // confirmed a code (SRS FR-EMG-10). This used to be hardcoded true,
+    // which meant the app asserted something nobody had checked.
+    confirmed: json['verified_at'] != null,
     relationship: json['relationship'] as String? ?? 'trusted_contact',
     priority: json['priority'] as int? ?? 1,
     email: json['email'] as String?,
@@ -29,6 +29,22 @@ class ContactsRepositoryRemote implements ContactsRepository {
   Future<List<Contact>> getContacts() async {
     final response = await _apiClient.dio.get(_basePath);
     return (response.data as List).cast<Map<String, dynamic>>().map(_fromJson).toList();
+  }
+
+  /// Emails this contact a code to read back. Returns true when the contact
+  /// was already verified and nothing was sent.
+  @override
+  Future<bool> sendVerificationCode(String id) async {
+    final response = await _apiClient.dio.post<Map<String, dynamic>>(
+      '$_basePath/$id/verify/send',
+    );
+    return response.data?['already_verified'] as bool? ?? false;
+  }
+
+  @override
+  Future<List<Contact>> confirmVerificationCode(String id, String code) async {
+    await _apiClient.dio.post('$_basePath/$id/verify', data: {'code': code});
+    return getContacts();
   }
 
   @override

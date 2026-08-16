@@ -19,6 +19,25 @@ List<Contact> _sampleContacts() => [
 ];
 
 class _FakeContactsRepository implements ContactsRepository {
+  var verificationSends = <String>[];
+  var verificationCodes = <String>[];
+
+  /// Set to make [confirmVerificationCode] throw, as a wrong code does.
+  bool verificationFails = false;
+
+  @override
+  Future<bool> sendVerificationCode(String id) async {
+    verificationSends.add(id);
+    return false;
+  }
+
+  @override
+  Future<List<Contact>> confirmVerificationCode(String id, String code) async {
+    verificationCodes.add(code);
+    if (verificationFails) throw Exception('wrong code');
+    return getContacts();
+  }
+
   /// Defaults to "everything works" so existing tests are unaffected by the
   /// unreachable-contact warning; the settings tests override it.
   AlertChannels channels = const AlertChannels(sms: true, email: true, push: true);
@@ -445,6 +464,127 @@ void main() {
 
       expect(repo.contacts.single.email, 'sister@example.com');
       expect(find.text('An alert can’t reach this contact'), findsNothing);
+    });
+
+    testWidgets('flags a contact nobody has confirmed', (tester) async {
+      // FR-EMG-10. The commonest reason a contact never hears from SafeHer
+      // is a typo nobody noticed.
+      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final repo = _FakeContactsRepository(
+        initialContacts: const [
+          Contact(
+            id: '1',
+            name: 'Unconfirmed',
+            phone: '+15550101000',
+            relationship: 'Sister',
+            priority: 1,
+            confirmed: false,
+            email: 'sister@example.com',
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(_harness(repo: repo));
+      await _settleChannels(tester);
+
+      expect(find.text('Not confirmed yet'), findsOneWidget);
+      expect(find.text('Confirm'), findsOneWidget);
+    });
+
+    testWidgets('a confirmed contact is not flagged', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final repo = _FakeContactsRepository(
+        initialContacts: const [
+          Contact(
+            id: '1',
+            name: 'Confirmed',
+            phone: '+15550101000',
+            relationship: 'Sister',
+            priority: 1,
+            confirmed: true,
+            email: 'sister@example.com',
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(_harness(repo: repo));
+      await _settleChannels(tester);
+
+      expect(find.text('Not confirmed yet'), findsNothing);
+    });
+
+    testWidgets('unreachable outranks unconfirmed', (tester) async {
+      // A contact with no address definitely will not hear; one that is
+      // merely unconfirmed probably will. Showing both would flatten a
+      // distinction that decides what the user should fix first.
+      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final repo = _FakeContactsRepository(
+        initialContacts: const [
+          Contact(
+            id: '1',
+            name: 'No Email',
+            phone: '+15550101000',
+            relationship: 'Sister',
+            priority: 1,
+            confirmed: false,
+          ),
+        ],
+      )..channels = const AlertChannels(sms: false, email: true, push: false);
+
+      await tester.pumpWidget(_harness(repo: repo));
+      await _settleChannels(tester);
+
+      expect(find.text('An alert can\u2019t reach this contact'), findsOneWidget);
+      expect(find.text('Not confirmed yet'), findsNothing);
+    });
+
+    testWidgets('confirming sends a code and then accepts one', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final repo = _FakeContactsRepository(
+        initialContacts: const [
+          Contact(
+            id: '1',
+            name: 'Anika',
+            phone: '+15550101000',
+            relationship: 'Sister',
+            priority: 1,
+            confirmed: false,
+            email: 'anika@example.com',
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(_harness(repo: repo));
+      await _settleChannels(tester);
+
+      await tester.tap(find.text('Confirm'));
+      await _settleSheet(tester);
+
+      // The copy has to say the code goes to the contact, or the user waits
+      // for an email that was never addressed to her.
+      expect(find.textContaining('anika@example.com'), findsOneWidget);
+      expect(find.text('Send code'), findsOneWidget);
+
+      await tester.tap(find.text('Send code'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(repo.verificationSends, ['1']);
+
+      final digits = find.byType(TextField);
+      for (var i = 0; i < 6; i++) {
+        await tester.enterText(digits.at(i), '1');
+      }
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(repo.verificationCodes, ['111111']);
+
+      // Success pops a toast that lives for four seconds; drain it so the
+      // binding does not fail the test on a leftover timer.
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(milliseconds: 300));
     });
 
     testGoldens('golden - light', (tester) async {
