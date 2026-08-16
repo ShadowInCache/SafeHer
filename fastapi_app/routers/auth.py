@@ -363,6 +363,16 @@ async def firebase_exchange(
                 role=requested_role,
                 phone=payload.phone,
             )
+            # Google has already confirmed this address, which is exactly what
+            # `is_verified` records. Leaving it False provisioned an account
+            # that could sign in with Google forever but was rejected by
+            # `/auth/login` with "check your inbox" -- for a code that is
+            # never sent, because this user never registered by email.
+            if identity.email_verified and not user.is_verified:
+                user.is_verified = True
+                session.add(user)
+                await session.commit()
+                await session.refresh(user)
             if payload.avatar_url:
                 user.avatar_url = payload.avatar_url
                 session.add(user)
@@ -388,6 +398,11 @@ async def firebase_exchange(
             updated = True
         if not user.avatar_url and payload.avatar_url:
             user.avatar_url = payload.avatar_url
+            updated = True
+        # Repairs accounts provisioned before the line above existed, on
+        # their next Google sign-in, without anyone having to notice.
+        if identity.email_verified and not user.is_verified:
+            user.is_verified = True
             updated = True
         if not user.is_active:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")

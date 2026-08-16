@@ -37,10 +37,16 @@ class TestFirebaseProvisioning(unittest.IsolatedAsyncioTestCase):
         await self.client.aclose()
 
     @staticmethod
-    def _identity(email: str, name: str | None = "Google User") -> FirebaseIdentity:
+    def _identity(
+        email: str, name: str | None = "Google User", *, email_verified: bool = True
+    ) -> FirebaseIdentity:
         uid = f"uid-{uuid4().hex}"
         return FirebaseIdentity(
-            uid=uid, email=email, name=name, raw_claims={"uid": uid, "email": email}
+            uid=uid,
+            email=email,
+            name=name,
+            raw_claims={"uid": uid, "email": email, "email_verified": email_verified},
+            email_verified=email_verified,
         )
 
     async def _me(self, token: str) -> dict:
@@ -157,6 +163,103 @@ class TestFirebaseProvisioning(unittest.IsolatedAsyncioTestCase):
 
         prefs = await self.client.get("/api/v1/safety/preferences", headers=headers)
         self.assertEqual(prefs.status_code, 200, prefs.text)
+
+    @patch("fastapi_app.routers.auth.verify_firebase_id_token")
+    async def test_google_sign_in_counts_as_a_verified_address(self, mocked_verify):
+        """Found on a real device, in a real log.
+
+        `firebase_exchange` provisioned every account with `is_verified`
+        False. That is invisible while the user keeps signing in with
+        Google -- the exchange never checks it -- but `/auth/login` does,
+        and answers 403 "check your inbox for the verification code" the
+        moment SMTP is configured. No code was ever sent, because the user
+        never registered by email, so the account is simply locked.
+        """
+        email = f"verified-{uuid4().hex}@safeherapp.com"
+        mocked_verify.return_value = self._identity(email)
+
+        response = await self.client.post(
+            "/api/v1/auth/firebase/exchange", json={"id_token": "firebase-id-token-stub"}
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue((await self._me(response.json()["access_token"]))["is_verified"])
+
+    @patch("fastapi_app.routers.auth.verify_firebase_id_token")
+    async def test_an_unverified_provider_address_is_not_promoted(self, mocked_verify):
+        # The claim is the provider's assertion, not a formality. An address
+        # Google itself will not vouch for must not clear SafeHer's check.
+        email = f"unverified-{uuid4().hex}@safeherapp.com"
+        mocked_verify.return_value = self._identity(email, email_verified=False)
+
+        response = await self.client.post(
+            "/api/v1/auth/firebase/exchange", json={"id_token": "firebase-id-token-stub"}
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertFalse((await self._me(response.json()["access_token"]))["is_verified"])
+
+    @patch("fastapi_app.routers.auth.verify_firebase_id_token")
+    async def test_an_older_unverified_account_is_repaired_on_next_sign_in(self, mocked_verify):
+        """Accounts already provisioned before the fix must heal themselves.
+
+        Requiring a support request, or a password reset the user cannot
+        start because they have no password, would leave them stranded.
+        """
+        email = f"legacy-{uuid4().hex}@safeherapp.com"
+        mocked_verify.return_value = self._identity(email, email_verified=False)
+        first = await self.client.post(
+            "/api/v1/auth/firebase/exchange", json={"id_token": "firebase-id-token-stub"}
+        )
+        self.assertFalse((await self._me(first.json()["access_token"]))["is_verified"])
+
+        # Same address, this time with Google vouching for it.
+        mocked_verify.return_value = self._identity(email, email_verified=True)
+        second = await self.client.post(
+            "/api/v1/auth/firebase/exchange", json={"id_token": "firebase-id-token-stub"}
+        )
+
+        self.assertTrue((await self._me(second.json()["access_token"]))["is_verified"])
+
+    @patch("fastapi_app.routers.auth.verify_firebase_id_token")
+    async def test_google_sign_in_unblocks_a_login_stranded_by_verification(self, mocked_verify):
+        """The reachable form of the bug, end to end.
+
+        Register by email while verification is enforced and the account
+        starts unverified, holding a code in an inbox. Sign in with Google
+        instead -- which proves ownership of that same address far more
+        strongly than the code would -- and before the fix the password
+        login stayed 403 forever, because the exchange never touched
+        `is_verified`. The user has proven who they are and is still locked
+        out, with no error that explains why.
+        """
+        from fastapi_app.config import Settings, get_settings
+
+        base = get_settings()
+        strict = Settings(**{**base.model_dump(), "require_email_verification": True})
+        app.dependency_overrides[get_settings] = lambda: strict
+        try:
+            email = f"stranded-{uuid4().hex}@safeherapp.com"
+            credentials = {"email": email, "password": "TestPass123!"}
+            register = await self.client.post(
+                "/api/v1/auth/register", json={**credentials, "full_name": "S", "role": "user"}
+            )
+            self.assertEqual(register.status_code, 201, register.text)
+
+            blocked = await self.client.post("/api/v1/auth/login", json=credentials)
+            self.assertEqual(blocked.status_code, 403, blocked.text)
+            self.assertIn("not verified", blocked.text)
+
+            mocked_verify.return_value = self._identity(email)
+            exchange = await self.client.post(
+                "/api/v1/auth/firebase/exchange", json={"id_token": "firebase-id-token-stub"}
+            )
+            self.assertEqual(exchange.status_code, 200, exchange.text)
+
+            unblocked = await self.client.post("/api/v1/auth/login", json=credentials)
+            self.assertEqual(unblocked.status_code, 200, unblocked.text)
+        finally:
+            app.dependency_overrides.pop(get_settings, None)
 
     async def test_a_forged_token_is_rejected(self):
         response = await self.client.post(

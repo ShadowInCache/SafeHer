@@ -23,6 +23,10 @@ class FirebaseIdentity:
     email: str
     name: Optional[str]
     raw_claims: dict[str, Any]
+    # Whether the identity provider itself vouches for the address. Google
+    # sets this after its own confirmation, so it is a stronger assertion
+    # than SafeHer's own emailed code, not a weaker one.
+    email_verified: bool = False
 
 
 def _verify_with_google(
@@ -109,4 +113,5 @@ def verify_firebase_id_token(*, id_token: str, project_id: Optional[str]) -> Fir
         email=email,
         name=str(name).strip() if isinstance(name, str) and name.strip() else None,
         raw_claims=claims,
+        email_verified=bool(claims.get("email_verified", False)),
     )

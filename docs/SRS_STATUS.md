@@ -733,3 +733,73 @@ to its implementation, and a test enforces the map: nothing can go missing
 from it, no path can rot, and "not built" cannot sit next to a file path.
 
 Totals: 584 Flutter tests, 195 backend tests, all green.
+
+## 2026-08-17 — first run on real Android hardware
+
+Samsung SM A346E, Android 16 (API 36), against the backend on the LAN
+(`0.0.0.0:5000`, reached at `192.168.0.102`). Everything below is from the
+device log, not from a test double.
+
+### Confirmed working on real hardware
+
+* **Networking.** Every endpoint answered 200 over the LAN — `users/me`,
+  `devices/me`, `incidents/`, `dashboard/summary`, `dashboard/analytics`,
+  `alerts/live`. `usesCleartextTraffic` was already set, so plain HTTP to a
+  LAN IP was not the blocker it usually is.
+* **Bluetooth.** The whole chain ran for the first time outside a fake:
+  `startScan` → `connect` SUCCESS → MTU negotiated to 512 → `discoverServices`
+  returning 4 services → clean `disconnect`. Service discovery round-trips to
+  the peripheral's GATT server, so this is proof of a real link rather than a
+  local flag.
+* **Push.** FCM v1 accepted an authenticated send; the earlier
+  `PERMISSION_DENIED` was a missing IAM binding, restored by granting the
+  recreated service account the Firebase Admin SDK role.
+
+### Fixed as a result
+
+**Federated sign-in left every account permanently unverified.**
+`firebase_exchange` provisioned users without ever setting `is_verified`, and
+never consulted the `email_verified` claim that Google puts in the ID token.
+Invisible while the user keeps signing in with Google — the exchange does not
+check the flag — but `/auth/login` does, and answers 403 "check your inbox for
+the verification code" as soon as SMTP is configured. No code was ever sent,
+because the user never registered by email. The account is simply locked, with
+an error that names an inbox holding nothing.
+
+Found by reading `is_verified: false` in the device's own `/users/me`
+response. The identity now carries `email_verified`, the exchange honours it,
+and accounts provisioned before the fix repair themselves on their next
+Google sign-in rather than needing support.
+
+Three tests pin it, including the reachable end-to-end form — register by
+email under enforced verification, get blocked, sign in with Google, log in
+successfully. All three were confirmed to fail with the fix disabled.
+
+**`test_integration.py` failed whenever a dev server was running.** Alone in
+the suite, that file talks to a live server over HTTP, so `conftest.py` cannot
+isolate it and it inherits the developer's `.env`. With SMTP configured there,
+its login 403s on a code it has no inbox to read. It now skips with that
+reason stated, instead of failing for an environment policy.
+
+### Not a defect
+
+`/devices/me` still returns `[]` after the Bluetooth session. The log shows
+`connect` followed directly by `disconnect`, with no `POST /devices/register`
+in between — the sheet's "Register Device" button was never pressed. The flow
+behaved as designed.
+
+### Still unverified on hardware
+
+SOS and the microphone permission, evidence upload, the alert email as sent
+from the phone, and PDF export through the system share sheet. The session
+ended before that path was walked.
+
+Worth stating plainly: pairing a device is not the same as hearing from it.
+`connect()` discovers services and stops there — it subscribes to no
+characteristic, so a button press on a wearable cannot currently reach the
+app. The `setNotifyValue` visible in the log is flutter_blue_plus subscribing
+to the standard Service Changed characteristic (`2a05`) as its own
+housekeeping, not SafeHer code. Receiving events from a device is the unbuilt
+firmware side (FR-DEV-04, FR-DEV-06) and needs real hardware to define its
+characteristics.
+
