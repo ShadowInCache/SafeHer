@@ -74,7 +74,13 @@ class Settings(BaseSettings):
     # guessing. Set explicitly to override.
     require_email_verification: Optional[bool] = None
 
-    # Notifications
+    # Notifications.
+    #
+    # FCM v1 authenticates with a service-account JSON, not a server key.
+    # The legacy key API this project used was decommissioned by Google and
+    # its endpoint now 404s, so fcm_server_key is kept only so an existing
+    # .env does not fail to load -- it is read by nothing.
+    fcm_service_account_file: Optional[str] = None
     fcm_server_key: Optional[str] = None
     # SMS. Note that OneSignal is not an alternative here: its free-tier
     # SMS trial works by connecting your own Twilio account, and its paid

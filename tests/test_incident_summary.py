@@ -134,6 +134,51 @@ class TestSummarizer(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(MAX_OUTPUT_TOKENS, 1000)
 
 
+class TestRetry(unittest.IsolatedAsyncioTestCase):
+    """Which failures are worth a second attempt.
+
+    The free tier answered 503 twice in a handful of manual runs and then
+    succeeded, so a single 503 must not cost the user a summary. A 400 never
+    clears, and retrying it only delays an error the caller needs now.
+    """
+
+    async def test_a_busy_model_is_retried_and_then_succeeds(self):
+        from fastapi_app.services import incident_summary as mod
+
+        summarizer = mod.IncidentSummarizer(api_key="k")
+        calls = {"n": 0}
+
+        async def flaky(prompt):
+            calls["n"] += 1
+            if calls["n"] < 3:
+                error = mod.SummaryGenerationError("busy")
+                error.retryable = True
+                raise error
+            return "A summary."
+
+        summarizer._summarise_once = flaky
+        mod.RETRY_DELAY_SECONDS = 0
+
+        self.assertEqual(await summarizer.summarise("p"), "A summary.")
+        self.assertEqual(calls["n"], 3)
+
+    async def test_a_malformed_request_is_not_retried(self):
+        from fastapi_app.services import incident_summary as mod
+
+        summarizer = mod.IncidentSummarizer(api_key="k")
+        calls = {"n": 0}
+
+        async def hopeless(prompt):
+            calls["n"] += 1
+            raise mod.SummaryGenerationError("bad request")
+
+        summarizer._summarise_once = hopeless
+
+        with self.assertRaises(mod.SummaryGenerationError):
+            await summarizer.summarise("p")
+        self.assertEqual(calls["n"], 1)
+
+
 class TestSummaryApi(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         await init_db()
@@ -231,6 +276,48 @@ class TestSummaryInPdf(unittest.TestCase):
         pdf = pdf_text(self._build())
 
         self.assertNotIn("Written automatically", pdf)
+
+
+class TestFcmV1(unittest.TestCase):
+    """The legacy FCM API this project used was decommissioned by Google.
+
+    Its endpoint now answers 404 to everything, so every push the app sent
+    was going nowhere and setting FCM_SERVER_KEY would not have helped. What
+    is worth pinning about the replacement is the two things that silently
+    break a v1 send.
+    """
+
+    def test_data_values_are_coerced_to_strings(self):
+        from fastapi_app.services.notifications import _stringify
+
+        # v1 rejects a payload with a numeric data value, and the 400 reads
+        # like a malformed request rather than a type error.
+        out = _stringify({"incident_id": "abc", "count": 3, "auto": True, "missing": None})
+
+        self.assertEqual(out["count"], "3")
+        self.assertEqual(out["auto"], "True")
+        self.assertEqual(out["missing"], "")
+        self.assertTrue(all(isinstance(v, str) for v in out.values()))
+
+    def test_missing_credentials_are_reported_not_guessed(self):
+        from fastapi_app.services.notifications import FcmCredentials, FcmNotConfigured
+
+        credentials = FcmCredentials(service_account_path=None, project_id="safeher")
+
+        self.assertFalse(credentials.is_configured)
+        with self.assertRaises(FcmNotConfigured):
+            credentials.access_token()
+
+    def test_a_path_that_does_not_exist_counts_as_unconfigured(self):
+        from fastapi_app.services.notifications import FcmCredentials
+
+        # A stale path in .env is the likeliest misconfiguration, and it must
+        # read as "push is off" rather than crash an emergency dispatch.
+        credentials = FcmCredentials(
+            service_account_path="./does-not-exist.json", project_id="safeher"
+        )
+
+        self.assertFalse(credentials.is_configured)
 
 
 if __name__ == "__main__":

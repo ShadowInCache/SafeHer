@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_app.config import Settings, get_settings
 from fastapi_app.db import get_session
+from fastapi_app.deps import fcm_credentials
 from fastapi_app.models import Incident, Location, User
 from fastapi_app.realtime import manager
 from fastapi_app.repositories import fcm_tokens
@@ -47,14 +48,14 @@ async def _best_effort_push(
     body: str,
     data: dict[str, Any],
 ) -> None:
-    if not settings.fcm_server_key:
+    if not fcm_credentials(settings).is_configured:
         return
 
     tokens = await fcm_tokens.list_by_user(session, user_id=user_id)
     for item in tokens:
         try:
             await send_fcm_notification(
-                server_key=settings.fcm_server_key,
+                credentials=fcm_credentials(settings),
                 token=item.token,
                 title=title,
                 body=body,
@@ -157,7 +158,7 @@ async def get_alert_channels(
     return {
         "sms": sms_configured,
         "email": email_configured,
-        "push": bool(settings.fcm_server_key),
+        "push": fcm_credentials(settings).is_configured,
         # True when email is the only channel that can reach an ordinary
         # contact, so a contact without an address cannot be reached at all.
         "email_requires_address": email_configured and not sms_configured,

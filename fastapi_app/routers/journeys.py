@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_app.config import Settings, get_settings
 from fastapi_app.db import get_session
+from fastapi_app.deps import fcm_credentials
 from fastapi_app.models import Incident, SafeJourney
 from fastapi_app.realtime import manager
 from fastapi_app.repositories import emergency_contacts as contacts_repo
@@ -78,13 +79,13 @@ async def _best_effort_push(
     body: str,
     data: dict[str, Any],
 ) -> None:
-    if not settings.fcm_server_key:
+    if not fcm_credentials(settings).is_configured:
         return
     tokens = await fcm_tokens.list_by_user(session, user_id=user_id)
     for item in tokens:
         try:
             await send_fcm_notification(
-                server_key=settings.fcm_server_key,
+                credentials=fcm_credentials(settings),
                 token=item.token,
                 title=title,
                 body=body,

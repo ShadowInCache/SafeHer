@@ -238,12 +238,12 @@ async def _notify_contact(
 
     # --- Push: only if this contact is themselves a SafeHer user ----------
     tokens = await _tokens_for_contact(session, contact)
-    if tokens and settings.fcm_server_key:
+    if tokens and fcm_credentials(settings).is_configured:
         delivered = False
         for token in tokens:
             error = await _with_retries(
                 lambda token=token: send_fcm_notification(
-                    server_key=settings.fcm_server_key,
+                    credentials=fcm_credentials(settings),
                     token=token.token,
                     title="SafeHer emergency",
                     body=body,

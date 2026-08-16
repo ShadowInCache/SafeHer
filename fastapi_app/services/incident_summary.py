@@ -25,6 +25,7 @@ so it is never mistaken for a human account or for evidence.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Optional
@@ -46,6 +47,14 @@ API_ROOT = "https://generativelanguage.googleapis.com/v1beta"
 # ignored by this model, which is worth knowing before anyone "optimises"
 # this number back down.
 MAX_OUTPUT_TOKENS = 2000
+
+# The free tier returns 503 "overloaded" intermittently -- twice in a row
+# during a handful of manual runs, then succeeded. Not worth failing a
+# summary over, and not worth retrying forever either: this runs after the
+# alert has gone out, so a few seconds of patience costs nobody anything.
+MAX_ATTEMPTS = 3
+RETRY_DELAY_SECONDS = 2.0
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
 # Sent as a systemInstruction rather than prepended to the user turn.
 # Prepending leaked: the first attempt returned "neutral):*" followed by the
@@ -134,6 +143,24 @@ class IncidentSummarizer:
         return bool(self._api_key)
 
     async def summarise(self, prompt: str) -> str:
+        """Writes the summary, retrying only what is worth retrying.
+
+        A 503 is the free tier being busy and usually clears in seconds. A
+        400 is a malformed request and will never clear, so retrying it
+        would just delay an error the caller needs now.
+        """
+        last: Exception | None = None
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            try:
+                return await self._summarise_once(prompt)
+            except SummaryGenerationError as exc:
+                last = exc
+                if not getattr(exc, "retryable", False) or attempt == MAX_ATTEMPTS:
+                    raise
+                await asyncio.sleep(RETRY_DELAY_SECONDS)
+        raise last  # unreachable, but keeps the type obvious
+
+    async def _summarise_once(self, prompt: str) -> str:
         if not self.is_configured:
             raise SummaryNotConfigured("GEMINI_API_KEY is not set.")
 
@@ -160,15 +187,19 @@ class IncidentSummarizer:
             # an empty string, which produced "Could not reach the model: "
             # and told the reader nothing at all.
             detail = str(exc) or type(exc).__name__
-            raise SummaryGenerationError(f"Could not reach the model: {detail}") from exc
+            error = SummaryGenerationError(f"Could not reach the model: {detail}")
+            error.retryable = True
+            raise error from exc
 
         if response.status_code >= 300:
             # The key travels as a query parameter, so the URL is never
             # logged -- only the status.
             logger.warning("Gemini rejected a summary request: status=%s", response.status_code)
-            raise SummaryGenerationError(
+            error = SummaryGenerationError(
                 f"The model refused the request (HTTP {response.status_code})."
             )
+            error.retryable = response.status_code in RETRYABLE_STATUS
+            raise error
 
         try:
             body = response.json()

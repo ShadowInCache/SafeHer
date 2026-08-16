@@ -5,7 +5,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_app.db import get_session
-from fastapi_app.deps import get_evidence_store
+from fastapi_app.deps import fcm_credentials, get_evidence_store
 from fastapi_app.models import Incident, Location, Media
 from fastapi_app.schemas import IncidentCreate, IncidentPublic, UserPublic
 from fastapi_app.security import get_current_user
@@ -64,7 +64,7 @@ async def create_incident(
         settings = get_settings()
         try:
             await send_fcm_notification(
-                server_key=settings.fcm_server_key,
+                credentials=fcm_credentials(settings),
                 token=payload.fcm_token,
                 title=payload.title,
                 body=payload.description or "New incident reported",
