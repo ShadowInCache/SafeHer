@@ -5,6 +5,14 @@ End-to-end tests for the complete SafeHer system
 
 import unittest
 import requests
+
+# `RequestException` rather than `ConnectionError`: these files drive a live
+# server over HTTP, and "the server is not there" is only one of the ways
+# that fails. A managed Postgres that suspends when idle -- Neon's free tier
+# does, after about five minutes -- makes the first request after a pause
+# exceed the client timeout, which raises ReadTimeout. That is not a
+# ConnectionError, so it escaped these handlers and failed the suite for a
+# reason that had nothing to do with the code under test.
 from uuid import uuid4
 from tests import TEST_CONFIG
 
@@ -40,7 +48,7 @@ class TestEndToEnd(unittest.TestCase):
             )
             if response.status_code == 200:
                 cls.access_token = response.json().get('access_token')
-        except requests.ConnectionError:
+        except requests.RequestException:
             cls.access_token = None
     
     def test_user_registration_to_device_pairing(self):
@@ -89,7 +97,7 @@ class TestEndToEnd(unittest.TestCase):
             )
             self.assertEqual(device.status_code, 200)
             self.assertIn('id', device.json())
-        except requests.ConnectionError:
+        except requests.RequestException:
             self.skipTest("API Gateway not running")
     
     def test_threat_detection_to_alert(self):
@@ -119,7 +127,7 @@ class TestEndToEnd(unittest.TestCase):
             result = response.json()
             self.assertIn('threat_detected', result)
             self.assertIn('live_score', result)
-        except requests.ConnectionError:
+        except requests.RequestException:
             self.skipTest("API Gateway not running")
     
     def test_device_data_to_incident_storage(self):
@@ -147,7 +155,7 @@ class TestEndToEnd(unittest.TestCase):
             )
             self.assertEqual(live.status_code, 200)
             self.assertIn('live_score', live.json())
-        except requests.ConnectionError:
+        except requests.RequestException:
             self.skipTest("API Gateway not running")
     
     def test_sos_trigger_complete_flow(self):
@@ -179,7 +187,7 @@ class TestEndToEnd(unittest.TestCase):
             )
             self.assertEqual(incidents.status_code, 200)
             self.assertTrue(any(item.get('id') == result['id'] for item in incidents.json()))
-        except requests.ConnectionError:
+        except requests.RequestException:
             self.skipTest("API Gateway not running")
 
 

@@ -24,6 +24,27 @@ jobs:
   backend-checks:
     runs-on: ubuntu-latest
 
+    services:
+      # Production runs Postgres. Until this existed every check below ran
+      # on SQLite, and the two disagree about booleans, type strictness and
+      # string comparison. That gap shipped migration 0007 containing
+      # `is_verified = 1`, which passed the entire suite here and raised
+      # "operator does not exist: boolean = integer" the first time it met
+      # a real Postgres -- aborting the chain midway, schema half-applied.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: safeher
+          POSTGRES_PASSWORD: safeher
+          POSTGRES_DB: safeher_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U safeher"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
       # A throwaway secret: config.py refuses to start without one outside
       # development, and CI must not depend on a real value.
@@ -75,11 +96,34 @@ jobs:
       # test_api_gateway.py and test_integration.py drive a live server over
       # HTTP rather than the ASGI app, so they need a running backend and are
       # excluded from this job.
+      - name: Verify migrations run on Postgres
+        # The engine production actually uses. The whole chain from empty,
+        # then one step back and forward again, so a migration that only
+        # works on SQLite fails here rather than on a deploy.
+        env:
+          DATABASE_URL: postgresql://safeher:safeher@localhost:5432/safeher_ci
+        run: |
+          python -m alembic upgrade head
+          python -m alembic current
+          python -m alembic downgrade -1
+          python -m alembic upgrade head
+
       - name: Run in-process test suites
         run: |
           python -m pytest tests/ -q \
             --ignore=tests/test_api_gateway.py \
             --ignore=tests/test_integration.py
+
+      - name: Verify the app connects on Postgres
+        # Most test modules pin DATABASE_URL to SQLite at import time, so
+        # this is not the suite re-run against Postgres -- it is a boot
+        # check plus the modules that read the environment. Deliberately
+        # not a substitute for the SQLite run above.
+        env:
+          DATABASE_URL: postgresql://safeher:safeher@localhost:5432/safeher_ci
+        run: |
+          python -m pytest tests/test_database_url.py -q
+          python scripts/ci_postgres_boot_check.py
 
       - name: Check no secrets or artifacts are tracked
         # Cheap regression guard: this repo has twice shipped committed

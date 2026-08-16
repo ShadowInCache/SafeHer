@@ -1059,3 +1059,56 @@ interpolation escaping was exercised at the same time.
 
 279 backend tests pass (up from 266), 596 Flutter tests pass.
 
+## 2026-08-17 (sixth session) — Postgres everywhere
+
+Asked which database setup a production-ready app should use. The answer was
+neither of the two previously on the table: not SQLite in development, and
+not Neon in development either.
+
+**Development now runs local Postgres** (`docker compose up -d postgres`,
+already defined in `deployment/docker/docker-compose.yml`), **CI runs
+Postgres**, and **Neon is production**. Same engine at every stage, which is
+the dev/prod parity rule — and the reason it matters is not theoretical:
+SQLite hid two deploy-breaking bugs earlier today, one of which passed all
+279 tests.
+
+### Changes
+
+* `deployment/docker/docker-compose.yml` — the Postgres host port is now
+  `${POSTGRES_HOST_PORT:-5433}`. It was hardcoded to 5432, which collided
+  with another project's Postgres already bound there; the failure arrives
+  at `up` time with no hint that the fix is one variable.
+* `.env` — `DATABASE_URL` points at local Postgres. The Neon URL is kept as
+  `NEON_DATABASE_URL` so switching to production is a copy, not a re-fetch
+  from the dashboard.
+* `.github/workflows/backend-ci.yml` — a `postgres:16-alpine` service, the
+  full migration chain run against it (including a downgrade and reapply),
+  and a boot check. The SQLite runs are kept: they are fast and they cover
+  modules that pin the URL at import time, so this is an addition rather
+  than a replacement.
+* `scripts/ci_postgres_boot_check.py` — asserts the connection string
+  survived translation (no masked password, no libqp spellings asyncpg
+  rejects), the engine connects, and the migrations actually created the
+  schema.
+
+### A flake fixed on the way
+
+`test_integration.py` failed once during this session with the backend
+pointed at Neon. Neon's free tier suspends after roughly five minutes idle,
+so the first request exceeded the test's 5-second timeout and raised
+`ReadTimeout` — which is not a `ConnectionError`, so it escaped the handler
+that exists to skip when no server is running. Both live-server test files
+now catch `RequestException`.
+
+### Data
+
+The same 25 rows (the real account, 2 contacts, 10 incidents, 10 locations,
+1 media record) now exist in three places: the original SQLite file,
+untouched; Neon; and local Postgres. Nothing was deleted anywhere, so any of
+the three is one `.env` line away.
+
+### State
+
+279 backend tests pass, 596 Flutter tests pass. The LAN backend the phone
+talks to now runs on local Postgres.
+

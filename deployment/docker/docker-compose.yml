@@ -21,7 +21,12 @@ services:
     container_name: safeher_postgres
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      # Host port is configurable and deliberately not 5432: a developer
+      # machine often already has another project's Postgres bound there,
+      # and the failure ("port is already allocated") arrives at `up` time
+      # with no hint that the fix is one variable. Inside the compose
+      # network the port is still 5432, so nothing else changes.
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-safeher}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-safeher}
