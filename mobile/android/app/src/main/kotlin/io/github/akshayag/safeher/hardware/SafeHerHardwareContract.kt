@@ -1,4 +1,4 @@
-package com.example.safeher_app.hardware
+package io.github.akshayag.safeher.hardware
 
 object SafeHerHardwareContract {
     const val METHOD_CHANNEL = "safeher.example.com/hardware/methods"

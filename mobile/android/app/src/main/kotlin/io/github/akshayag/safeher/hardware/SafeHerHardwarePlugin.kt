@@ -1,4 +1,4 @@
-package com.example.safeher_app.hardware
+package io.github.akshayag.safeher.hardware
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel

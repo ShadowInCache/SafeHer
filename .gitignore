@@ -62,3 +62,10 @@ secrets/
 # Coverage output (SRS §10.1 measurement; regenerate with pytest --cov)
 .coverage
 htmlcov/
+
+# Android release signing. A committed keystore is a leaked signing identity:
+# whoever holds it can publish updates that every installed copy of SafeHer
+# accepts as genuine.
+**/key.properties
+*.jks
+*.keystore

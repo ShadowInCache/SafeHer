@@ -1,6 +1,6 @@
-package com.example.safeher_app
+package io.github.akshayag.safeher
 
-import com.example.safeher_app.hardware.SafeHerHardwarePlugin
+import io.github.akshayag.safeher.hardware.SafeHerHardwarePlugin
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 

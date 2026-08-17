@@ -8,18 +8,26 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1050083589372:android:26800c672afa6e31ef6b79",
+        "mobilesdk_app_id": "1:1050083589372:android:6f648ab15440c00bef6b79",
         "android_client_info": {
-          "package_name": "com.example.safeher_app"
+          "package_name": "io.github.akshayag.safeher"
         }
       },
       "oauth_client": [
         {
-          "client_id": "1050083589372-dg2ukbvoqjohv671lre0rjmd92lc36tv.apps.googleusercontent.com",
+          "client_id": "1050083589372-a4q7q9gdre2mcqgcjminlo75blsi2hre.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.example.safeher_app",
+            "package_name": "io.github.akshayag.safeher",
             "certificate_hash": "2b27bd92d90fb0adf32b3b2ee8500024c2eaf78c"
+          }
+        },
+        {
+          "client_id": "1050083589372-ohb5o66d2ff23lkt0ak2jd4jra8esunc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "io.github.akshayag.safeher",
+            "certificate_hash": "abdc3dd069bed25bae8dd46e78f08eb19945fd89"
           }
         },
         {

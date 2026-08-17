@@ -70,7 +70,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '1050083589372',
     projectId: 'safeher-2a1f2',
     storageBucket: 'safeher-2a1f2.firebasestorage.app',
-    iosBundleId: 'com.example.safeherApp',
+    iosBundleId: 'io.github.akshayag.safeher',
   );
 
 }

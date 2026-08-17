@@ -1193,3 +1193,67 @@ these files used it. No editor flagged it; the release build did.
 Remaining P0 blockers are both Android identity: the placeholder package name
 `com.example.safeher_app`, and release builds signed with the debug key.
 
+## 2026-08-17 (ninth session) — the app has a real identity
+
+Two P0 blockers closed together, because they feed the same Firebase
+registration and doing them separately means two broken-auth windows instead
+of one.
+
+### Package name
+
+`com.example.safeher_app` was the Flutter default. `com.example.*` is the
+reserved sample prefix and Play rejects it outright, and a package name is
+permanent once published — changing it later produces a *different* app, not
+a renamed one, losing every existing user, review and install.
+
+Now `io.github.akshayag.safeher`: derived from the GitHub account that owns
+the project, which is the convention when no domain is owned and is provably
+not someone else's. It stays valid even if a domain is bought later.
+
+Six bindings, all updated: the Gradle namespace and applicationId, three
+Kotlin package declarations, the source folder path, the iOS bundle
+identifier, and `firebase_options.dart`. The hardware plugin's method and
+event channels are plain strings (`safeher.example.com/hardware/...`) rather
+than derived from the package, so they were unaffected — checked rather than
+assumed.
+
+### Release signing
+
+Release builds were signed with the debug key. That file ships with the
+Android SDK: same bytes, same password (`android`), on every machine on
+Earth. The signature therefore proved nothing — anyone could build an update
+a phone would accept as SafeHer's — and Play rejects such uploads.
+
+`android/app/build.gradle.kts` now reads `key.properties`, which is
+gitignored along with `*.jks` and `*.keystore`; a canary confirmed git cannot
+see either. When the properties file is absent the build still works and
+falls back to the debug key with a loud warning, so a fresh clone can run the
+app but cannot quietly produce something that looks publishable.
+
+Verified on the artifact rather than the config:
+
+    package : io.github.akshayag.safeher
+    signer  : CN=Akshay AG, O=SafeHer, Bengaluru
+    SHA-1   : abdc3dd069bed25bae8dd46e78f08eb19945fd89
+
+### Corrected on the way
+
+* The signing config resolved `storeFile` relative to `android/app/` while
+  the instructions placed the keystore in `android/`, next to the
+  `key.properties` that names it. Fixed in Gradle with `rootProject.file`
+  rather than by moving the file, since a path beside its own properties
+  file should simply work.
+* R8 minification was added and then removed. It shrinks the APK, but its
+  failures appear at runtime rather than build time, which is not a risk
+  worth taking two days before a release.
+* Firebase briefly had the release fingerprint *replaced* by the debug one
+  rather than joined by it, which would have left Google Sign-In working in
+  development and broken in the build users actually install. Both are now
+  registered under the single new app, and the old app entry is deleted.
+
+### Note for publishing
+
+Play App Signing re-signs uploads with a key Google holds, which has its own
+SHA-1. That fingerprint must also be added in Firebase, or sign-in breaks for
+store installs while working perfectly on a locally built APK.
+
