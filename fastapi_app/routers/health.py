@@ -4,16 +4,21 @@ import socket
 from fastapi_app.realtime import manager
 import httpx
 import redis
+from sqlalchemy.engine import make_url
 
 from fastapi_app.mqtt_service import get_mqtt_status
 
 router = APIRouter(tags=["health"])
 
 
-@router.get("/health")
-@router.get("/api/v1/health")
-def health(settings: SettingsDep):
-    redis_ok = False
+def _redis_reachable(settings) -> bool:
+    """Whether Redis answers. Reported, never used to judge health.
+
+    Nothing in `fastapi_app` reads or writes Redis -- it appears only in
+    config defaults and here. Letting it decide `status` meant every healthy
+    deployment reported `degraded` forever, which trains everyone watching to
+    ignore the field. A monitor that is always red is a monitor that is off.
+    """
     try:
         # A raw precheck first: redis-py's own connect/socket timeouts don't
         # reliably bound how long client.ping() takes when nothing is
@@ -31,16 +36,52 @@ def health(settings: SettingsDep):
             socket_connect_timeout=1,
             socket_timeout=1,
         )
-        redis_ok = bool(client.ping())
+        return bool(client.ping())
     except Exception:
-        redis_ok = False
+        return False
 
+
+@router.get("/health")
+@router.get("/api/v1/health")
+def health(settings: SettingsDep):
+    """Liveness. `ok` means the API can serve requests.
+
+    Deliberately does not touch the database: this endpoint is what the host
+    polls to decide whether to keep the instance alive, and making it depend
+    on a managed database that can pause under load turns a slow query into
+    a restart loop.
+    """
     return {
-        "status": "ok" if redis_ok else "degraded",
+        "status": "ok",
         "service": settings.app_name,
         "environment": settings.environment,
         "hostname": socket.gethostname(),
-        "redis": "connected" if redis_ok else "disconnected",
+        # Informational. Redis is not a dependency of this API, so its
+        # absence is not a fault -- see `_redis_reachable`.
+        "redis": "connected" if _redis_reachable(settings) else "not configured",
+    }
+
+
+def _describe_database(url: str) -> dict:
+    """The database, named but not disclosed.
+
+    This endpoint used to return `settings.database_url` verbatim. On a
+    deployed instance that is an unauthenticated URL publishing the database
+    username, password and host to anyone who fetches it -- full read and
+    write access to every incident, location and emergency contact SafeHer
+    holds.
+
+    What an operator actually needs from here is which engine and which host,
+    neither of which is a secret.
+    """
+    try:
+        parsed = make_url(url)
+    except Exception:
+        return {"engine": "unparseable"}
+    return {
+        "engine": parsed.drivername,
+        "host": parsed.host or "local file",
+        "database": parsed.database,
     }
 
 
@@ -70,5 +111,5 @@ def status(settings: SettingsDep):
             "url": settings.event_processor_url,
             "health": processor_health,
         },
-        "database": settings.database_url,
+        "database": _describe_database(settings.database_url),
     }
