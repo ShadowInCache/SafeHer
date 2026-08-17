@@ -56,7 +56,7 @@ stated limitation), **not built**.
 | ID | Status | Implementation |
 |----|--------|----------------|
 | FR-EMG-01 | done | `mobile/lib/features/emergency/presentation/emergency_screen.dart` |
-| FR-EMG-02 | done | `fastapi_app/services/threat_fusion.py`, `fastapi_app/routers/alerts.py` — built 2026-08-17; previously marked done while not existing |
+| FR-EMG-02 | partial | `fastapi_app/services/threat_fusion.py`, `fastapi_app/routers/alerts.py` — the decision path is complete and tested end to end, but no model produces a score to decide on, so it never fires in practice. `mobile/lib/core/detection/detection_status.dart` says so on the Profile screen rather than letting the threshold slider imply protection. The phone's own honest trigger (deliberate shake → countdown) does work. |
 | FR-EMG-03 | done | `mobile/lib/features/emergency/presentation/emergency_screen.dart` |
 | FR-EMG-04 | partial | `fastapi_app/services/emergency_dispatch.py` — email and push both verified against live services; 3 attempts per contact per spec; **SMS unconfigured** (Twilio is paid) |
 | FR-EMG-05 | partial | `fastapi_app/services/emergency_dispatch.py` — evidence URL follows in a second email, not the alert |
@@ -103,6 +103,7 @@ because nothing else would catch them drifting.
 | §5.2 no cleartext in release | done | `mobile/android/app/src/main/res/xml/network_security_config.xml` forbids it; debug and profile permit it for LAN testing. Verified against the packaged resources of both variants, not the source. |
 | §10.2 TC-EMG-01 auto-alert | done | `tests/test_threat_fusion.py` |
 | §10.2 TC-EMG-05 deduplication | done | `tests/test_threat_fusion.py` |
+| §5.1 alert dispatch < 5s | partial | Warm requests answer in ~0.2–0.5s. Render's free tier suspends the instance after ~15 minutes idle, and an SOS is by nature the first request after a long idle period. Mitigated by `mobile/lib/core/network/backend_warmer.dart`, which wakes the instance at the *start* of the countdown so the ten deliberate seconds absorb the spin-up (measured at 3.4s). A paid instance removes the risk entirely. |
 | §6.1 three-model pipeline | scaffolded | `fastapi_app/services/threat_models.py` — contract, registry and `POST /alerts/analyze` ready; **no model trained**, so nothing produces these scores yet |
 
 ---

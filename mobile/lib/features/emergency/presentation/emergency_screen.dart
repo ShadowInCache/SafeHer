@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/evidence/evidence_recorder.dart';
+import '../../../core/network/backend_warmer.dart';
+import '../../../core/network/network_providers.dart';
 import '../../../core/evidence/video_recorder.dart';
 import '../../../core/local/app_preferences.dart';
 import '../../../core/location/location_providers.dart';
@@ -103,6 +105,7 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
       _secondsRemaining = _countdownSeconds;
       _location = null;
     });
+    _wakeBackend();
     _fetchLocation();
     _startRecording();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -172,6 +175,14 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
       }),
     );
   }
+
+  /// Wakes a sleeping backend while the countdown runs.
+  ///
+  /// See [BackendWarmer]: the countdown is ten deliberate seconds during
+  /// which nothing is sent, and spending the first of them waking a
+  /// suspended instance means the alert that follows is not the request
+  /// paying the spin-up.
+  void _wakeBackend() => ref.read(backendWarmerProvider).warm();
 
   /// Evidence capture begins with the countdown, not after dispatch.
   ///

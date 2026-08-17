@@ -9,6 +9,7 @@ import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/components/cards/sa_card.dart';
+import '../../../../core/detection/detection_status.dart';
 import '../../data/profile_providers.dart';
 
 /// Profile > Preferences — AI sensitivity, countdown length, auto-record,
@@ -48,6 +49,13 @@ class ProfilePreferencesSection extends ConsumerWidget {
                   ),
                 ],
               ),
+              // What this threshold currently governs, from the server rather
+              // than from an assumption. Until a detection model is serving,
+              // nothing produces the score this is compared against, and a
+              // control that silently governs nothing is indistinguishable
+              // from protection.
+              const SizedBox(height: AppSpacing.space2),
+              _DetectionStatusLine(status: ref.watch(detectionStatusProvider)),
               Slider(
                 value: prefs.threatThreshold,
                 min: 0.50,
@@ -174,6 +182,71 @@ class _DurationChip extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// One honest line about whether the threshold above is doing anything.
+class _DetectionStatusLine extends StatelessWidget {
+  const _DetectionStatusLine({required this.status});
+
+  final AsyncValue<DetectionStatus> status;
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+
+    return status.when(
+      // No placeholder claim while loading. "Checking" is honest; anything
+      // more would be a guess in the dangerous direction.
+      loading: () => Text(
+        'Checking detection status…',
+        style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.5)),
+      ),
+      error: (error, stackTrace) => Text(
+        "Couldn't check whether automatic detection is running.",
+        style: AppTypography.bodyS.copyWith(color: AppColors.warning500),
+      ),
+      data: (value) {
+        final active = value.autoSosActive;
+        return Semantics(
+          label: '${value.headline}. ${value.detail}',
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.only(top: 6, right: AppSpacing.space2),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: active ? AppColors.success500 : AppColors.warning500,
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      value.headline,
+                      style: AppTypography.labelM.copyWith(
+                        color: active ? AppColors.success500 : AppColors.warning500,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      value.detail,
+                      style: AppTypography.bodyS.copyWith(
+                        color: onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

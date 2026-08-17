@@ -1257,3 +1257,88 @@ Play App Signing re-signs uploads with a key Google holds, which has its own
 SHA-1. That fingerprint must also be added in Firebase, or sign-in breaks for
 store installs while working perfectly on a locally built APK.
 
+## 2026-08-17 (tenth session) — production hardening
+
+### A public endpoint was publishing the database credential
+
+`GET /status` returned `settings.database_url` verbatim, and the endpoint has
+no authentication — it cannot have any, because the host polls it and holds
+no token. On the deployed instance that published the Neon username, password
+and host to anyone who fetched the URL: full read and write access to every
+incident, location, emergency contact and evidence record SafeHer holds.
+
+Found by reading the handler while fixing something unrelated. No test caught
+it and nothing in the deploy flagged it. `/status` now names the engine, host
+and database and discloses nothing else; nine tests pin it, asserted against
+the whole response body rather than one field, because the next diagnostic
+someone adds is the one that leaks. The credential was rotated.
+
+### Health reported a fault it did not have
+
+`/health` returned `degraded` whenever Redis was unreachable — and nothing in
+this API reads or writes Redis. Every healthy deployment therefore looked
+unhealthy forever, and the first real outage would have arrived into a field
+everyone had learned to ignore. Redis is still reported; it no longer judges
+health. `/health` also deliberately does not touch the database, since it is
+what the host polls to decide whether to keep the instance alive.
+
+### Pinning the issuer rather than the leaf
+
+The app now defaults to `https://safeher-sf68.onrender.com/api/v1` rather than
+localhost, and ships with a pin enabled by default rather than one that has to
+be remembered at build time.
+
+The leaf was the wrong thing to pin. Render renews its Google Trust Services
+certificate roughly every ninety days — the current one expires 22 Oct 2026 —
+and a leaf pin would stop matching the day it rotated, taking the backend away
+from every installed copy of SafeHer with no remedy but a store update. The
+issuer is stable for years and still refuses a certificate from any other
+authority, which is the hostile-WiFi or corporate-MDM CA that SRS §5.2 is
+about.
+
+### FR-EMG-02 downgraded to partial, deliberately
+
+The decision path is complete and tested end to end. What it lacks is a
+producer: no detection model is trained, so no score is ever evaluated and the
+automatic alarm never fires.
+
+The tempting shortcut — post the phone's accelerometer magnitude as a
+"motion score" — was not taken. It would be an invented number wearing a
+model's name, it would dispatch to every emergency contact on a dropped phone
+or a run for a bus, and each false alarm spends the credibility the real alert
+depends on. The phone already has an honest trigger for its own hardware: the
+deliberate shake gesture, which opens the countdown rather than dispatching
+directly, and that path works today.
+
+Instead the app now says what is true. `GET /alerts/models` is read on the
+Profile screen and rendered beside the threshold slider: "Automatic detection
+is not active yet — your wearables are not sending readings, so SafeHer cannot
+detect a threat by itself. SOS, the shake gesture and your emergency contacts
+all work as normal." An unreachable backend reports detection as *off*, never
+on: claiming detection is running when we do not know is the one error that
+could stop someone acting for herself.
+
+### Dispatch latency, and the countdown that pays for it
+
+Warm requests answer in 0.2–0.5s. Render's free tier suspends the instance
+after roughly fifteen minutes idle, and an SOS is by its nature the first
+request after a long idle period — measured at 3.4s on one wake, and capable
+of worse. SRS §5.1 asks for dispatch within five seconds.
+
+`core/network/backend_warmer.dart` wakes the instance at the *start* of the
+countdown rather than at dispatch. The countdown is ten deliberate seconds
+during which nothing is sent, so it absorbs a spin-up that would otherwise
+land on the alert itself. The call is fire-and-forget and its `warm()`
+returns `void` specifically so no caller can await it and put a round trip in
+front of the countdown — the very delay it exists to avoid.
+
+That is a mitigation, not a cure: an auto-triggered dispatch with no
+countdown would still pay the spin-up. A paid instance removes the risk.
+
+### State
+
+302 backend tests pass. The release APK is signed with the project's own key
+(`abdc3dd0…`, unchanged, so the Firebase registration still holds), carries
+the package name `io.github.akshayag.safeher`, points at production and
+forbids cleartext.
+
