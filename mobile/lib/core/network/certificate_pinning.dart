@@ -27,7 +27,28 @@ import 'certificate_pinning_stub.dart'
 ///   | openssl x509 -outform DER | openssl dgst -sha256 -binary | openssl base64
 /// ```
 ///
-/// **Always configure at least two pins** — the certificate in use and the
+/// **Two ways to pin, and the right one depends on who owns the
+/// certificate.**
+///
+/// `PINNED_CERT_SHA256` pins the leaf. Strictest, and correct for a domain
+/// whose certificate you renew yourself and can coordinate with a release.
+///
+/// `PINNED_CERT_ISSUERS` pins the issuing authority instead, and is what a
+/// platform-managed certificate needs. Render serves a Google Trust Services
+/// certificate for `onrender.com` and renews it roughly every ninety days; a
+/// leaf pin would stop matching the day it rotated, taking the backend away
+/// from every installed copy of SafeHer — including mid-emergency — with no
+/// remedy but a store update. That is a worse outcome than the attack the
+/// pin defends against, so the issuer is pinned instead. It still refuses a
+/// certificate minted by any other authority, which is the hostile-WiFi or
+/// corporate-MDM CA that SRS section 5.2 is about.
+///
+/// Read the current issuer with:
+///
+///   openssl s_client -connect HOST:443 -servername HOST < /dev/null \\
+///     | openssl x509 -noout -issuer
+///
+/// **When pinning leaves, always configure at least two pins** — the certificate in use and the
 /// next one. A single pin turns routine certificate renewal into a total
 /// outage that only an app-store update can fix, and for this app an outage
 /// means an SOS that does not send.

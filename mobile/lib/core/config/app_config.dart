@@ -16,9 +16,14 @@ abstract final class AppConfig {
   /// Android emulators can't resolve `127.0.0.1` back to the host — pass
   /// `--dart-define=API_BASE_URL=http://10.0.2.2:5000/api/v1` there
   /// instead; a physical device needs the host's LAN IP.
+  ///
+  /// The default is the deployed backend, not localhost. A release build that
+  /// falls back to `127.0.0.1` is one that silently cannot work on a user's
+  /// phone, and the failure looks like a network problem rather than a
+  /// misbuild. Development overrides it with `--dart-define`.
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://127.0.0.1:5000/api/v1',
+    defaultValue: 'https://safeher-sf68.onrender.com/api/v1',
   );
 
   /// Whether sign-in goes through Firebase Auth.
@@ -45,7 +50,45 @@ abstract final class AppConfig {
   /// to read a fingerprint off a live host, and why you want two of them.
   static const _pinnedCertificateHashesRaw = String.fromEnvironment('PINNED_CERT_SHA256');
 
-  static Set<String> get pinnedCertificateHashes => _pinnedCertificateHashesRaw
+  static Set<String> get pinnedCertificateHashes => _splitPins(_pinnedCertificateHashesRaw);
+
+  /// Issuers the API's certificate is allowed to come from, as they appear in
+  /// `X509Certificate.issuer`. Supplied with
+  /// `--dart-define=PINNED_CERT_ISSUERS=<issuer>[,<issuer>]`.
+  ///
+  /// This exists because leaf pinning is the wrong tool for a certificate the
+  /// hosting platform manages. Render serves a Google Trust Services
+  /// certificate for `onrender.com` that it renews roughly every ninety days,
+  /// and a leaf pin would stop matching the moment it rotated — every
+  /// installed copy of SafeHer would lose the backend, mid-emergency for
+  /// anyone unlucky, with no fix but a store update. On a safety app that is
+  /// a worse outcome than the attack pinning defends against.
+  ///
+  /// Pinning the issuer survives renewal, because the intermediate is stable
+  /// for years, while still refusing a certificate minted by any *other*
+  /// authority — which is exactly the corporate-MDM or hostile-WiFi CA that
+  /// SRS section 5.2 has in mind.
+  ///
+  /// Prefer [pinnedCertificateHashes] once the API moves to a custom domain
+  /// whose certificate you control and can rotate deliberately.
+  /// Defaults to the authority that issues the certificate for
+  /// [apiBaseUrl]'s host. The two defaults describe one deployment and have
+  /// to move together: overriding `API_BASE_URL` to a host with a different
+  /// CA without also overriding this would refuse every connection.
+  ///
+  /// Defaulting rather than requiring a `--dart-define` is deliberate. A pin
+  /// that must be remembered at build time is a pin that ships missing, and
+  /// SRS section 5.2 asks for pinning in release builds — not for pinning in
+  /// the release builds somebody remembered to configure.
+  static const _pinnedCertificateIssuersRaw = String.fromEnvironment(
+    'PINNED_CERT_ISSUERS',
+    defaultValue: 'O=Google Trust Services',
+  );
+
+  static Set<String> get pinnedCertificateIssuers =>
+      _splitPins(_pinnedCertificateIssuersRaw);
+
+  static Set<String> _splitPins(String raw) => raw
       .split(',')
       .map((pin) => pin.trim())
       .where((pin) => pin.isNotEmpty)
