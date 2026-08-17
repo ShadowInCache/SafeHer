@@ -147,5 +147,57 @@ class TestMalformed(unittest.TestCase):
         self.assertEqual(credentials.project_id, "safeher-explicit")
 
 
+class TestStatus(unittest.TestCase):
+    """`push: false` has four causes and a bare boolean names none of them.
+
+    Guessing between them cost a real afternoon on the first deploy: a
+    credential set as a *path*, on a host that never receives the file, is
+    indistinguishable from outside from one that was never set at all.
+    """
+
+    def test_nothing_set_says_so(self):
+        status = FcmCredentials().status
+
+        self.assertIn("not set", status)
+        self.assertIn("FCM_SERVICE_ACCOUNT_JSON", status)
+
+    def test_a_path_that_does_not_exist_points_at_the_fix(self):
+        # The exact case that stalled the first deploy.
+        status = FcmCredentials(service_account_path="./secrets/nope.json").status
+
+        self.assertIn("missing file", status)
+        self.assertIn("FCM_SERVICE_ACCOUNT_JSON", status)
+
+    def test_unparseable_is_distinguished_from_absent(self):
+        status = FcmCredentials(service_account_json="not json at all").status
+
+        self.assertIn("unreadable", status)
+
+    def test_parsed_but_incomplete_is_its_own_answer(self):
+        # The most misleading case: it parses, so a naive check would call
+        # it configured and fail later, mid-dispatch.
+        status = FcmCredentials(service_account_json='{"project_id": "x"}').status
+
+        self.assertIn("incomplete", status)
+
+    def test_a_working_credential_says_ready(self):
+        self.assertEqual(FcmCredentials(service_account_json=json.dumps(ACCOUNT)).status, "ready")
+
+    def test_the_status_never_describes_the_credential(self):
+        # This string is returned by an authenticated API endpoint. It must
+        # not leak the key, a fragment of it, or even its length -- each of
+        # which narrows an attacker's search.
+        secret = ACCOUNT["private_key"]
+        for credentials in (
+            FcmCredentials(service_account_json=json.dumps(ACCOUNT)),
+            FcmCredentials(service_account_json=secret),
+            FcmCredentials(service_account_json='{"private_key": "' + "x" * 50 + '"}'),
+        ):
+            status = credentials.status
+            self.assertNotIn(secret, status)
+            self.assertNotIn("BEGIN PRIVATE KEY", status)
+            self.assertNotIn(str(len(secret)), status)
+
+
 if __name__ == "__main__":
     unittest.main()

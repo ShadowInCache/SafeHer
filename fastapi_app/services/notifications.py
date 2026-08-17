@@ -119,6 +119,38 @@ class FcmCredentials:
         return bool(info and info.get("private_key") and info.get("client_email"))
 
     @property
+    def status(self) -> str:
+        """Why push is off, in a word an operator can act on.
+
+        `is_configured` being False has at least four distinct causes, and a
+        bare `false` sends whoever is deploying to guess between them. That
+        guessing cost a real afternoon: a credential set as a *path* on a host
+        that never receives the file looks identical, from outside, to one
+        that was never set at all.
+
+        Deliberately says nothing about the credential's contents -- no
+        length, no prefix, no fragment. A private key is not something to
+        describe in an API response, however helpfully.
+        """
+        if self._json and self._json.strip():
+            info = self._info()
+            if info is None:
+                return "unreadable: the value is neither JSON nor base64-encoded JSON"
+            if not (info.get("private_key") and info.get("client_email")):
+                return "incomplete: parsed, but has no private_key or client_email"
+            return "ready"
+
+        if self._path:
+            if not Path(self._path).is_file():
+                return (
+                    f"missing file: nothing at {self._path!r}. A deployed host has "
+                    "no such file -- set FCM_SERVICE_ACCOUNT_JSON to its contents instead"
+                )
+            return "ready" if self.is_configured else "incomplete: the file has no private_key"
+
+        return "not set: neither FCM_SERVICE_ACCOUNT_JSON nor FCM_SERVICE_ACCOUNT_FILE"
+
+    @property
     def project_id(self) -> str:
         if self._project_id:
             return self._project_id

@@ -267,10 +267,17 @@ async def get_alert_channels(
         settings.onesignal_app_id and settings.onesignal_api_key
     )
 
+    push = fcm_credentials(settings)
+
     return {
         "sms": sms_configured,
         "email": email_configured,
-        "push": fcm_credentials(settings).is_configured,
+        "push": push.is_configured,
+        # Why push is off, when it is off. A bare `false` has at least four
+        # distinct causes and sends whoever is deploying to guess between
+        # them -- which cost a real afternoon on the first deploy. Contains
+        # no part of the credential itself.
+        "push_status": push.status,
         # True when email is the only channel that can reach an ordinary
         # contact, so a contact without an address cannot be reached at all.
         "email_requires_address": email_configured and not sms_configured,
