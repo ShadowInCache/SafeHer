@@ -99,7 +99,8 @@ because nothing else would catch them drifting.
 |------|--------|-------|
 | §6.2 fusion weights, EMA, boosters, dedup | partial | `fastapi_app/services/threat_fusion.py` implements all of it; `fuse()` is unreachable end to end until firmware produces motion/audio/vision scores |
 | §10.1 backend coverage > 80% | **not met** | Measured 62% on 2026-08-17 (`pytest --cov=fastapi_app`), up from 58% before this audit's tests |
-| §10.1 Flutter coverage > 70% | unmeasured | 587 tests pass; line coverage not measured |
+| §10.1 Flutter coverage > 70% | unmeasured | 596 tests pass; line coverage not measured |
+| §5.2 no cleartext in release | done | `mobile/android/app/src/main/res/xml/network_security_config.xml` forbids it; debug and profile permit it for LAN testing. Verified against the packaged resources of both variants, not the source. |
 | §10.2 TC-EMG-01 auto-alert | done | `tests/test_threat_fusion.py` |
 | §10.2 TC-EMG-05 deduplication | done | `tests/test_threat_fusion.py` |
 | §6.1 three-model pipeline | scaffolded | `fastapi_app/services/threat_models.py` — contract, registry and `POST /alerts/analyze` ready; **no model trained**, so nothing produces these scores yet |

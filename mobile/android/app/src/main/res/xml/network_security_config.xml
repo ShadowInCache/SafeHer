@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Release network policy: encrypted traffic only.
+
+    `android:usesCleartextTraffic="true"` used to sit in this manifest, which
+    applies to every build type. It is what makes LAN development work against
+    a laptop on http://192.168.x.x, and in a shipped app it meant SafeHer would
+    accept plain HTTP from anyone able to answer for the host — quietly
+    undoing the certificate pinning in `lib/core/network/`.
+
+    For an app that carries a woman's live location and her recorded evidence,
+    an attacker on the same cafe wifi reading or rewriting that traffic is the
+    threat the pinning exists to stop.
+
+    Cleartext now lives only in the debug and profile variants, which never
+    reach a user.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

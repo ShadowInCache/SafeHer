@@ -1134,3 +1134,62 @@ and `paho-mqtt` publish no wheel at all, only an sdist — but both are pure
 Python and built in seconds in the failing log, so they are not a concern.
 Everything else is either pure Python or has a cp312 wheel.
 
+## 2026-08-17 (eighth session) — backend live, cleartext closed
+
+### The API is deployed
+
+`https://safeher-sf68.onrender.com`, on Neon, with a valid certificate.
+Register, login, incidents, dashboard and `/alerts/analyze` all answer
+correctly against the live service; `/alerts/analyze` returned 0.815 for
+motion 0.9 / audio 0.8 / vision 0.7, which is SRS §6.2's weights running in
+production.
+
+Two deploys failed first, both for reasons outside the code:
+
+* Render defaults new services to **Python 3.14.3**, where `asyncpg==0.29.0`
+  has no wheel and its Cython C fails to compile. `.python-version` now pins
+  3.12, matching development and CI.
+* `DATABASE_URL` was set to the local Postgres URL, so the container tried
+  `localhost:5433` and got connection refused. That was a naming trap of my
+  own making: `.env` holds local Postgres in `DATABASE_URL` and Neon in
+  `NEON_DATABASE_URL`, so copying the obvious line gives the wrong one.
+
+Push is still off in production — the credential is set as a *path*, and the
+file is gitignored so it never reaches the host. `FcmCredentials` now also
+accepts `FCM_SERVICE_ACCOUNT_JSON` (raw or base64), and `/alerts/channels`
+reports a `push_status` naming which of the four failure modes applies,
+because a bare `false` cost an afternoon of guessing. Nothing about the
+credential appears in that string, and a test asserts it.
+
+### Cleartext HTTP closed in release builds
+
+`android:usesCleartextTraffic="true"` sat in the main manifest, so it applied
+to every variant. It is what makes LAN development work against a laptop, and
+in a shipped app it meant SafeHer would accept plain HTTP from anyone able to
+answer for the host — quietly undoing the certificate pinning in
+`lib/core/network/`. For an app carrying a woman's live location and her
+recorded evidence, an attacker on the same cafe wifi is the threat that
+pinning exists to stop.
+
+Cleartext now lives only in the debug and profile variants, via
+`network_security_config.xml`. The debug config also trusts user certificates
+so a debugging proxy still works — exactly the capability a release must not
+have.
+
+Verified against the **packaged resources of both builds**, not the source:
+
+    debug    cleartextTrafficPermitted="true"
+    release  cleartextTrafficPermitted="false"
+
+and the merged release manifest has no `usesCleartextTraffic` attribute at
+all. Release APK builds at 70.3 MB, under the SRS §6 target of 80 MB.
+
+Caught on the way: XML forbids `--` inside comments, and the first version of
+these files used it. No editor flagged it; the release build did.
+
+### State
+
+296 backend tests pass, 596 Flutter tests pass, `flutter analyze` clean.
+Remaining P0 blockers are both Android identity: the placeholder package name
+`com.example.safeher_app`, and release builds signed with the debug key.
+
