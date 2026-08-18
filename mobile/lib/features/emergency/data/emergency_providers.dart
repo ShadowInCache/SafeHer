@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/config/app_config.dart';
-import '../../../core/connectivity/connectivity_notifier.dart';
 import '../../../core/network/network_providers.dart';
 import '../../../core/offline/offline_queue_providers.dart';
 import '../../../core/evidence/evidence_recorder.dart';
@@ -81,8 +80,6 @@ class EmergencyDispatchNotifier extends _$EmergencyDispatchNotifier {
     });
   }
 
-  bool get _isOffline => ref.read(connectivityNotifierProvider).valueOrNull == false;
-
   /// Sends the alert and reports what happened to it.
   ///
   /// Callers **do** need this result: the Emergency screen shows which
@@ -101,17 +98,19 @@ class EmergencyDispatchNotifier extends _$EmergencyDispatchNotifier {
     double? longitude,
     double? accuracyMeters,
   }) async {
-    if (_isOffline) {
-      await ref.read(offlineQueueServiceProvider).enqueue('emergency.dispatch', {
-        'severity': severity,
-        'summary': summary,
-        'auto': auto,
-        'latitude': latitude,
-        'longitude': longitude,
-        'accuracyMeters': accuracyMeters,
-      });
-      return const DispatchResult.queued();
-    }
+    // Deliberately no connectivity pre-check. `connectivity_plus` reports
+    // whether a network *interface* is up, which is not the same question as
+    // "can this reach SafeHer" — a captive portal, a VPN, or a device the
+    // plugin simply misreads all produce a false negative. Refusing to try on
+    // its word meant an SOS was filed in a queue while the phone had a
+    // perfectly good connection, and the woman holding it was told her
+    // contacts would be alerted "when you have signal".
+    //
+    // So always attempt. The network stack is the authority on whether the
+    // network works, and the catch below already queues anything that fails —
+    // which is the same outcome the pre-check produced, minus the chance of
+    // being wrong about it. The connectivity flag still drives the offline
+    // banner, where being informational is all it has to be.
     try {
       final outcome = await ref
           .read(emergencyRepositoryProvider)
@@ -125,8 +124,10 @@ class EmergencyDispatchNotifier extends _$EmergencyDispatchNotifier {
           );
       return DispatchResult.sent(outcome);
     } catch (_) {
-      // Reachable network but the request itself failed (timeout, 5xx,
-      // etc.) — still queue it rather than silently losing the alert.
+      // The attempt failed: no network, a timeout, a 5xx, a captive portal.
+      // Queue it rather than silently losing the alert — this is now the only
+      // path to the queue, so an alert reaches it because sending genuinely
+      // did not work, never because a plugin predicted it would not.
       await ref.read(offlineQueueServiceProvider).enqueue('emergency.dispatch', {
         'severity': severity,
         'summary': summary,

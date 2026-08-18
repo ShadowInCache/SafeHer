@@ -31,9 +31,19 @@ import '../../../test_utils/offline_test_overrides.dart';
 import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
 class _RecordingEmergencyRepository implements EmergencyRepository {
-  _RecordingEmergencyRepository({this.outcome = const DispatchOutcome(contactsTotal: 2, contactsNotified: 2)});
+  _RecordingEmergencyRepository({
+    this.outcome = const DispatchOutcome(contactsTotal: 2, contactsNotified: 2),
+    this.unreachable = false,
+  });
 
   final DispatchOutcome outcome;
+
+  /// Behaves like a phone with no usable network: the request is made and it
+  /// throws. Needed because the dispatcher no longer refuses to try on a
+  /// connectivity plugin's word -- it always attempts, and reaches the queue
+  /// only when the attempt genuinely fails. A fake that succeeds while the
+  /// harness claims "offline" is not a phone that exists.
+  bool unreachable;
 
   final dispatched = <Map<String, Object?>>[];
 
@@ -46,6 +56,7 @@ class _RecordingEmergencyRepository implements EmergencyRepository {
     double? longitude,
     double? accuracyMeters,
   }) async {
+    if (unreachable) throw Exception('no route to host');
     dispatched.add({
       'severity': severity,
       'summary': summary,
@@ -470,7 +481,11 @@ void main() {
 
     testWidgets('an offline SOS says pending, never delivered', (tester) async {
       final queue = OfflineQueueService(FakeOfflineQueueBox());
-      await tester.pumpWidget(_harness(offline: true, queueService: queue));
+      await tester.pumpWidget(_harness(
+        offline: true,
+        queueService: queue,
+        emergencyRepo: _RecordingEmergencyRepository(unreachable: true),
+      ));
       await tester.pump(const Duration(milliseconds: 100));
       await _holdSos(tester);
       for (var i = 0; i < 11; i++) {
@@ -489,7 +504,9 @@ void main() {
 
     testWidgets('offline SOS queues the alert, then sends it once reconnected', (tester) async {
       final queue = OfflineQueueService(FakeOfflineQueueBox());
-      final repo = _RecordingEmergencyRepository();
+      // Unreachable on the first attempt, which is what being offline
+      // actually looks like from the dispatcher's side.
+      final repo = _RecordingEmergencyRepository(unreachable: true);
       await tester.pumpWidget(_harness(offline: true, queueService: queue, emergencyRepo: repo));
       await tester.pump(const Duration(milliseconds: 100));
       await _holdSos(tester);
@@ -507,7 +524,10 @@ void main() {
       expect(queue.pending, hasLength(1));
       expect(queue.pending.single.actionType, 'emergency.dispatch');
 
-      // Reconnecting drains the queue and actually sends the alert.
+      // Reconnecting: the network comes back, then the queue drains and the
+      // alert actually goes. Flipping this is the point -- a fake that stayed
+      // unreachable would only prove the replay fails too.
+      repo.unreachable = false;
       await queue.drain();
       expect(repo.dispatched, hasLength(1));
       expect(repo.dispatched.single['severity'], 'critical');

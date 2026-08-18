@@ -1,9 +1,23 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'connectivity_notifier.g.dart';
 
-bool _isOnline(List<ConnectivityResult> results) => results.any((r) => r != ConnectivityResult.none);
+@visibleForTesting
+bool isDeviceOnline(List<ConnectivityResult> results) {
+  // An empty list means the platform told us nothing, not that the device is
+  // definitely offline — and the two must not be collapsed. `[].any(...)` is
+  // false, so the old one-liner reported "offline" whenever the plugin
+  // returned nothing, which on this screen shows an offline banner and, until
+  // it was fixed, filed an SOS in a queue instead of sending it.
+  //
+  // Unknown resolves to online. Being wrong that way costs a failed request
+  // that the caller already handles; being wrong the other way costs the
+  // alert.
+  if (results.isEmpty) return true;
+  return results.any((r) => r != ConnectivityResult.none);
+}
 
 /// Whether the device currently has *some* network interface up
 /// (Wi-Fi/mobile/ethernet). This is reachability of a network, not proof
@@ -17,7 +31,7 @@ class ConnectivityNotifier extends _$ConnectivityNotifier {
     // onConnectivityChanged only fires on transitions, so seed the current
     // state first — otherwise a stable connection never emits anything
     // and this provider sits in AsyncLoading forever.
-    yield _isOnline(await connectivity.checkConnectivity());
-    yield* connectivity.onConnectivityChanged.map(_isOnline);
+    yield isDeviceOnline(await connectivity.checkConnectivity());
+    yield* connectivity.onConnectivityChanged.map(isDeviceOnline);
   }
 }
