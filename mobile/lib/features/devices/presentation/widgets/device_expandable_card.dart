@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../data/device_providers.dart';
+import '../../../../shared/utils/user_error.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
@@ -30,7 +33,7 @@ String _modelFor(DeviceType type) => switch (type) {
 /// Full device row: header (icon/name/status), battery, signal, firmware,
 /// tap to AnimatedSize-expand into the 3D visual + sensor grid + calibrate
 /// CTA. [initiallyExpanded] supports deep-linking from Home's device tap.
-class DeviceExpandableCard extends StatefulWidget {
+class DeviceExpandableCard extends ConsumerStatefulWidget {
   const DeviceExpandableCard({
     required this.device,
     super.key,
@@ -41,11 +44,12 @@ class DeviceExpandableCard extends StatefulWidget {
   final bool initiallyExpanded;
 
   @override
-  State<DeviceExpandableCard> createState() => DeviceExpandableCardState();
+  ConsumerState<DeviceExpandableCard> createState() => DeviceExpandableCardState();
 }
 
-class DeviceExpandableCardState extends State<DeviceExpandableCard> {
+class DeviceExpandableCardState extends ConsumerState<DeviceExpandableCard> {
   late bool _expanded = widget.initiallyExpanded;
+  bool _unpairing = false;
 
   @override
   Widget build(BuildContext context) {
@@ -195,9 +199,51 @@ class DeviceExpandableCardState extends State<DeviceExpandableCard> {
             onPressed: () =>
                 showSaToast(context, message: 'Calibrating ${device.name}…'),
           ),
+          const SizedBox(height: AppSpacing.space2),
+          SaButton(
+            label: _unpairing ? 'Removing…' : 'Remove Device',
+            variant: SaButtonVariant.danger,
+            fullWidth: true,
+            // Two taps, because this is not undoable from the app: pairing
+            // again means being in Bluetooth range of the wearable, which the
+            // person removing a lost or stolen one is not.
+            confirmRequired: true,
+            isLoading: _unpairing,
+            semanticsLabel: 'Remove ${device.name} from your account',
+            onPressed: _unpairing ? null : () => _unpair(context),
+          ),
         ],
       ),
     );
+  }
+
+  /// Removes the wearable from the account, server-side.
+  ///
+  /// Dropping only the Bluetooth link would look identical on this screen and
+  /// leave the device registered — still listed, and its push tokens still
+  /// receiving this account's emergency notifications.
+  Future<void> _unpair(BuildContext context) async {
+    setState(() => _unpairing = true);
+    final name = widget.device.name;
+    try {
+      await ref.read(deviceRepositoryProvider).unpairDevice(widget.device.id);
+      ref.invalidate(devicesProvider);
+      if (context.mounted) {
+        showSaToast(context, message: '$name removed', type: SaToastType.success);
+      }
+    } catch (error) {
+      if (context.mounted) {
+        final described = describeError(error, fallbackTitle: "Couldn't remove $name");
+        showSaToast(
+          context,
+          title: described.title,
+          message: described.message,
+          type: SaToastType.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _unpairing = false);
+    }
   }
 }
 

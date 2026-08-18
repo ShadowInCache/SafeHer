@@ -1409,3 +1409,74 @@ the next step, not a finished one.
 327 backend tests pass (up from 314), 614 Flutter tests pass, analyze clean.
 The dispatched-stage golden was regenerated for the new button.
 
+## 2026-08-18 — the first real on-device session, and what it found
+
+The release build went onto the phone and was actually used. Four findings,
+two of them serious, none of which any test could have produced.
+
+### One account could see another account's emergency contacts
+
+Sign out, sign in as someone else, and the previous account's contacts were on
+screen: names, numbers, email addresses.
+
+**The server was never wrong.** Every row was correctly scoped the whole time
+— the database showed exactly two contacts, both on the right user. The leak
+was in the app: several providers are `@Riverpod(keepAlive: true)` so their
+state survives navigation, which is right for a live BLE link and wrong for
+anything belonging to a person. Nothing invalidated them on sign-out, so the
+cached list simply stayed.
+
+That is precisely why nothing caught it. Backend tests scope by user and pass;
+widget tests drive one account and pass. It takes two accounts on one device.
+
+`core/session/session_reset.dart` now invalidates every user-scoped provider,
+called on sign-out *and* on sign-in — a session can also end via an expired
+token or a killed app, and the cost of an extra refetch is a spinner while the
+cost of a miss is one woman seeing another's contacts.
+
+### Emergency email does not work in production, and it is not our bug
+
+The SOS **did** dispatch — two incidents recorded, contacts fanned out — but
+every email failed. Root cause, confirmed against Render's own changelog:
+**free web services block outbound traffic to SMTP ports 25, 465 and 587**,
+a policy change from September 2025. The same block breaks contact
+verification, which is the `[Errno 101] Network is unreachable` behind the
+"could not be found" message.
+
+The credentials are fine: they authenticate to Gmail from this machine
+immediately. Ports 465/587 work on any paid Render instance.
+
+FR-EMG-04 is now marked **blocked** rather than partial, and the traceability
+vocabulary gained that status deliberately. Partial means it works with a
+limit; blocked means the code is correct and the environment refuses to run
+it. Calling an alert channel that reaches nobody "partial" would let it read
+as working-with-caveats on a scan of the matrix.
+
+### Failures now record why
+
+`NotificationLog` stored `failed` and nothing else, so an alert that reached
+nobody looked identical whether the password was wrong, the port blocked or
+the host unreachable. Diagnosing this one meant reproducing it by hand against
+production. Reasons are now recorded, truncated, and never taken from the
+message body — that body carries the user's live location.
+
+### Devices could be paired but never removed
+
+There was no unpair route at all. A device paired once stayed registered
+forever: dropping the Bluetooth link locally left the server still listing the
+wearable and still holding its push tokens. Someone who had given a glove away
+or had one taken had no way to say so. `DELETE /api/v1/devices/{id}` and a
+**Remove Device** button now exist, with a confirm step because re-pairing
+needs Bluetooth range that the person removing a stolen device does not have.
+
+### Recorded, not answered
+
+`resetSessionScopedState` deliberately does not clear the offline queue. It
+can hold an undelivered emergency alert: replaying it under a new session
+attributes one person's emergency to another, and dropping it loses an alert
+someone is waiting on. Neither is acceptable as a silent default.
+
+### State
+
+333 backend tests pass (up from 327), 617 Flutter tests pass, analyze clean.
+

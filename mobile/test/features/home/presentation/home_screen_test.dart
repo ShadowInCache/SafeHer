@@ -75,6 +75,9 @@ class _FakeProfileRepository implements ProfileRepository {
 
 class _FakeDeviceRepository implements DeviceRepository {
   @override
+  Future<void> unpairDevice(String id) async {}
+
+  @override
   Future<List<DeviceDetail>> getDevices() async {
     await Future.delayed(const Duration(milliseconds: 50));
     return [
@@ -408,6 +411,9 @@ void main() {
 }
 
 class _EmptyDeviceRepository implements DeviceRepository {
+  @override
+  Future<void> unpairDevice(String id) async {}
+
   @override
   Future<List<DeviceDetail>> getDevices() async {
     await Future.delayed(const Duration(milliseconds: 50));

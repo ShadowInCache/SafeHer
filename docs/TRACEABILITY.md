@@ -15,7 +15,8 @@ appear below, and every path named must exist. A requirement can be marked
 **not built** — that is an honest state — but it cannot be left out.
 
 Status values: **done** (implemented and tested), **partial** (works, with a
-stated limitation), **not built**.
+stated limitation), **blocked** (the code is correct and the environment
+refuses to run it), **not built**.
 
 > **Last full audit: 2026-08-17.** Every row below was re-read against the
 > code rather than carried forward. That audit found one requirement marked
@@ -58,13 +59,13 @@ stated limitation), **not built**.
 | FR-EMG-01 | done | `mobile/lib/features/emergency/presentation/emergency_screen.dart` |
 | FR-EMG-02 | partial | `fastapi_app/services/threat_fusion.py`, `fastapi_app/routers/alerts.py` — the decision path is complete and tested end to end, but no model produces a score to decide on, so it never fires in practice. `mobile/lib/core/detection/detection_status.dart` says so on the Profile screen rather than letting the threshold slider imply protection. The phone's own honest trigger (deliberate shake → countdown) does work. |
 | FR-EMG-03 | done | `mobile/lib/features/emergency/presentation/emergency_screen.dart` |
-| FR-EMG-04 | partial | `fastapi_app/services/emergency_dispatch.py` — email and push both verified against live services; 3 attempts per contact per spec; **SMS unconfigured** (Twilio is paid) |
+| FR-EMG-04 | blocked | `fastapi_app/services/emergency_dispatch.py` — the dispatch runs and push is configured, but **email fails on the deployed host**: Render's free tier blocks outbound SMTP ports 25/465/587 (policy change, Sept 2025), so every send returns `[Errno 101] Network is unreachable`. The same block breaks contact verification. Fixed by any paid Render instance, or by moving to an HTTP email API. SMS remains unconfigured (Twilio is paid). |
 | FR-EMG-05 | partial | `fastapi_app/services/emergency_dispatch.py` — evidence URL follows in a second email, not the alert |
 | FR-EMG-06 | partial | `mobile/lib/core/evidence/evidence_recorder_io.dart` (audio), `video_recorder_io.dart` (video) — both capture on device; the camera is the phone's, not the glasses', so video only helps when the lens happens to be pointed at something |
 | FR-EMG-07 | done | `fastapi_app/services/evidence_store.py` — AES-256-GCM |
 | FR-EMG-08 | done | `mobile/lib/features/emergency/presentation/emergency_screen.dart` |
 | FR-EMG-09 | done | `mobile/lib/core/offline/offline_queue_service.dart` |
-| FR-EMG-10 | done | `fastapi_app/services/contact_verification.py`, `fastapi_app/routers/users.py` — max 10 per spec |
+| FR-EMG-10 | partial | `fastapi_app/services/contact_verification.py`, `fastapi_app/routers/users.py` — max 10 per spec, but the OTP cannot be delivered from the deployed host: same Render SMTP block as FR-EMG-04. |
 
 ## §4.4 Live Monitoring
 
@@ -191,6 +192,22 @@ missing video rather than a lost recording.
   with no camera, and at 0.40 with the glove alone — which would silently
   disable auto-SOS. Weights are renormalised over whichever sensors
   reported.
+
+## Removing a paired device
+
+`DELETE /api/v1/devices/{id}` and a **Remove Device** button on the device
+card. There was no unpair route at all before: a device paired once stayed
+registered forever, so dropping the Bluetooth link locally left the server
+still listing the wearable and still holding push tokens for it. Someone who
+had given a glove away, or had one taken, had no way to say so.
+
+## An open question: the offline queue on sign-out
+
+`resetSessionScopedState` deliberately does **not** clear the offline queue.
+It can hold an undelivered emergency alert: replaying that under a new
+session would attribute one person's emergency to another, while dropping it
+loses an alert someone is waiting on. Neither is acceptable as a silent
+default, so it is recorded here rather than answered by accident.
 
 ## Calling the emergency helpline — one tap, not automatic
 

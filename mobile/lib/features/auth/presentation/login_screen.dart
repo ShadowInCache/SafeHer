@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/session/session_reset.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -68,6 +69,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
       final wasLoading = previous?.isLoading ?? false;
       if (wasLoading && !next.isLoading && !next.hasError) {
+        // Belt as well as braces. Sign-out clears the previous account's
+        // cached data, but a session can also end without passing through
+        // that button -- an expired token, an app killed mid-session, a
+        // deleted account. Clearing again here costs a refetch; missing it
+        // costs one woman seeing another woman's emergency contacts.
+        resetSessionScopedState(ref);
         context.go('/home');
       }
     });

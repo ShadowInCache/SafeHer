@@ -113,6 +113,9 @@ class _FakeContactsRepository implements ContactsRepository {
 
 class _FakeDeviceRepository implements DeviceRepository {
   @override
+  Future<void> unpairDevice(String id) async {}
+
+  @override
   Future<List<DeviceDetail>> getDevices() async {
     // Same staggered-mount reasoning as _FakeContactsRepository above.
     await Future.delayed(const Duration(milliseconds: 10));

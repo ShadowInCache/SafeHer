@@ -55,4 +55,9 @@ class DeviceRepositoryRemote implements DeviceRepository {
     final response = await _apiClient.dio.get('/devices/me');
     return (response.data as List).cast<Map<String, dynamic>>().map(_fromJson).toList();
   }
+
+  @override
+  Future<void> unpairDevice(String id) async {
+    await _apiClient.dio.delete<dynamic>('/devices/$id');
+  }
 }

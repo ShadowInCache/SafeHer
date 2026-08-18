@@ -199,7 +199,7 @@ async def _notify_contact(
             await _log(session, owner.id, "sms", "sent", incident_id, contact.id)
         else:
             result.failures["sms"] = error
-            await _log(session, owner.id, "sms", "failed", incident_id, contact.id)
+            await _log(session, owner.id, "sms", "failed", incident_id, contact.id, reason=error)
     else:
         # Recorded rather than silently skipped: an operator reading the
         # notification log needs to see that the channel was unavailable,
@@ -229,7 +229,7 @@ async def _notify_contact(
                 await _log(session, owner.id, "email", "sent", incident_id, contact.id)
             else:
                 result.failures["email"] = error
-                await _log(session, owner.id, "email", "failed", incident_id, contact.id)
+                await _log(session, owner.id, "email", "failed", incident_id, contact.id, reason=error)
         else:
             result.failures["email"] = "No email channel is configured"
             await _log(
@@ -329,20 +329,31 @@ async def _log(
     status: str,
     incident_id: str,
     contact_id: str,
+    reason: Optional[str] = None,
 ) -> None:
     """Appends an audit row.
 
-    The payload records ids only. The message body carries the user's live
-    location and the contact's phone number is already on the contact row —
-    copying either into a log table would spread the most sensitive data in
-    the system across another store for no operational gain.
+    The payload records ids, and — on a failure — why. It used to record only
+    "failed", which is what an alert that reached nobody looked like from the
+    database: a row saying something went wrong, with no way to tell a wrong
+    password from a blocked port from an unreachable host. Diagnosing one real
+    outage meant reproducing it by hand against production.
+
+    Reasons are truncated and come from exception text, never from the message
+    body: that body carries the user's live location, and the contact's phone
+    number is already on the contact row. Copying either into a log table
+    would spread the most sensitive data in the system across another store
+    for no operational gain.
     """
     session.add(
         NotificationLog(
             user_id=user_id,
             channel=channel,
             status=status,
-            payload=f"incident={incident_id} contact={contact_id}",
+            payload=(
+                f"incident={incident_id} contact={contact_id}"
+                + (f" reason={reason[:160]}" if reason else "")
+            ),
         )
     )
     await session.commit()
@@ -398,7 +409,7 @@ async def send_evidence_followup(
                 await _log(session, user.id, "email", "evidence_sent", incident_id, contact.id)
             else:
                 result.failures["email"] = error
-                await _log(session, user.id, "email", "evidence_failed", incident_id, contact.id)
+                await _log(session, user.id, "email", "evidence_failed", incident_id, contact.id, reason=error)
         else:
             result.failures["email"] = "No email address for this contact"
         report.results.append(result)

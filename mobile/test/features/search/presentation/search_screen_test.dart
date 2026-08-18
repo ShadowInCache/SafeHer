@@ -124,6 +124,9 @@ class _FakeContactsRepository implements ContactsRepository {
 
 class _FakeDeviceRepository implements DeviceRepository {
   @override
+  Future<void> unpairDevice(String id) async {}
+
+  @override
   Future<List<DeviceDetail>> getDevices() async {
     await Future.delayed(const Duration(milliseconds: 50));
     return const [

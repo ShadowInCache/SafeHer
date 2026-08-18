@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/session/session_reset.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -318,6 +319,10 @@ class _ProfileContent extends ConsumerWidget {
                   onPressed: () async {
                     try {
                       await ref.read(authRepositoryProvider).signOut();
+      // Forget the signed-out account's cached data. Without this the
+      // next person to sign in sees the previous one's emergency
+      // contacts, because those providers are keepAlive.
+      if (context.mounted) resetSessionScopedState(ref);
                     } catch (_) {
                       // Sign-out proceeds regardless — a failed server-side
                       // sign-out shouldn't trap the user in the app.

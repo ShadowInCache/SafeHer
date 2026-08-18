@@ -22,7 +22,13 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRS = ROOT / "SRS.md"
 MAP = ROOT / "docs" / "TRACEABILITY.md"
 
-VALID_STATUSES = {"done", "partial", "not built"}
+# "blocked" earns its place separately from "partial". Partial means the
+# feature works with a stated limit; blocked means the code is correct and the
+# environment refuses to run it -- Render's free tier blocks outbound SMTP, so
+# emergency email fails on the deployed host while passing every test. Calling
+# that "partial" would let an alert channel that reaches nobody read as
+# working-with-caveats on a scan of the matrix.
+VALID_STATUSES = {"done", "partial", "blocked", "not built"}
 
 
 def srs_requirements() -> list[tuple[str, str]]:

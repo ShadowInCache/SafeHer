@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/session/session_reset.dart';
 import '../../../core/local/app_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -82,6 +83,10 @@ class _SettingsContentState extends ConsumerState<_SettingsContent> {
   Future<void> _signOut(BuildContext context) async {
     try {
       await ref.read(authRepositoryProvider).signOut();
+      // Forget the signed-out account's cached data. Without this the
+      // next person to sign in sees the previous one's emergency
+      // contacts, because those providers are keepAlive.
+      if (context.mounted) resetSessionScopedState(ref);
     } catch (_) {
       // Proceeds regardless — see ProfileScreen's Sign Out for the same call.
     }

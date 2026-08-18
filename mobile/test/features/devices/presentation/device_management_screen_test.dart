@@ -45,6 +45,9 @@ List<DeviceDetail> _sampleDevices() => const [
 ];
 
 class _FakeDeviceRepository implements DeviceRepository {
+  @override
+  Future<void> unpairDevice(String id) async {}
+
   _FakeDeviceRepository({this.shouldFail = false});
   final bool shouldFail;
 

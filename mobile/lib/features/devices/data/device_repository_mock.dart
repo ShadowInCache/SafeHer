@@ -56,4 +56,7 @@ class DeviceRepositoryMock implements DeviceRepository {
       ),
     ];
   }
+
+  @override
+  Future<void> unpairDevice(String id) async {}
 }

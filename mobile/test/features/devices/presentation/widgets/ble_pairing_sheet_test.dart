@@ -66,6 +66,9 @@ class _FakeRegistrationRepository implements DeviceRegistrationRepository {
 /// once these tests dispose their widget tree before it fires.
 class _InstantDeviceRepository implements DeviceRepository {
   @override
+  Future<void> unpairDevice(String id) async {}
+
+  @override
   Future<List<DeviceDetail>> getDevices() async => const [];
 }
 

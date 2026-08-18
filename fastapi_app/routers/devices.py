@@ -35,6 +35,31 @@ async def list_my_devices(
     return devices
 
 
+@router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def unpair_device(
+    device_id: str,
+    current_user: UserPublic = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Removes a paired wearable from the account.
+
+    There was no route for this, so a device paired once stayed on the
+    account permanently: the app could drop the Bluetooth link locally, and
+    the server would still list the wearable as registered. A woman who has
+    given a glove away, or had one taken, had no way to say so.
+
+    The 404 is deliberately the same whether the device does not exist or
+    belongs to someone else. Distinguishing them would let any signed-in user
+    probe for valid device ids.
+    """
+    device = await device_repo.get_by_id(session, device_id)
+    if device is None or device.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+
+    await device_repo.delete(session, device=device)
+    return None
+
+
 @router.post("/{device_id}/heartbeat", status_code=status.HTTP_204_NO_CONTENT)
 async def update_device_heartbeat(
     device_id: str,
