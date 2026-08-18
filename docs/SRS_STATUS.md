@@ -1342,3 +1342,70 @@ countdown would still pay the spin-up. A paid instance removes the risk.
 the package name `io.github.akshayag.safeher`, points at production and
 forbids cleartext.
 
+## 2026-08-17 (eleventh session) — what the models saw, and the helpline
+
+The auto-SOS requirement was described in full: glove readings through
+XGBoost, glasses video through YOLOv8 for weapons, glasses audio through
+CNN+LSTM for distress words; the combined score crosses the threshold; the
+incident is summarised with the model outputs stated, sent to contacts with
+the recordings, and the police helpline dialled.
+
+Most of the chain already existed. What did not was the part that makes an
+automatic alarm accountable.
+
+### The incident now records why it fired
+
+Migration 0012 adds per-modality scores, weapon confidence, the fused score
+and the threshold it was compared against, plus a free-text `detections`
+field. `threat_models.describe()` turns those numbers into a sentence: *"Sudden,
+violent movement was detected. Distress and calls for help were heard. A knife
+was detected in view."*
+
+That sentence, not the score, is what an automatic incident is titled and
+described with, and it flows into the Gemini summary prompt and a new **What
+the system detected** section in the PDF — with the raw numbers beside it, so
+a reader challenging the conclusion can audit it.
+
+Two properties are pinned by tests. A weapon below §6.2's 0.70 floor is *not*
+named, because that sentence would otherwise end up in an evidence pack
+asserting a gun that the model was unsure about. And an absent sensor is
+stated as absent — "the glasses were not sending video" — because silence
+reads as "the camera saw nothing worrying", which is a different and
+misleading claim about coverage.
+
+`detections` is free text rather than typed columns on purpose: the shape of
+a detection belongs to models that are not trained yet, and guessing at a
+schema now means a migration during a live deployment later.
+
+### The helpline is one tap, and cannot be automatic
+
+The dispatched screen now carries a prominent **Call 112** button that opens
+the dialler pre-filled. `EMERGENCY_HELPLINE` makes the number configurable,
+since a hardcoded 112 shown outside India would be a wrong number at the worst
+moment.
+
+It cannot dial by itself: **Android refuses `ACTION_CALL` for emergency
+numbers** and permits only `ACTION_DIAL`. That is an operating-system
+restriction, not a policy exception anyone can request, and it exists because
+automatic calls from software have flooded emergency services before. It is
+also the right behaviour — detection models are wrong in both directions, and
+an app that dialled 112 on a false positive would spend an operator's time on
+someone who is fine, then be switched off before the day it mattered.
+
+No requirement in `SRS.md` asks for any of this — §4 has no police or helpline
+item, and the "Call Contact" action at line 2006 means a priority *contact*.
+Recorded as a product addition rather than folded in as though the spec asked.
+
+### Still outstanding on this chain
+
+Attaching the audio and video to the contact email rather than linking them.
+Gmail rejects messages over 25 MB and the evidence cap is 25 MB by itself, so
+an attachment would bounce exactly when the recording is most substantial.
+The share link is the reliable path; making attachment conditional on size is
+the next step, not a finished one.
+
+### State
+
+327 backend tests pass (up from 314), 614 Flutter tests pass, analyze clean.
+The dispatched-stage golden was regenerated for the new button.
+

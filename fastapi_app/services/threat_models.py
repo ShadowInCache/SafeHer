@@ -179,3 +179,79 @@ class ModalityScores:
     @property
     def has_any(self) -> bool:
         return bool(self.reporting_modalities)
+
+
+# Above this, YOLOv8's weapon class is reported as a weapon rather than a
+# maybe. Matches SRS §6.2's booster floor so the report and the score agree
+# about what counted.
+WEAPON_REPORTING_FLOOR = 0.70
+
+
+def describe(scores: "ModalityScores", *, weapon_label: Optional[str] = None) -> str:
+    """What the models saw, in a sentence a frightened person can read.
+
+    An incident report has to answer "why did SafeHer decide I was in
+    danger?". "Threat score 0.83" does not answer it. "Sudden violent motion,
+    distress in your voice, and a knife detected in view" does — she can
+    recognise her own emergency in that, or recognise that it was wrong.
+
+    It matters forensically too: a conclusion offered as evidence has to say
+    what produced it, and a number with no provenance is evidence of nothing.
+
+    Absent modalities are named as absent rather than omitted. "The glasses
+    were not sending video" is a materially different report from silence,
+    which reads as though the camera saw nothing worrying.
+    """
+    parts: list[str] = []
+
+    def band(value: float, low: str, mid: str, high: str) -> str:
+        if value >= 0.75:
+            return high
+        if value >= 0.4:
+            return mid
+        return low
+
+    if scores.motion is None:
+        parts.append("The glove was not sending motion readings.")
+    else:
+        parts.append(
+            band(
+                scores.motion,
+                "Movement looked ordinary.",
+                "Unusual movement was detected.",
+                "Sudden, violent movement was detected.",
+            )
+        )
+
+    if scores.audio is None:
+        parts.append("The glasses were not sending audio.")
+    else:
+        parts.append(
+            band(
+                scores.audio,
+                "Nothing alarming was heard.",
+                "Raised or distressed speech was heard.",
+                "Distress and calls for help were heard.",
+            )
+        )
+
+    if scores.vision is None:
+        parts.append("The glasses were not sending video.")
+    else:
+        parts.append(
+            band(
+                scores.vision,
+                "Nothing alarming was seen.",
+                "Something concerning was seen.",
+                "A violent scene was seen.",
+            )
+        )
+
+    if scores.weapon_confidence > WEAPON_REPORTING_FLOOR:
+        weapon = weapon_label or "a weapon"
+        parts.append(f"{weapon.capitalize()} was detected in view.")
+
+    if scores.heart_rate_bpm is not None and scores.heart_rate_bpm >= 120:
+        parts.append(f"Heart rate was raised, at {round(scores.heart_rate_bpm)} bpm.")
+
+    return " ".join(parts)

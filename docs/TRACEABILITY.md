@@ -192,7 +192,33 @@ missing video rather than a lost recording.
   disable auto-SOS. Weights are renormalised over whichever sensors
   reported.
 
-## Notifying police or help centres — not built
+## Calling the emergency helpline — one tap, not automatic
+
+`GET /api/v1/safety/nearby` finds real nearby police stations. Nothing
+*notifies* them, and nothing dials automatically. The dispatched SOS screen
+now carries a prominent **Call 112** button that opens the dialler with the
+national emergency number filled in.
+
+It cannot be automatic, and that is an operating-system constraint rather than
+a choice: **Android refuses `ACTION_CALL` for emergency numbers**, permitting
+only `ACTION_DIAL`, which fills the dialler and waits for a person to press
+call. The restriction exists because automatic calls from software have a
+history of flooding emergency services.
+
+It is the right behaviour anyway. Detection models are wrong in both
+directions, and an app that dialled 112 by itself on a false positive would
+spend an operator's time on someone who is fine — and teach that user to
+switch the feature off before the day it matters.
+
+The number is `EMERGENCY_HELPLINE`, defaulting to 112 (India's ERSS). A
+hardcoded 112 shown to someone in the UK or the US would be a wrong number at
+the worst possible moment.
+
+**Note:** no requirement in `SRS.md` asks for this. §4 has no police or
+helpline item at all; the "Call Contact" action at line 2006 means a priority
+*contact*. This is a product addition, recorded as such.
+
+## Notifying a police station directly — not built
 
 `GET /api/v1/safety/nearby` finds real nearby police stations and hospitals.
 Nothing **notifies** them, and `routers/journeys.py` states this explicitly.

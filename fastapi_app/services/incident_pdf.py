@@ -64,6 +64,8 @@ def build_incident_pdf(
     evidence: Sequence[tuple[str, str, bytes]],
     contacts_notified: Optional[int] = None,
     ai_summary: Optional[str] = None,
+    detections: Optional[str] = None,
+    scores: Optional[dict] = None,
 ) -> bytes:
     """Renders the report.
 
@@ -115,6 +117,34 @@ def build_incident_pdf(
             5,
             "Written automatically from the recorded facts below. It is a "
             "convenience, not a statement by the person involved.",
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
+        pdf.set_text_color(*INK)
+
+    if detections or scores:
+        heading("What the system detected")
+        if detections:
+            pdf.set_font("Helvetica", "", 10)
+            pdf.multi_cell(0, 6, detections, new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(1)
+        if scores:
+            # The numbers behind the sentence. A conclusion offered as
+            # evidence has to be auditable, and a reader challenging it needs
+            # the per-model values and the threshold they were compared
+            # against -- not just the verdict.
+            for label, value in scores.items():
+                if value is None:
+                    continue
+                field(label, f"{value:.2f}" if isinstance(value, float) else str(value))
+        pdf.ln(1)
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_text_color(*MUTED)
+        pdf.multi_cell(
+            0,
+            5,
+            "Produced by automated detection models, not by a person. Model "
+            "output is an indication and can be wrong in either direction.",
             new_x="LMARGIN",
             new_y="NEXT",
         )

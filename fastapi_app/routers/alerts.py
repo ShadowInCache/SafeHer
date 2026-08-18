@@ -50,6 +50,8 @@ async def _auto_dispatch_if_threatened(
     incident: Optional[Incident] = None,
     weapon_confidence: float = 0.0,
     in_high_risk_zone: bool = False,
+    scores: Optional[threat_models.ModalityScores] = None,
+    weapon_label: Optional[str] = None,
 ) -> dict[str, Any]:
     """SRS FR-EMG-02 -- raise the alarm without being asked.
 
@@ -95,17 +97,34 @@ async def _auto_dispatch_if_threatened(
         }
 
     if incident is None:
+        findings = (
+            threat_models.describe(scores, weapon_label=weapon_label)
+            if scores is not None
+            else decision.reason
+        )
         incident = Incident(
             user_id=user_id,
             title="Automatic SOS",
-            description=(
-                "Raised automatically by SafeHer: " + decision.reason
-            ),
+            # The findings, not the arithmetic. "A knife was detected in
+            # view" is what she needs to read first; the score is recorded
+            # alongside for anyone who wants to audit the decision.
+            description=findings,
             threat_level="critical",
         )
         session.add(incident)
 
     incident.auto_dispatched = True
+    # What the models observed, recorded on the incident itself. Without this
+    # the report can say SafeHer raised the alarm but not why, which is no
+    # use to the woman reading it and worthless as evidence.
+    if scores is not None:
+        incident.motion_score = scores.motion
+        incident.audio_score = scores.audio
+        incident.vision_score = scores.vision
+        incident.weapon_confidence = scores.weapon_confidence or None
+        incident.detections = threat_models.describe(scores, weapon_label=weapon_label)
+    incident.fused_score = round(decision.boosted_score, 4)
+    incident.threshold_used = threshold
     session.add(incident)
     await session.commit()
     await session.refresh(incident)
@@ -524,6 +543,8 @@ async def analyze_model_scores(
         raw_score=fused,
         weapon_confidence=scores.weapon_confidence,
         in_high_risk_zone=payload.in_high_risk_zone,
+        scores=scores,
+        weapon_label=payload.weapon_label,
     )
 
     _latest_scores[current_user.id] = {
@@ -534,6 +555,9 @@ async def analyze_model_scores(
 
     return {
         "fused_score": round(fused, 4),
+        # The same sentence written onto the incident, returned so a caller
+        # can show it without a second request.
+        "findings": threat_models.describe(scores, weapon_label=payload.weapon_label),
         # Which sensors this verdict actually rests on. A score fused from
         # the glove alone means something different from one that also saw
         # and heard, and a reader cannot tell them apart from the number.

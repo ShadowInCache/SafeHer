@@ -181,6 +181,15 @@ async def export_incident_pdf(
         longitude=location.lng if location else None,
         evidence=evidence,
         ai_summary=incident.ai_summary,
+        detections=incident.detections,
+        scores={
+            "Motion (glove)": incident.motion_score,
+            "Audio (glasses)": incident.audio_score,
+            "Vision (glasses)": incident.vision_score,
+            "Weapon confidence": incident.weapon_confidence,
+            "Combined score": incident.fused_score,
+            "Threshold": incident.threshold_used,
+        },
     )
 
     return Response(
@@ -257,6 +266,7 @@ async def generate_incident_summary(
         evidence_count=evidence_count,
         contacts_notified=None,
         trigger=incident.description or "not recorded",
+        detections=incident.detections,
     )
 
     try:

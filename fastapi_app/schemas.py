@@ -275,6 +275,11 @@ class ModelScoresRequest(BaseModel):
     weapon_confidence: float = Field(
         default=0.0, ge=0.0, le=1.0, description="YOLOv8 weapon class; boosts above 0.70 per §6.2"
     )
+    weapon_label: Optional[str] = Field(
+        default=None,
+        max_length=40,
+        description="What YOLOv8 identified -- 'a knife', 'a gun', 'a rod'. Reported verbatim in the incident, so it is length-capped and escaped downstream.",
+    )
     heart_rate_bpm: Optional[float] = Field(
         default=None, ge=20.0, le=250.0, description="Glove pulse sensor; a booster, not a weight"
     )

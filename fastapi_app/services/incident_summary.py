@@ -92,6 +92,7 @@ def build_prompt(
     evidence_count: int,
     contacts_notified: Optional[int],
     trigger: str,
+    detections: Optional[str] = None,
 ) -> str:
     """Assembles the fact sheet.
 
@@ -106,6 +107,14 @@ def build_prompt(
         f"Time (UTC): {occurred_at}",
         f"Trigger: {trigger}",
     ]
+    # What the detection models observed, when the alarm was raised by the
+    # system rather than by a tap. This is the single most important fact in
+    # an automatic incident: it is the answer to "why did SafeHer think I was
+    # in danger?", and a summary that omits it describes an alarm with no
+    # cause. Fenced with everything else, because a weapon label originates
+    # from a model and is still not trusted input.
+    if detections:
+        facts.append(f"What the detection models observed: {detections}")
     if latitude is not None and longitude is not None:
         facts.append(f"Location: {latitude:.5f}, {longitude:.5f}")
     else:

@@ -5,6 +5,9 @@ import '../../data/emergency_providers.dart';
 import '../../domain/models/evidence_state.dart';
 import '../../../../core/animations/animation_helpers.dart';
 import '../../../../core/location/location_result.dart';
+import '../../../../core/config/app_config.dart';
+import '../../../../core/platform/external_actions.dart';
+import '../../../../shared/components/overlays/sa_toast.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -137,6 +140,8 @@ class EmergencyDispatchedStage extends StatelessWidget {
           _CouldNotReachBanner(),
         ],
         const SizedBox(height: AppSpacing.space5),
+        const _CallHelplineButton(),
+        const SizedBox(height: AppSpacing.space3),
         _EvidencePanel(state: evidence, hasVideo: hasVideo),
         const SizedBox(height: AppSpacing.space3),
         _LiveLocationPanel(location: location),
@@ -391,6 +396,52 @@ class _LiveBadgeState extends State<_LiveBadge> with SingleTickerProviderStateMi
           Text('LIVE', style: AppTypography.labelM.copyWith(color: AppColors.coral500)),
         ],
       ),
+    );
+  }
+}
+
+/// One tap to the national emergency number.
+///
+/// **Why this is a button and not an automatic call.** Android will not let
+/// an app place a call to an emergency number: `ACTION_CALL` is refused for
+/// them and only `ACTION_DIAL` — which fills the dialler and waits for a
+/// human to press call — is permitted. That restriction is the operating
+/// system's, not a policy we could ask to be excepted from, and it exists
+/// because automatic calls to emergency services from software have a long
+/// history of flooding them.
+///
+/// It is right anyway. Detection models can be wrong, and an app that dialled
+/// 112 by itself on a false positive would spend an emergency operator's time
+/// on someone who is fine — and teach that user to disable the feature before
+/// the day it matters. So SafeHer gets her one tap away and leaves the tap to
+/// her.
+class _CallHelplineButton extends StatelessWidget {
+  const _CallHelplineButton();
+
+  /// Matches how the rest of the app reaches the dialler — a const instance
+  /// rather than a provider, since it holds no state.
+  static const _actions = ExternalActions();
+
+  @override
+  Widget build(BuildContext context) {
+    final number = AppConfig.emergencyHelplineNumber;
+
+    return SaButton(
+      label: 'Call $number',
+      variant: SaButtonVariant.danger,
+      fullWidth: true,
+      semanticsLabel: 'Call the emergency helpline on $number',
+      onPressed: () async {
+        final launched = await _actions.dial(number);
+        if (!context.mounted || launched) return;
+        // Never fails silently. A button that appears to do nothing during an
+        // emergency is worse than one that is not offered.
+        showSaToast(
+          context,
+          message: 'Could not open the dialler. Call $number yourself.',
+          type: SaToastType.error,
+        );
+      },
     );
   }
 }

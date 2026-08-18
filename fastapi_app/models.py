@@ -92,6 +92,26 @@ class Incident(Base):
     # held only in memory would not survive a restart mid-emergency.
     auto_dispatched = Column(Boolean, nullable=False, default=False, server_default="0")
 
+    # SRS §6.1 -- what each model observed, so the report can say why SafeHer
+    # decided she was in danger rather than only that it did. Nullable per
+    # modality: a sensor that did not report is not one that reported calm,
+    # and a report that cannot tell those apart is misleading about coverage.
+    motion_score = Column(Float, nullable=True)
+    audio_score = Column(Float, nullable=True)
+    vision_score = Column(Float, nullable=True)
+    weapon_confidence = Column(Float, nullable=True)
+
+    # The value actually compared against the threshold, after §6.2 fusion,
+    # smoothing and context boosters -- not the raw weighted sum.
+    fused_score = Column(Float, nullable=True)
+    threshold_used = Column(Float, nullable=True)
+
+    # Free text, deliberately. The shape of a detection belongs to the models,
+    # and none is trained yet; committing to columns for "weapon class" and
+    # "trigger words" now would be guessing at a schema, and a wrong guess is
+    # a migration during a live deployment.
+    detections = Column(Text, nullable=True)
+
     created_at = Column(DateTime, nullable=False, default=_utcnow)
     updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
 

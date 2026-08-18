@@ -94,6 +94,17 @@ abstract final class AppConfig {
       .where((pin) => pin.isNotEmpty)
       .toSet();
 
+  /// The national emergency number the SOS screen offers to call.
+  ///
+  /// 112 is India's single emergency number (ERSS), which routes to police,
+  /// fire and ambulance. Overridable per build for other countries, because
+  /// a hardcoded 112 shown to someone in the UK or the US would be a wrong
+  /// number at the worst possible moment.
+  static const emergencyHelplineNumber = String.fromEnvironment(
+    'EMERGENCY_HELPLINE',
+    defaultValue: '112',
+  );
+
   static const apiConnectTimeout = Duration(seconds: 10);
   static const apiReceiveTimeout = Duration(seconds: 15);
 

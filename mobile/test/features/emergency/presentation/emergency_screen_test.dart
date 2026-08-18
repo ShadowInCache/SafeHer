@@ -541,7 +541,14 @@ void main() {
       }
       await tester.pump(const Duration(milliseconds: 100));
 
-      await tester.ensureVisible(find.text("I'm Safe — Cancel Alert"));
+      // The dispatched stage is a ListView, so off-screen children are not
+      // built and `ensureVisible` cannot find them. The Call-helpline button
+      // added above the evidence panel pushed this one past the fold.
+      await tester.scrollUntilVisible(
+        find.text("I'm Safe — Cancel Alert"),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.pump();
       await tester.tap(find.text("I'm Safe — Cancel Alert"));
       await tester.pump(const Duration(milliseconds: 100));
@@ -561,7 +568,14 @@ void main() {
         await tester.pump(const Duration(seconds: 1));
       }
       await tester.pump(const Duration(milliseconds: 100));
-      await tester.ensureVisible(find.text("I'm Safe — Cancel Alert"));
+      // The dispatched stage is a ListView, so off-screen children are not
+      // built and `ensureVisible` cannot find them. The Call-helpline button
+      // added above the evidence panel pushed this one past the fold.
+      await tester.scrollUntilVisible(
+        find.text("I'm Safe — Cancel Alert"),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.pump();
       await tester.tap(find.text("I'm Safe — Cancel Alert"));
       await tester.pump(const Duration(milliseconds: 100));
