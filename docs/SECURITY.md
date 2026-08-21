@@ -66,7 +66,7 @@ audit — none of these are fixed as part of this audit, they're flagged for fol
 - **Supabase RLS**: the archived `docs/archive/TECHNICAL_INVENTORY.md` flagged that
   Supabase row-level security was configured to allow all operations at the time it
   was written — verify current RLS policy on the `events` table
-  (`supabase_setup.sql`) before relying on Supabase-side access control.
+  (`deployment/sql/supabase_setup.sql`) before relying on Supabase-side access control.
 - **The legacy Flask gateway was deleted on 2026-08-15.** If you restore it from git
   history, treat it as unmaintained and do not run it in any environment that
   handles real user data; it predates the current security review and is kept for

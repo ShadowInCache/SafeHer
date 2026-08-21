@@ -398,7 +398,7 @@ arrive. Linking a phone credential is an enhancement, not a precondition.
 ## 5. Run the ML training pipeline (optional)
 
 ```bash
-python validate_dataset.py           # checks for a dataset/raw/*.csv tree — not committed
+python scripts/validate_dataset.py   # checks for a dataset/raw/*.csv tree — not committed
 python ml_training/motion_detection/train_motion_model.py
 ```
 

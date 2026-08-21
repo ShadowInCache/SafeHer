@@ -1,7 +1,7 @@
 # SRS Compliance Status
 
 **Last refreshed:** 2026-08-21
-**Governing spec:** [`SRS.md`](../SRS.md) (2,851 lines)
+**Governing spec:** [`SRS.md`](SRS.md) (2,851 lines)
 
 This file answers one question: *how much of `SRS.md` is actually built, and
 how do we know?* It is refreshed at the start of every working session, and

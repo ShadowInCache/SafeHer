@@ -69,3 +69,13 @@ htmlcov/
 **/key.properties
 *.jks
 *.keystore
+
+# JVM crash dumps from Gradle/Android builds. Four of these were sitting in
+# mobile/android/ untracked; they are pure build wreckage and never wanted.
+hs_err_pid*.log
+replay_pid*.log
+
+# Captured `flutter run` output. mobile/flutter_err.txt and flutter_out.txt
+# were committed by accident and have now been removed -- this keeps the next
+# redirect from following them in.
+mobile/flutter_*.txt

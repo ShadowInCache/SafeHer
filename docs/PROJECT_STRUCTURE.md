@@ -14,18 +14,27 @@ SafeHer/
 ├── ml_training/           Offline model-training scripts + trained artifacts (XGBoost, voice, weapon)
 ├── hardware/               ESP32 firmware for the two physical devices (glove, glasses)
 ├── cloud_functions/       Multi-cloud serverless functions (motion/voice/weapon/fusion)
-├── deployment/             Docker Compose stack, service configs, startup scripts
+├── deployment/             Docker Compose stack, service configs, startup scripts,
+│                            and sql/supabase_setup.sql (events-archive schema)
 ├── alembic/                Database migrations (SQLAlchemy schema history)
 ├── tests/                  Backend test suite (pytest)
-├── scripts/                One-off operational scripts
-├── docs/                   Documentation, including docs/archive/ (superseded reports)
+├── scripts/                One-off operational scripts, incl. validate_dataset.py
+├── docs/                   All project documentation — SRS.md, API.md, ARCHITECTURE.md,
+│                            SETUP.md, SECURITY.md, MEMORY.md, plus archive/ (superseded)
 ├── app.py                  Backend entrypoint — launches fastapi_app via uvicorn
 ├── manage.py                Docker Compose process manager (start/stop/status/logs)
-├── validate_dataset.py     Standalone validator for the ML training dataset
-├── requirements.txt         Python dependencies (see DEPENDENCIES.md)
+├── requirements.txt         Python dependencies (see docs/DEPENDENCIES.md)
 ├── alembic.ini               Alembic configuration
-├── supabase_setup.sql        Schema for the Supabase events-archive table
-└── Makefile                  Convenience commands (see SETUP.md)
+├── README.md                 Orientation; everything else lives in docs/
+└── Makefile                  Convenience commands (see docs/SETUP.md)
+
+Only README.md and LICENSE remain as documentation at the root. Every other
+document moved into `docs/` on 2026-08-21 — eleven markdown files at the top
+level made the repo hard to scan, and none of them was load-bearing there.
+`fastapi_app/`, `mobile/`, `alembic/` and `tests/` deliberately did **not**
+move: `fastapi_app.main:app` is the import path the deployment, Dockerfile,
+Makefile and every test rely on, and relocating it would buy tidiness at the
+cost of the one thing that has to keep working.
 ```
 
 ## `fastapi_app/` — current backend

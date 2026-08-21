@@ -112,7 +112,7 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full tree. In one line 
 - **`ml_training/`** — produces the model artifacts (`xgboost_motion_model.json`,
   `motion_training_results.json`) that `cloud_functions/motion_detection/` loads.
   Training is not reproducible from a fresh clone — the raw dataset directory
-  `validate_dataset.py` expects isn't committed.
+  `scripts/validate_dataset.py` expects isn't committed.
 - **`hardware/`** — firmware for the two devices that actually have code: the smart
   glove and the smart glasses. No firmware exists for a "smart ring" or "pendant"
   despite both appearing in the mobile UI (see Known Gaps below).
