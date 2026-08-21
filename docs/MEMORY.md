@@ -324,6 +324,32 @@ in future work — this file describes state as of 2026-08-08, not necessarily t
   layout (a production crash, not just a test failure), and a stagger built on
   `Future.delayed` leaks a timer when its card scrolls out of a lazily-built
   sliver. Coverage was measured for the first time: **75.2%**, above the SRS's 70%
-  gate. Also added [docs/SRS_STATUS.md](docs/SRS_STATUS.md), the per-session SRS
+  gate. Also added [docs/SRS_STATUS.md](SRS_STATUS.md), the per-session SRS
   compliance report, and removed the empty `legacy_flask_gateway/` directory tree
   the 2026-08-08 untracking pass left behind on disk.
+
+- **2026-08-21** — Root-level declutter. Ten documents moved from the repo root into
+  `docs/` (`API.md`, `ARCHITECTURE.md`, `CHANGELOG.md`, `CONTRIBUTING.md`,
+  `DEPENDENCIES.md`, this file, `PROJECT_STRUCTURE.md`, `SECURITY.md`, `SETUP.md`,
+  `SRS.md`), leaving only `README.md` and `LICENSE` as documentation at the top level.
+  `validate_dataset.py` moved to `scripts/`; `supabase_setup.sql` moved to
+  `deployment/sql/`. Deleted `xgboost_motion_model.json` and
+  `motion_training_results.json` from the root — they were **stale copies with
+  different content** from the `ml_training/motion_detection/` versions the trainer
+  actually writes, and a grep confirmed nothing loaded them; the cloud function reads
+  `cloud_functions/motion_detection/models/`, a directory that does not exist. Also
+  removed `mobile/flutter_err.txt` and `mobile/flutter_out.txt`, two captured
+  `flutter run` logs committed by accident, and added `.gitignore` rules for those and
+  for JVM `hs_err_pid*.log` crash dumps so the next redirect does not follow them in.
+  Five references were rewired: `tests/test_traceability.py` reads `docs/SRS.md`
+  (the only hard failure — it is enforced by a test), `README.md` links gained a
+  `docs/` prefix, and `docs/SRS_STATUS.md`, `docs/TRACEABILITY.md` and this file now
+  link to siblings rather than parents. A link checker verified all 49 relative
+  markdown links resolve.
+
+  **No code directory moved, deliberately.** `fastapi_app/`, `mobile/`, `alembic/` and
+  `tests/` stay where they are: `fastapi_app.main:app` is the import path the Render
+  deployment, `Dockerfile.processor`, the `Makefile`, `alembic.ini` and every test
+  depend on. A `backend/` folder or an `apps/`-style monorepo was considered and
+  rejected — it would trade a tidier tree for a broken production deploy, and the tree
+  was never what made this repo hard to work in.

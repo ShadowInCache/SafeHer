@@ -38,10 +38,10 @@ SUPABASE_SECRET_KEY = os.getenv('SUPABASE_SECRET_KEY')
 # Server-side only, so the secret (service_role) key is the correct one.
 #
 # This used to fall back to the publishable key. That key is meant to be
-# handed to clients, and `supabase_setup.sql` now denies it by default --
-# the events table holds raw safety data, and a policy readable by anyone
-# holding a distributable key is not an acceptable default. So the fallback
-# would produce an archiver that starts cleanly, reports itself connected,
+# handed to clients, and `deployment/sql/supabase_setup.sql` now denies it by
+# default -- the events table holds raw safety data, and a policy readable by
+# anyone holding a distributable key is not an acceptable default. So the
+# fallback would produce an archiver that starts cleanly, reports itself connected,
 # and has every insert rejected. Requiring the secret key makes a
 # misconfiguration loud at boot instead of silent at write time.
 SUPABASE_API_KEY = SUPABASE_SECRET_KEY

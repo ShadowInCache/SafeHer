@@ -5,11 +5,11 @@ backend, and a Flutter mobile app, built around one idea: detect a threat (motio
 or visual) fast enough to alert a user's emergency contacts before they have to.
 
 > **Documentation map:** this README covers setup and orientation. For depth, see
-> [ARCHITECTURE.md](ARCHITECTURE.md) (how the pieces fit together, with diagrams),
-> [API.md](API.md) (every backend endpoint), [SETUP.md](SETUP.md) (detailed local
-> setup + troubleshooting), [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) (folder-by-folder
-> tour), [SECURITY.md](SECURITY.md), [DEPENDENCIES.md](DEPENDENCIES.md),
-> [CONTRIBUTING.md](CONTRIBUTING.md), and [CHANGELOG.md](CHANGELOG.md).
+> [ARCHITECTURE.md](docs/ARCHITECTURE.md) (how the pieces fit together, with diagrams),
+> [API.md](docs/API.md) (every backend endpoint), [SETUP.md](docs/SETUP.md) (detailed local
+> setup + troubleshooting), [PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) (folder-by-folder
+> tour), [SECURITY.md](docs/SECURITY.md), [DEPENDENCIES.md](docs/DEPENDENCIES.md),
+> [CONTRIBUTING.md](docs/CONTRIBUTING.md), and [CHANGELOG.md](docs/CHANGELOG.md).
 
 ## What's actually here
 
@@ -38,7 +38,7 @@ This repo holds three things that share history but not a runtime:
 - **Device management**: pairing, heartbeat/battery tracking for wearables — currently
   real for the smart glove and smart glasses; the "smart ring" and "pendant" seen in the
   mobile UI are product-vision concepts with no firmware yet (see
-  [ARCHITECTURE.md#known-gaps](ARCHITECTURE.md#known-gaps)).
+  [ARCHITECTURE.md#known-gaps](docs/ARCHITECTURE.md#known-gaps)).
 - **Evidence capture**: signed direct-to-Cloudinary uploads for incident media.
 - **Hybrid auth**: email/password or Firebase sign-in, both resolving to the same JWT
   session.
@@ -67,7 +67,7 @@ This repo holds three things that share history but not a runtime:
 | Firmware | ESP32 (Arduino), MPU6050, ESP32-CAM |
 | Deployment | Docker Compose (Postgres + Redis + Mosquitto + event processor) |
 
-Full list with rationale: [DEPENDENCIES.md](DEPENDENCIES.md).
+Full list with rationale: [DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
 ## Architecture overview
 
@@ -81,11 +81,11 @@ flowchart LR
     CloudFn["cloud_functions/\n(motion/voice/weapon/fusion)"] --> Backend
 ```
 
-Full diagrams and data-flow detail: [ARCHITECTURE.md](ARCHITECTURE.md).
+Full diagrams and data-flow detail: [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Folder structure
 
-See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the complete, annotated tree.
+See [PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) for the complete, annotated tree.
 
 ## Prerequisites
 
@@ -98,8 +98,8 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the complete, annotated tre
 ## Environment variables
 
 Copy `.env.example` to `.env` at the repo root and fill in real values before running
-anything. See [SETUP.md](SETUP.md#2-environment-variables) for what each variable does and
-[SECURITY.md](SECURITY.md) for which ones are secrets you must never commit.
+anything. See [SETUP.md](docs/SETUP.md#2-environment-variables) for what each variable does and
+[SECURITY.md](docs/SECURITY.md) for which ones are secrets you must never commit.
 
 ## Running locally
 
@@ -124,7 +124,7 @@ flutter run
 ```
 
 Full walkthrough, including troubleshooting common first-run issues:
-[SETUP.md](SETUP.md).
+[SETUP.md](docs/SETUP.md).
 
 ## Development workflow
 
@@ -134,7 +134,7 @@ Full walkthrough, including troubleshooting common first-run issues:
   `setState`), GoRouter only (no direct `Navigator.push`), custom vector icons (no
   Material defaults), and every component/screen gets a widget test and golden test
   before being considered done. See `mobile/` for the existing pattern to follow.
-- Both: see [CONTRIBUTING.md](CONTRIBUTING.md) for branch/commit conventions.
+- Both: see [CONTRIBUTING.md](docs/CONTRIBUTING.md) for branch/commit conventions.
 
 ## Build instructions
 
@@ -161,7 +161,7 @@ The in-process suites are the reliable ones and need no running server:
 `test_auth_provisioning.py` and `test_firebase_token_verification.py` (67 tests).
 `test_api_gateway.py` and `test_integration.py` drive a **live** server over HTTP, so
 start the backend first or they will fail on connection. Details:
-[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md#tests-backend-pytest).
+[PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md#tests-backend-pytest).
 
 ## Deployment
 
@@ -169,11 +169,11 @@ The only actively-maintained deployment path is `deployment/docker/docker-compos
 (Postgres + Redis + Mosquitto + one unified event-processor container), managed via
 `manage.py`. `deployment/config/nginx.conf` and `prometheus.yml` describe an earlier,
 larger microservices design that isn't wired into the current compose file — see
-[ARCHITECTURE.md](ARCHITECTURE.md) before assuming they're live.
+[ARCHITECTURE.md](docs/ARCHITECTURE.md) before assuming they're live.
 
 ## API overview
 
-Every endpoint, request/response shape, and auth requirement: [API.md](API.md).
+Every endpoint, request/response shape, and auth requirement: [API.md](docs/API.md).
 
 ## Screenshots
 
@@ -193,9 +193,9 @@ each screen is finalized — `mobile/lib/features/*/presentation/`._
 - Weapon and voice threat detection use synthetic-fallback models in places — not yet
   fully backed by trained models (`cloud_functions/weapon_detection`, `voice_analysis`).
 - `/api/v1/alerts/live` state is in-process and resets on backend restart — see
-  [API.md](API.md#alerts-apiv1alerts--the-core-threat-pipeline).
+  [API.md](docs/API.md#alerts-apiv1alerts--the-core-threat-pipeline).
 - The ML training pipeline can't be re-run from a clean clone — the raw dataset isn't
-  committed (`ml_training/motion_detection/`, `validate_dataset.py`).
+  committed (`ml_training/motion_detection/`, `scripts/validate_dataset.py`).
 - No firmware exists yet for the "smart ring" or "pendant" devices shown in the mobile UI.
 - BLE pairing is implemented against the real `flutter_blue_plus` API (real permissions,
   real scan, real connect) but unverified end-to-end — there's no Bluetooth radio in the
@@ -214,7 +214,7 @@ each screen is finalized — `mobile/lib/features/*/presentation/`._
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](docs/CONTRIBUTING.md).
 
 ## License
 
@@ -230,7 +230,7 @@ Built on FastAPI, Flutter/Riverpod, SQLAlchemy and XGBoost. Historical
 project reports and an earlier architecture snapshot are preserved in
 [docs/archive/](docs/archive/) for context on how this codebase evolved.
 
-For how much of [SRS.md](SRS.md) is actually built — with the measured
+For how much of [SRS.md](docs/SRS.md) is actually built — with the measured
 evidence behind each claim and a ranked list of what is still missing — see
 [docs/SRS_STATUS.md](docs/SRS_STATUS.md). It is refreshed at the start of
 every working session.
@@ -240,5 +240,5 @@ PIN, shake-to-trigger, voice commands, Fake Call, and the helplines directory �
 inspired by [GoSecure](https://github.com/Divijkatyal0406/GoSecure) (MIT licensed).
 They were **reimplemented from scratch** against SafeHer's own architecture rather than
 ported: no GoSecure source, assets, or dependencies are vendored into this repo. See
-[ARCHITECTURE.md](ARCHITECTURE.md#adapted-from-gosecure) for what was adopted, what was
+[ARCHITECTURE.md](docs/ARCHITECTURE.md#adapted-from-gosecure) for what was adopted, what was
 rebuilt differently, and what was deliberately rejected.

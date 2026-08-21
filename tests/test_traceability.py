@@ -1,4 +1,4 @@
-"""Keeps docs/TRACEABILITY.md honest against SRS.md and the filesystem.
+"""Keeps docs/TRACEABILITY.md honest against docs/SRS.md and the filesystem.
 
 "Verify it against the SRS" was, until this landed, something only a person
 reading both documents could do — and a first attempt at auditing it
@@ -19,7 +19,7 @@ import re
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SRS = ROOT / "SRS.md"
+SRS = ROOT / "docs" / "SRS.md"
 MAP = ROOT / "docs" / "TRACEABILITY.md"
 
 # "blocked" earns its place separately from "partial". Partial means the

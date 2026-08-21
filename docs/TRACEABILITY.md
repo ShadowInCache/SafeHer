@@ -1,6 +1,6 @@
 # SRS Traceability
 
-Every functional requirement in [`SRS.md`](../SRS.md), mapped to the code
+Every functional requirement in [`SRS.md`](SRS.md), mapped to the code
 that implements it.
 
 This exists because "verify it against the SRS" was, until now, something
