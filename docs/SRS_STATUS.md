@@ -40,7 +40,7 @@ Beyond the SRS's four, the repo also runs:
 |-------|---------------|--------|
 | `flutter test` (full suite) | 639 passing, 0 failing | ✅ |
 | `pytest tests/` (in-process suites) | 341 passing, 0 failing | ✅ |
-| Alembic from empty → head → downgrade → head | 17 migrations, reversible | ✅ |
+| Alembic from empty → head → downgrade → head | 13 migrations, reversible | ✅ |
 
 Coverage by area — the thin spots are where next session's tests should go:
 
