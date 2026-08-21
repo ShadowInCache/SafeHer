@@ -249,8 +249,8 @@ safeher/
 
 ```
 LAYER 1 — EDGE (Firmware)
-  Smart Glove:   MPU6050 + flex sensors → ESP32 → TFLite Micro
-                 → classify gesture → MQTT publish (QoS 1)
+  Smart Glove:   MPU6050 + pulse sensor → ESP32 → XGBoost (flash-resident C)
+                 → motion_score + bpm → MQTT publish (QoS 1)
   Smart Glasses: OV2640 camera → JPEG buffer → HTTPS chunked upload
                  INMP441 mic → PCM audio → MQTT publish (QoS 1)
 
@@ -411,14 +411,105 @@ Reduced motion: All animations respect MediaQuery.disableAnimations
 
 ### 6.1 Model Architecture
 
-| Model | Input | Architecture | Output | Target |
-|-------|-------|-------------|--------|--------|
-| Motion Classifier | 5s window: accel (3-axis) + gyro (3-axis) + flex (5-ch) @ 50Hz → 250×11 tensor | BiLSTM (128 units) + Attention + Dense. TFLite for edge; full model on Cloud Run | `[normal, struggling, falling, running, distress_gesture]` + confidence | > 95% accuracy |
-| Weapon Detector | JPEG 640×640 | YOLOv8-nano fine-tuned. INT8 quantised for edge | BBox + class + confidence per detection | mAP@0.5 > 0.88 |
-| Voice Analyser | 3s PCM @ 16kHz → mel-spectrogram 128×128 | EfficientNet-B0 CNN. TFLite for edge | `[calm, elevated, aggressive, screaming, crying]` + confidence | > 90% F1 |
-| Incident Summariser | Structured incident JSON + optional image frame | GPT-4o via API; fallback Llama-3.1-8B via Ollama | Prose narrative (200–500 words) + key event bullets | Human eval > 4.0/5.0 |
+| Model | Source device | Input | Architecture | Output | Runs on | Target |
+|-------|---------------|-------|-------------|--------|---------|--------|
+| Motion Classifier | Smart Glove | accel (3-axis) + gyro (3-axis) + derived magnitude → 7 features | **XGBoost**, 500 estimators, max_depth 6 | `motion_score` ∈ [0,1] + class | **Glove MCU** (cloud mirror) | > 95% accuracy |
+| Voice Analyser | Smart Glasses | 3s PCM @ 16kHz from INMP441 → mel-spectrogram 128×128 | Screening: small CNN (TFLite-Micro / ESP-SR class, ≤ 200KB). Confirming: EfficientNet-B0 CNN | `audio_score` ∈ [0,1] + `[calm, elevated, aggressive, screaming, crying]` | **Split** — screen on glasses, confirm in cloud | > 90% F1 |
+| Weapon Detector | Smart Glasses | JPEG 640×640 from OV2640 | YOLOv8-nano fine-tuned, INT8 quantised | `vision_score` + `weapon_confidence` + BBox/class | **Cloud only** (§6.1.2) | mAP@0.5 > 0.88 |
+| Incident Summariser | — | Structured incident JSON + optional image frame | GPT-4o via API; fallback Llama-3.1-8B via Ollama | Prose narrative (200–500 words) + key event bullets | Cloud | Human eval > 4.0/5.0 |
+
+> **Motion Classifier revised 2026-08-21.** This row previously specified a
+> BiLSTM(128)+Attention over a 250×11 tensor including five flex-sensor
+> channels, producing five classes. That was never what was built or intended:
+> `ml_training/motion_detection/train_motion_model.py` trains an XGBoost
+> classifier over seven features — `acceleration_x/y/z`, `gyroscope_x/y/z` and
+> a derived `magnitude` — and flex readings do not enter the model at all. The
+> spec is corrected to the design rather than the design bent to a spec nobody
+> implemented. The flex sensors that tensor assumed have been removed from the
+> §9.1 BOM entirely — the glove senses motion and pulse only.
+
+### 6.1.1 Per-device scoring topology
+
+**No single device computes the combined threat score.** Each wearable scores
+only what its own sensors can see, and those sub-scores are fused (§6.2) into
+one number that the alert threshold is compared against.
+
+```
+Smart Glove (ESP32 + MPU6050 + pulse sensor)
+    accel x/y/z + gyro x/y/z + magnitude
+        └─ XGBoost ─────────────────────────→ motion_score   ┐
+    heart rate (bpm) ───────────────────────→ booster ┄┄┄┄┐  │
+                                                          ┆  │
+Smart Glasses (ESP32-CAM + INMP441)                       ┆  ├─→ FUSION (§6.2)
+    OV2640 frames ─ YOLOv8-nano ──→ vision_score          ┆  │      │
+                                  + weapon_confidence     ┆  │      ▼
+    INMP441 PCM  ─ CNN ───────────→ audio_score          ┆ ┘  threat_score
+                                                          └┄┄┄┄┄┄┄→ + 0.05
+                                                                   │
+                                                    ≥ user.threat_threshold
+                                                                   │
+                                                       auto-SOS (FR-EMG-02)
+```
+
+| Sub-score | Produced by | Fusion weight (§6.2) | Absent when |
+|-----------|-------------|----------------------|-------------|
+| `motion_score` | Glove | 0.40 | Glove unpaired, out of range, or flat |
+| `audio_score` | Glasses microphone | 0.35 | Glasses unpaired or mic disabled |
+| `vision_score` | Glasses camera | 0.25 | Glasses unpaired or camera obstructed |
+| `weapon_confidence` | Glasses camera | additive booster, +0.15 above 0.70 | as above |
+| `heart_rate` (bpm) | Glove pulse sensor | additive booster, +0.05 at ≥120 bpm | Pulse sensor not in contact with skin |
+
+**Heart rate boosts; it does not vote.** It is deliberately *not* a fourth
+fusion weight. A racing pulse is evidence of running for a bus at least as
+often as it is evidence of an assault, so it may tip a score that the other
+sensors already find alarming and must not be able to raise the alarm by
+itself. Keeping it additive also leaves §6.2's arithmetic exactly as written
+and independently testable. Implemented in
+`fastapi_app/services/threat_fusion.py` as `heart_rate_boost()`.
+
+**A missing sub-score is treated as absent, never as zero.** Substituting 0.0
+for a sensor that is not reporting silently states that the sensor observed
+calm, which is a different and misleading claim about coverage — and it drags
+the weighted sum down, suppressing alerts that the remaining sensors justify.
+The fusion engine renormalises across the modalities actually present and the
+incident records which were missing (see FR-EMG-02 and `detections`).
+
+### 6.1.2 Inference placement — edge-first, cloud-authoritative
+
+The design intent is to run inference **on the ESP32 itself** wherever the
+model fits, falling back to cloud inference where it does not. That resolves
+differently per modality, and stating it per modality matters more than a
+blanket policy:
+
+| Modality | Model size | Fits on ESP32? | Placement | Reasoning |
+|----------|-----------|----------------|-----------|-----------|
+| **Motion** | 500 trees × depth 6 | **Yes** | Edge (glove) | A gradient-boosted tree ensemble compiles to flash-resident C arrays and evaluates by traversal — microseconds per inference, no float matrix maths, no PSRAM pressure. Emit with `m2cgen`/`treelite` from the trained `xgboost_motion_model.json`. |
+| **Audio** | ≤ 200KB screening CNN | **Partly** | Edge screen + cloud confirm | A keyword/distress screening model of ESP-SR/TFLite-Micro scale fits and can run continuously. EfficientNet-B0 (≈5.3M params) does not fit and stays in the cloud, invoked only on frames the screen flags. |
+| **Vision** | YOLOv8-nano ≈3.2M params | **No** | **Cloud only** | INT8-quantised YOLOv8-nano still exceeds what an ESP32-CAM can hold and evaluate at usable frame rates; per-frame latency would be seconds. The camera captures and uploads; detection happens server-side. |
+
+Two consequences follow, and both are deliberate:
+
+1. **The authoritative fused score is computed in the cloud**, because one of
+   its three inputs can only be produced there. Edge scores are inputs to
+   fusion, not substitutes for it.
+2. **The glove keeps a local escalation path.** Because its model runs
+   on-device, the glove can raise an alert from its own reading alone when the
+   cloud is unreachable — degraded (motion-only, no fusion, no context
+   boosters) but functional. A design that could only alarm with connectivity
+   would fail in exactly the places this product is for: underground car
+   parks, lifts, rural roads.
+
+**Model distribution.** Edge models ship inside the firmware image and update
+through the same signed OTA channel (FR-DEV-04), SHA-256 verified before
+flash. An edge model is never updated out-of-band from the firmware that
+calls it, so a device is never running a classifier its code was not built
+against.
 
 ### 6.2 Fusion Engine Algorithm
+
+Runs in the cloud (`fastapi_app/services/threat_fusion.py`), over the
+sub-scores defined in §6.1.1. Devices publish their own scores; none of them
+evaluates this formula.
 
 ```python
 # Threat Score Computation
@@ -519,7 +610,7 @@ Response 200: {
 | `alert_dispatched` | Server → Client | `{ alert_id, contacts_notified, evidence_session }` |
 | `location_update` | Server → Client | `{ lat, lng, accuracy_m, timestamp }` |
 | `evidence_progress` | Server → Client | `{ session_id, bytes_uploaded, bytes_total, pct }` |
-| `sensor_stream` | Client → Server | `{ accel, gyro, flex, timestamp }` (10Hz) |
+| `sensor_stream` | Client → Server | `{ accel, gyro, bpm, timestamp }` (10Hz) |
 | `heartbeat` | Both ↔ Both | `{ ts }` (every 30s) |
 
 ---
@@ -690,13 +781,21 @@ service cloud.firestore {
 | Component | Specification | Purpose |
 |-----------|--------------|---------|
 | MCU | ESP32-WROOM-32E (240MHz dual-core, 520KB SRAM) | Compute + WiFi + BLE |
-| IMU | MPU6050 (3-axis accel ±16g, gyro ±2000°/s, I²C 400kHz) | Motion detection |
-| Flex Sensors | 5× 4.5" resistive (Spectra Symbol) | Finger gesture recognition |
-| ADC | ADS1115 (16-bit, 4-channel, I²C) | High-res flex readings |
+| IMU | MPU6050 (3-axis accel ±16g, gyro ±2000°/s, I²C 400kHz) | Motion detection — the model's only input (§6.1) |
+| Pulse sensor | PPG heart-rate sensor, I²C (reference part: MAX30102) | Heart rate for the §6.2 context booster |
 | Battery | LiPo 1000mAh 3.7V with TP4056 charge controller | ~8h runtime |
 | Haptic | ERM vibration motor 3V | Haptic feedback on alert |
 | Audio alert | Passive buzzer 5V + NPN transistor | Audio warning |
 | LED | NeoPixel WS2812B ×3 | Status indication |
+
+> **Flex sensors removed 2026-08-21.** Earlier revisions listed 5× resistive
+> flex sensors and an ADS1115 ADC to read them. The glove senses **motion and
+> pulse only**: accelerometer, gyroscope, heart rate. Nothing consumed the flex
+> channels — they are absent from the trained model's feature set, absent from
+> `smart_glove.ino`, and absent from the §9.3 payload. Carrying them in the BOM
+> implied a gesture-recognition capability that no part of the system provides,
+> and added two components, an I²C address and a power draw to a device whose
+> runtime budget is 8 hours.
 
 ### 9.2 Smart Glove — FreeRTOS Task Architecture
 
@@ -709,8 +808,8 @@ ota_manager_task()     // Check manifest; download; SHA-256 verify; flash
 
 // Core 1 — Sensing Tasks
 imu_reader_task()      // MPU6050 @ 50Hz via DMA; ring buffer
-flex_reader_task()     // ADS1115 @ 25Hz; 5-channel; ring buffer
-ml_inference_task()    // TFLite Micro; classify every 100ms
+hr_reader_task()       // PPG pulse sensor @ 1Hz; rolling 10s median bpm
+ml_inference_task()    // XGBoost (m2cgen C, flash-resident); classify every 100ms
 event_dispatcher_task()// Publish sensor_event to MQTT; deduplication
 alert_controller_task()// Activate buzzer/vibration/LED on alert commands
 
@@ -725,11 +824,12 @@ alert_controller_task()// Activate buzzer/vibration/LED on alert commands
 
 | Topic | Direction | Payload | QoS |
 |-------|-----------|---------|-----|
-| `safeher/glove/{id}/sensors` | Device → Cloud | `{ ts, ax, ay, az, gx, gy, gz, f0-f4 }` | 1 |
+| `safeher/glove/{id}/sensors` | Device → Cloud | `{ ts, ax, ay, az, gx, gy, gz, bpm }` | 1 |
 | `safeher/glove/{id}/events` | Device → Cloud | `{ ts, event_type, confidence, battery_pct }` | 1 |
 | `safeher/glove/{id}/status` | Device → Cloud | `{ battery_pct, rssi, fw_version, uptime_s }` | 0 |
 | `safeher/glove/{id}/cmd` | Cloud → Device | `{ cmd: "alert\|cancel\|ota\|reboot", payload }` | 1 |
 | `safeher/glove/{id}/ota` | Cloud → Device | `{ version, url, sha256, size_bytes }` | 1 |
+| `safeher/glove/{id}/score` | Device → Cloud | `{ ts, motion_score, class, model_version }` — output of the on-device XGBoost (§6.1.2) | 1 |
 
 ### 9.4 Smart Glasses — Hardware BOM
 
@@ -740,6 +840,27 @@ alert_controller_task()// Activate buzzer/vibration/LED on alert commands
 | Battery | LiPo 2000mAh USB-C | ~4h recording; ~12h standby |
 | Storage | MicroSD up to 128GB via SPI | Local evidence buffer |
 | Status LED | RGB LED | Privacy indicator (legally required) |
+
+### 9.5 Smart Glasses — MQTT Topics
+
+| Topic | Direction | Payload | QoS |
+|-------|-----------|---------|-----|
+| `safeher/glasses/{id}/frame` | Device → Cloud | `{ ts, seq, jpeg_b64 }` — frames for cloud weapon detection (§6.1.2) | 0 |
+| `safeher/glasses/{id}/audio` | Device → Cloud | `{ ts, seq, pcm_b64, sample_rate }` — 3s windows the on-device screen flagged | 1 |
+| `safeher/glasses/{id}/score` | Device → Cloud | `{ ts, audio_score, model_version }` — output of the on-device screening CNN | 1 |
+| `safeher/glasses/{id}/events` | Device → Cloud | `{ ts, event_type, confidence, battery_pct }` | 1 |
+| `safeher/glasses/{id}/status` | Device → Cloud | `{ battery_pct, rssi, fw_version, uptime_s, sd_free_mb }` | 0 |
+| `safeher/glasses/{id}/cmd` | Cloud → Device | `{ cmd: "record\|stop\|alert\|ota\|reboot", payload }` | 1 |
+
+**Media does not travel over MQTT in the deployed design.** The `frame` and
+`audio` topics above are the analysis path — small, lossy, and safe to drop.
+Evidence retention is a separate path: the glasses buffer to the §9.4 MicroSD
+card and the recording is uploaded over the authenticated media endpoint, so
+that a broker outage, a QoS-0 drop or a packet-size limit can never be the
+reason an assault recording does not exist. Publishing base64 media through a
+broker sized for telemetry is explicitly rejected — it inflates payloads by
+~33%, exceeds default MQTT packet limits, and puts evidence on a transport
+with no delivery guarantee.
 
 ---
 
@@ -2056,12 +2177,17 @@ Per device: SaDeviceCard (expanded variant)
   battery: SaBatteryBar (animated to current %) + '~{N}h remaining'
   signal: SaSignalBars (RSSI to bars mapping)
   firmware: version mono text + chip('Up to date' emerald | 'Update Available' coral)
-  sensors: 3-column Row: [Accel 9.8 m/s², Gyro 0.2°/s, Flex 75%]
+  sensors: 3-column Row: [Accel 9.8 m/s², Gyro 0.2°/s, Pulse 72 bpm]
            All values: monoDataS; update via MQTT stream
+           Glasses substitute [Frames 12/s, Audio -34 dB, SD 4.2 GB free]
   onTap: AnimatedSize expand → full sensor grid + calibration CTA
 
 3D device visual: Rive or Lottie asset per device type
-  Glove fingers: driven by flex sensor values 0–100%
+  Glove: idle-breathing loop; pulses on the beat when bpm is streaming.
+         Earlier revisions animated the fingers from flex-sensor values --
+         the glove has no flex sensors (§9.1), so there is nothing to drive
+         finger articulation and a fabricated animation would imply a sensor
+         that does not exist.
   Loading: SaLoadingShimmer (same card dimensions)
 
 BLE Scan Sheet (showSaBottomSheet):

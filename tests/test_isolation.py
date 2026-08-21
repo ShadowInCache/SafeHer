@@ -38,6 +38,10 @@ _OUTBOUND_HINTS = (
     # even where SMTP ports are blocked — which makes it exactly the kind of
     # credential this guard exists for.
     "brevo",
+    # Supabase now holds evidence blobs, not just the events archive, so
+    # its service-role key reaches storage containing recordings of real
+    # people. A suite that could write there would eventually write there.
+    "supabase",
 )
 
 # Settings that merely name a service without being able to reach it.

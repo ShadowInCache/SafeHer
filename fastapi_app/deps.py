@@ -13,6 +13,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from fastapi_app.config import Settings, get_settings
+from fastapi_app.services.evidence_backends import build_backend
 from fastapi_app.services.evidence_store import EvidenceStore, derive_key
 from fastapi_app.services.notifications import FcmCredentials
 
@@ -20,8 +21,14 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
 def get_evidence_store(settings: Settings = Depends(get_settings)) -> EvidenceStore:
+    """The evidence store, pointed at whichever backend is configured.
+
+    `build_backend` prefers Supabase Storage over the local directory, because
+    the local one silently loses everything on a host with an ephemeral
+    filesystem -- which is what production runs on.
+    """
     return EvidenceStore(
-        directory=settings.evidence_storage_dir,
+        backend=build_backend(settings),
         key=derive_key(settings.jwt_secret_key, explicit_key=settings.evidence_encryption_key),
     )
 

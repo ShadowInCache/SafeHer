@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import secrets
 from datetime import datetime, timedelta
@@ -91,7 +92,10 @@ async def upload_evidence(
         )
 
     try:
-        storage_id = store.write(data)
+        # Off the event loop: with an object-store backend this is a network
+        # round trip of tens of megabytes, and blocking here would stall every
+        # other request on the worker -- including someone else's SOS.
+        storage_id = await asyncio.to_thread(store.write, data)
     except EvidenceStoreError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 
@@ -181,7 +185,7 @@ async def download_evidence(
     await _owned_incident(session, incident_id=media.incident_id, user_id=current_user.id)
 
     try:
-        data = store.read(media.url)
+        data = await asyncio.to_thread(store.read, media.url)
     except EvidenceStoreError as exc:
         raise HTTPException(status_code=status.HTTP_410_GONE, detail=str(exc))
 

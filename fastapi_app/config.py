@@ -136,6 +136,26 @@ class Settings(BaseSettings):
     # infrastructure by default -- no third-party account required -- and
     # always encrypted at rest. See services/evidence_store.py.
     evidence_storage_dir: str = "./evidence_store"
+
+    # --- Object storage for evidence (see services/evidence_backends.py) ---
+    # `evidence_storage_dir` writes to the application server's own disk,
+    # which on Render and most PaaS hosts is wiped on every deploy and
+    # restart. Evidence of an assault was therefore being encrypted
+    # correctly and deleted by the next `git push`.
+    #
+    # Supabase Storage is used when configured: the project already runs
+    # Supabase for the events archive, so this adds no new vendor, no new
+    # bill and no new credential. The bucket holds **ciphertext only** --
+    # `EvidenceStore` seals with AES-256-GCM before any backend sees a byte.
+    supabase_url: Optional[str] = None
+    # The secret (service_role) key, never the publishable one: the bucket is
+    # private, and a key meant for distribution to clients must not open it.
+    supabase_secret_key: Optional[str] = None
+    # Case-sensitive, and defaulted to the bucket this project actually
+    # provisions. A generic lowercase default would 404 with NoSuchBucket
+    # on any deploy that forgot to set it -- discovered at the first
+    # upload, which is during someone's emergency.
+    evidence_bucket: str = "Evidence"
     # Optional. Unset, a key is derived from JWT_SECRET_KEY, so evidence is
     # never written in the clear just because nobody configured this.
     evidence_encryption_key: Optional[str] = None
@@ -194,6 +214,10 @@ class Settings(BaseSettings):
     @property
     def smtp_configured(self) -> bool:
         return bool(self.smtp_host and self.smtp_from_email)
+
+    @property
+    def evidence_supabase_configured(self) -> bool:
+        return bool(self.supabase_url and self.supabase_secret_key)
 
     @property
     def brevo_configured(self) -> bool:

@@ -22,11 +22,16 @@ import hashlib
 import hmac
 import logging
 import os
-from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+from fastapi_app.services.evidence_backends import (
+    BlobBackend,
+    EvidenceBackendError,
+    LocalBlobBackend,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,17 +66,34 @@ def derive_key(secret: str, *, explicit_key: Optional[str] = None) -> bytes:
 
 
 class EvidenceStore:
-    def __init__(self, *, directory: str, key: bytes) -> None:
+    """Seals evidence, then hands the ciphertext to a [BlobBackend].
+
+    The encryption stays here rather than moving down into the backend, so
+    that **every** backend stores ciphertext by construction. A backend cannot
+    accidentally persist plaintext, because it is never given any: whether the
+    bytes land on local disk or in Supabase, they were sealed before this
+    class let go of them.
+    """
+
+    def __init__(
+        self,
+        *,
+        key: bytes,
+        backend: Optional[BlobBackend] = None,
+        directory: Optional[str] = None,
+    ) -> None:
         if len(key) != 32:
             raise EvidenceStoreError("Evidence encryption key must be 32 bytes (AES-256).")
-        self._directory = Path(directory)
+        if backend is None and directory is None:
+            raise EvidenceStoreError("EvidenceStore needs a backend or a directory.")
         self._key = key
+        # `directory=` is kept so existing callers and tests that want plain
+        # local storage do not have to construct a backend to say so.
+        self._backend = backend or LocalBlobBackend(directory)
 
-    def _path_for(self, storage_id: str) -> Path:
-        # Basename only: the id is generated here, but treating it as
-        # untrusted costs nothing and keeps a future caller from walking out
-        # of the directory with one.
-        return self._directory / f"{Path(storage_id).name}.enc"
+    @property
+    def backend_name(self) -> str:
+        return self._backend.describe
 
     def write(self, data: bytes) -> str:
         """Seals [data] and returns the storage id needed to read it back."""
@@ -83,25 +105,17 @@ class EvidenceStore:
         sealed = AESGCM(self._key).encrypt(nonce, data, None)
 
         try:
-            self._directory.mkdir(parents=True, exist_ok=True)
-            path = self._path_for(storage_id)
-            # Written to a temporary name and moved into place, so a crash
-            # mid-write cannot leave a truncated file that later fails to
-            # decrypt with no way to tell why.
-            temporary = path.with_suffix(".part")
-            temporary.write_bytes(nonce + sealed)
-            temporary.replace(path)
-        except OSError as exc:
-            raise EvidenceStoreError(f"Could not store evidence: {exc}") from exc
+            self._backend.put(storage_id, nonce + sealed)
+        except EvidenceBackendError as exc:
+            raise EvidenceStoreError(str(exc)) from exc
 
         return storage_id
 
     def read(self, storage_id: str) -> bytes:
-        path = self._path_for(storage_id)
         try:
-            blob = path.read_bytes()
-        except OSError as exc:
-            raise EvidenceStoreError(f"Could not read evidence: {exc}") from exc
+            blob = self._backend.get(storage_id)
+        except EvidenceBackendError as exc:
+            raise EvidenceStoreError(str(exc)) from exc
 
         if len(blob) <= NONCE_BYTES:
             raise EvidenceStoreError("Stored evidence is truncated.")
@@ -118,7 +132,4 @@ class EvidenceStore:
             ) from exc
 
     def delete(self, storage_id: str) -> None:
-        try:
-            self._path_for(storage_id).unlink(missing_ok=True)
-        except OSError as exc:
-            logger.warning("Could not delete evidence %s: %s", storage_id, exc)
+        self._backend.remove(storage_id)
