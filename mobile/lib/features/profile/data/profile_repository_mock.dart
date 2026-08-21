@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../domain/models/user_profile.dart';
 import '../domain/profile_repository.dart';
 
@@ -15,6 +17,19 @@ class ProfileRepositoryMock implements ProfileRepository {
   Future<UserProfile> getUserProfile() async {
     await Future.delayed(const Duration(milliseconds: 300));
     return _profile;
+  }
+
+  @override
+  Future<List<int>> exportMyData() async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    return utf8.encode(
+      const JsonEncoder.withIndent('  ').convert({
+        'export_version': 1,
+        'account': {'email': 'mock@safeherapp.com', 'full_name': 'Mock User'},
+        'emergency_contacts': <Object>[],
+        'incidents': <Object>[],
+      }),
+    );
   }
 
   @override

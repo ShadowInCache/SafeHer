@@ -1,47 +1,53 @@
-/// Dispatches an emergency alert to the backend.
-///
-/// **What this currently does:** creates an `Incident` row, stores the
-/// location, broadcasts over the user's own WebSocket, and sends FCM to the
-/// user's *own* devices.
-///
-/// **What it does not do, despite the name:** notify the emergency contacts.
-/// `POST /api/v1/alerts/emergency` never reads the `emergency_contacts`
-/// table — see `fastapi_app/routers/alerts.py`. Nor does it start evidence
-/// recording or upload; nothing in the app imports the `record` package and
-/// nothing calls `/api/v1/media`.
-///
-/// This comment previously claimed the opposite ("triggers emergency-contact
-/// notification and evidence upload server-side"), which is the most
-/// dangerous kind of wrong comment to leave in a safety app: it describes
-/// FR-EMG-04 through FR-EMG-07 as done when the alert reaches nobody but the
-/// person who triggered it. Tracked as the top gap in docs/SRS_STATUS.md.
-///
-/// See [EmergencyDispatchNotifier] for the offline-queue wrapping around
-/// this call.
-///
-/// [latitude]/[longitude]/[accuracyMeters] are null when location wasn't
-/// available at dispatch time (permission denied, GPS off, weak signal) —
-/// dispatch must still proceed in that case, just without a location fix.
+/// How far along the server's fan-out to emergency contacts is.
+enum DispatchProgress {
+  /// The server has the emergency and is still working through the contacts.
+  /// Contacts not yet in `reachedContactIds` are *pending*, not failed.
+  inProgress,
+
+  /// Every contact has been attempted. Anything not reached is now known to
+  /// be unreachable, and the user needs to be told so.
+  complete,
+
+  /// The fan-out crashed server-side. Treated as complete for display —
+  /// what matters to the user is that it is no longer being attempted.
+  failed,
+
+  /// The alert never reached the server and is waiting on the offline queue.
+  queued;
+
+  /// Whether the server is still trying. Drives whether an unreached contact
+  /// reads as "Sending…" or as "Could not reach".
+  bool get isSettled => this != DispatchProgress.inProgress;
+}
+
 /// Outcome of one dispatch, as reported by the server.
 ///
-/// Both counts are nullable because a backend older than this client will
-/// simply not send them, and "the server didn't say" must not be rendered as
+/// Counts are nullable because a backend older than this client will simply
+/// not send them, and "the server didn't say" must not be rendered as
 /// "nobody was reached".
 class DispatchOutcome {
   const DispatchOutcome({
     this.contactsTotal,
     this.contactsNotified,
     this.reachedContactIds = const [],
+    this.failedContactIds = const [],
     this.incidentId,
+    this.progress = DispatchProgress.complete,
   });
 
   /// The alert never left the device and is waiting in the offline queue.
   /// Distinct from a dispatch that ran and reached nobody.
-  const DispatchOutcome.queued()
+  ///
+  /// Carries [incidentId] anyway: the id is generated on this device before
+  /// the request, so the recording has something to be filed against once the
+  /// queued alert replays. Discarding evidence because the network hiccupped
+  /// threw away exactly the emergencies that went worst.
+  const DispatchOutcome.queued({this.incidentId})
     : contactsTotal = null,
       contactsNotified = null,
       reachedContactIds = const [],
-      incidentId = null;
+      failedContactIds = const [],
+      progress = DispatchProgress.queued;
 
   final int? contactsTotal;
   final int? contactsNotified;
@@ -51,26 +57,90 @@ class DispatchOutcome {
   /// people know she needs help.
   final List<String> reachedContactIds;
 
-  /// The incident the alert created. Null when the alert was queued
-  /// offline — evidence has nothing to attach to until it actually sends.
+  /// Ids every channel refused. Empty while [progress] is
+  /// [DispatchProgress.inProgress], because a contact not yet tried is not a
+  /// contact that failed.
+  final List<String> failedContactIds;
+
+  /// The incident this alert belongs to. Generated client-side, so it is
+  /// known even when the request never landed.
   final String? incidentId;
 
-  /// True when the alert was recorded but reached none of the contacts —
-  /// the case the user most needs to know about, because it means she
-  /// should find another way to get help.
-  bool get reachedNobody => (contactsTotal ?? 0) > 0 && contactsNotified == 0;
+  final DispatchProgress progress;
+
+  /// True when the alert was recorded, the fan-out has *finished*, and it
+  /// reached none of the contacts — the case the user most needs to know
+  /// about, because it means she should find another way to get help.
+  ///
+  /// Gated on [DispatchProgress.isSettled] deliberately: mid-fan-out the
+  /// counts legitimately read as "nobody yet", and shouting "nobody could be
+  /// reached" at that moment would be wrong and frightening.
+  bool get reachedNobody =>
+      progress.isSettled &&
+      progress != DispatchProgress.queued &&
+      (contactsTotal ?? 0) > 0 &&
+      contactsNotified == 0;
 
   bool get reachedEveryone =>
       contactsTotal != null && contactsTotal! > 0 && contactsNotified == contactsTotal;
+
+  DispatchOutcome copyWith({
+    int? contactsTotal,
+    int? contactsNotified,
+    List<String>? reachedContactIds,
+    List<String>? failedContactIds,
+    String? incidentId,
+    DispatchProgress? progress,
+  }) => DispatchOutcome(
+    contactsTotal: contactsTotal ?? this.contactsTotal,
+    contactsNotified: contactsNotified ?? this.contactsNotified,
+    reachedContactIds: reachedContactIds ?? this.reachedContactIds,
+    failedContactIds: failedContactIds ?? this.failedContactIds,
+    incidentId: incidentId ?? this.incidentId,
+    progress: progress ?? this.progress,
+  );
 }
 
+/// Dispatches an emergency alert to the backend.
+///
+/// `POST /api/v1/alerts/emergency` creates the incident, stores the location,
+/// broadcasts over the user's own WebSocket, pushes to her own devices, and
+/// queues the fan-out to her emergency contacts.
+///
+/// **The fan-out is not finished when [dispatchAlert] returns.** It used to
+/// be, and that was the defect behind the "Sending…" that never resolved:
+/// each contact is tried on up to three channels with three attempts each,
+/// and a blocked channel fails by timing out rather than refusing, so two
+/// contacts could take around two minutes while this client gave up at
+/// fifteen seconds and filed the alert in its offline queue — reporting "you
+/// are offline" to someone holding a phone with full signal.
+///
+/// So the server answers as soon as the emergency is durable, and the outcome
+/// is read afterwards from [fetchDispatchStatus].
 abstract class EmergencyRepository {
+  /// Sends the alert.
+  ///
+  /// [incidentId] is generated by the *client*. That is what makes a retry
+  /// safe: a phone that never heard back cannot know whether the request
+  /// arrived, and without a stable id every retry filed a second emergency
+  /// and messaged every contact again.
+  ///
+  /// [latitude]/[longitude]/[accuracyMeters] are null when location wasn't
+  /// available at dispatch time (permission denied, GPS off, weak signal) —
+  /// dispatch must still proceed in that case, just without a location fix.
   Future<DispatchOutcome> dispatchAlert({
     required String severity,
     required String summary,
     required bool auto,
+    String? incidentId,
     double? latitude,
     double? longitude,
     double? accuracyMeters,
   });
+
+  /// Re-reads the fan-out state for an incident already dispatched.
+  ///
+  /// Polled by the Emergency screen while it shows "Help is on the way", so
+  /// the contact list stops being a guess and starts being a report.
+  Future<DispatchOutcome> fetchDispatchStatus(String incidentId);
 }

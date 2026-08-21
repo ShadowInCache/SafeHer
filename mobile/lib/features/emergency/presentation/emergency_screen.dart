@@ -15,6 +15,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/components/icons/sa_icon.dart';
+import '../../../shared/utils/random_id.dart';
 import '../../../shared/components/overlays/sa_bottom_sheet.dart';
 import '../../contacts/data/contacts_providers.dart';
 import '../../safety/data/safety_providers.dart';
@@ -63,6 +64,18 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
   EvidenceState _evidence = EvidenceState.idle;
   Timer? _recordingWindow;
 
+  /// Chosen on this device before the request goes out, so a retry after a
+  /// timeout resolves to the same incident instead of filing a second
+  /// emergency and messaging every contact twice. It also means the recording
+  /// has something to be filed against even when the alert had to be queued.
+  String? _incidentId;
+
+  /// Polls the server for the fan-out result while the dispatched stage is
+  /// on screen. The server answers the SOS before it has finished contacting
+  /// anyone — see [EmergencyRepository] — so this is how "Sending…" ever
+  /// becomes an answer.
+  Timer? _statusPoll;
+
   /// Resolved eagerly in [initState], not lazily: dispose() has to tear the
   /// recorder down and `ref` is unusable by then, so a `late final` that had
   /// never been touched would throw on the way out. Leaving the microphone
@@ -92,6 +105,7 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
   void dispose() {
     _countdownTimer?.cancel();
     _recordingWindow?.cancel();
+    _statusPoll?.cancel();
     // Not awaited: dispose cannot be async, and an abandoned recording must
     // still be torn down rather than left holding the microphone.
     unawaited(_recorder.cancel());
@@ -104,6 +118,11 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
       _stage = EmergencyStage.countdown;
       _secondsRemaining = _countdownSeconds;
       _location = null;
+      // One id per activation, minted before anything is sent. A cancelled
+      // countdown never uses it; the next activation gets a new one, so two
+      // separate emergencies are never merged into one incident.
+      _incidentId = newUuidV4();
+      _dispatchResult = null;
     });
     _wakeBackend();
     _fetchLocation();
@@ -227,13 +246,19 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
     );
   }
 
-  /// Stops the recording and uploads it against the incident the alert just
-  /// created.
+  /// Stops the recording and uploads it against the incident.
   ///
-  /// Runs after dispatch because the incident id does not exist until then.
-  /// An offline alert has no incident yet, so the recording is discarded
-  /// rather than held indefinitely — the queued alert will be re-sent
-  /// without it, which is honest about what was actually captured.
+  /// The incident id is chosen on this device before the alert is sent, so
+  /// there is always something to file against — including when the alert
+  /// itself had to be queued. That is the fix for a real defect: the previous
+  /// version discarded the recording outright whenever dispatch did not
+  /// return an id, which meant the emergencies that went *worst* — the ones
+  /// where the network failed — were also the only ones that lost their
+  /// evidence.
+  ///
+  /// A queued alert has no incident on the server *yet*, so the first upload
+  /// will fail. [_uploadWithRetry] waits for the queue to drain rather than
+  /// giving up on the first attempt.
   Future<void> _finishRecording(String? incidentId) async {
     // Video is settled first and independently, so that an audio path that
     // returns early below cannot strand a camera still recording.
@@ -254,23 +279,84 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
     }
 
     if (mounted) setState(() => _evidence = EvidenceState.uploading);
-    try {
-      final repository = ref.read(evidenceRepositoryProvider);
-      await repository.upload(incidentId: incidentId, recording: recording);
-      // Audio first, then video. If the connection dies partway, the
-      // recording that works regardless of where the phone was is the one
-      // already on the server.
-      if (video != null) {
-        try {
-          await repository.upload(incidentId: incidentId, recording: video);
-        } catch (_) {
-          // The audio is saved; a failed video upload does not undo that.
-        }
-      }
-      if (mounted) setState(() => _evidence = EvidenceState.saved);
-    } catch (_) {
+
+    final saved = await _uploadWithRetry(
+      incidentId: incidentId,
+      recording: recording,
+      // Only a queued alert is worth waiting on: its incident does not exist
+      // server-side until the queue drains, so early failures are expected
+      // rather than final.
+      alertWasQueued: _dispatchResult?.isQueued ?? false,
+    );
+    if (!saved) {
       if (mounted) setState(() => _evidence = EvidenceState.uploadFailed);
+      return;
     }
+
+    // Audio first, then video. If the connection dies partway, the
+    // recording that works regardless of where the phone was is the one
+    // already on the server.
+    if (video != null) {
+      // Not retried as hard as the audio and its failure is not surfaced:
+      // video is a bonus when the lens happened to be pointed at something,
+      // and reporting "evidence not uploaded" because the video leg failed
+      // would misdescribe an audio recording that is safely stored.
+      try {
+        await ref
+            .read(evidenceRepositoryProvider)
+            .upload(incidentId: incidentId, recording: video);
+      } catch (_) {
+        // The audio is saved; a failed video upload does not undo that.
+      }
+    }
+
+    if (mounted) setState(() => _evidence = EvidenceState.saved);
+  }
+
+  /// Uploads the recording, waiting out an incident that does not exist yet.
+  ///
+  /// Retries only when [alertWasQueued]. That is the one case where an early
+  /// failure means nothing: the incident is created server-side only once the
+  /// queued alert drains, so the first attempts are expected to 404.
+  ///
+  /// Every other failure is reported immediately. Grinding through two
+  /// minutes of retries on a recording the server has actually rejected —
+  /// too large, wrong type, session expired — would leave "Saving evidence
+  /// securely…" on screen long after the answer was known, and the user is
+  /// reading that line to decide whether she has a recording or not.
+  ///
+  /// **The bytes are deliberately not persisted to disk between attempts.**
+  /// [EvidenceRecording] holds them in memory precisely so no recording of an
+  /// assault is left in the device's temp directory, where it is one
+  /// file-manager app away from the person it was recorded about. Surviving
+  /// the app being killed is not worth reintroducing that, so a recording
+  /// that cannot be uploaded within the window is reported as lost rather
+  /// than quietly written somewhere.
+  Future<bool> _uploadWithRetry({
+    required String incidentId,
+    required EvidenceRecording recording,
+    required bool alertWasQueued,
+  }) async {
+    final repository = ref.read(evidenceRepositoryProvider);
+    final deadline = DateTime.now().add(const Duration(minutes: 2));
+    var delay = const Duration(seconds: 3);
+
+    while (mounted) {
+      try {
+        await repository.upload(incidentId: incidentId, recording: recording);
+        return true;
+      } catch (_) {
+        if (!alertWasQueued) return false;
+        if (DateTime.now().isAfter(deadline)) return false;
+        await Future<void>.delayed(delay);
+        // Backs off to a cap rather than growing without bound — the window
+        // is short, and a long sleep at the end of it would waste it.
+        delay = delay * 2 > const Duration(seconds: 20)
+            ? const Duration(seconds: 20)
+            : delay * 2;
+      }
+    }
+    return false;
   }
 
   /// Stops video and returns it for upload, or null if there is none.
@@ -299,6 +385,7 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
   void _dispatchAlert() {
     final location = _location;
     final hasFix = location is LocationAvailable;
+    final incidentId = _incidentId!;
     unawaited(
       ref
           .read(emergencyDispatchNotifierProvider.notifier)
@@ -306,6 +393,7 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
             severity: 'critical',
             summary: 'Emergency SOS triggered',
             auto: false,
+            incidentId: incidentId,
             latitude: hasFix ? location.latitude : null,
             longitude: hasFix ? location.longitude : null,
             accuracyMeters: hasFix ? location.accuracyMeters : null,
@@ -318,14 +406,64 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
                 ..clear()
                 ..addAll(result.outcome.reachedContactIds);
             });
+
+            // The server answers before it has finished contacting anyone,
+            // so keep asking until it says it is done.
+            if (!result.isQueued && !result.outcome.progress.isSettled) {
+              _startPollingStatus(incidentId);
+            }
+
             // Give the recording a moment to capture the aftermath before
             // closing it; the alert has already gone out either way.
+            //
+            // The id is passed even when the alert was queued: it was chosen
+            // on this device, so the recording can still be filed against it
+            // once the queued alert replays. Discarding evidence because the
+            // network hiccupped threw away exactly the emergencies that went
+            // worst.
             _recordingWindow = Timer(
               const Duration(seconds: 20),
-              () => unawaited(_finishRecording(result.outcome.incidentId)),
+              () => unawaited(_finishRecording(incidentId)),
             );
           }),
     );
+  }
+
+  /// Asks the server how the fan-out is going until it has finished.
+  ///
+  /// Two seconds is a compromise: fast enough that the screen stops saying
+  /// "Sending…" soon after the truth is known, slow enough not to hammer a
+  /// free-tier instance that is already busy sending the alert. It gives up
+  /// after two minutes — past that the fan-out has either finished or died,
+  /// and a spinner that never resolves is its own kind of lie.
+  void _startPollingStatus(String incidentId) {
+    _statusPoll?.cancel();
+    final startedAt = DateTime.now();
+    _statusPoll = Timer.periodic(const Duration(seconds: 2), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (DateTime.now().difference(startedAt) > const Duration(minutes: 2)) {
+        timer.cancel();
+        return;
+      }
+
+      final outcome = await ref
+          .read(emergencyDispatchNotifierProvider.notifier)
+          .pollStatus(incidentId);
+      // Null means the poll itself failed. Leave the last known state alone
+      // rather than blanking a contact list someone is watching.
+      if (outcome == null || !mounted) return;
+
+      setState(() {
+        _dispatchResult = DispatchResult.sent(outcome);
+        _notifiedContactIds
+          ..clear()
+          ..addAll(outcome.reachedContactIds);
+      });
+      if (outcome.progress.isSettled) timer.cancel();
+    });
   }
 
   /// Loads the contact list for the dispatched view.
@@ -344,6 +482,7 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
     // A false alarm's recording is deleted, not uploaded: FR-EMG-08 says a
     // cancelled alert is logged but not transmitted.
     _recordingWindow?.cancel();
+    _statusPoll?.cancel();
     unawaited(_recorder.cancel());
     setState(() {
       _evidence = EvidenceState.discarded;

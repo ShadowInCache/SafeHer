@@ -88,7 +88,7 @@ final videoRecorderProvider = Provider<VideoEvidenceRecorder>.internal(
 // ignore: unused_element
 typedef VideoRecorderRef = ProviderRef<VideoEvidenceRecorder>;
 String _$emergencyDispatchNotifierHash() =>
-    r'25309c4c1b16dee190537c0d2bfd558e16657fc2';
+    r'685e1d5e0d79fabaf3754646bb56832960a32871';
 
 /// Dispatches the SOS alert. If the device is offline when the countdown
 /// completes, the alert is queued via [OfflineQueueService] instead of

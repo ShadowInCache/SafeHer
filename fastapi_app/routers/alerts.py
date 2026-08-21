@@ -1,9 +1,10 @@
+import json
 import logging
 from datetime import datetime
 from typing import Any, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +13,7 @@ from fastapi_app.db import get_session
 from fastapi_app.deps import fcm_credentials
 from fastapi_app.models import Incident, Location, User
 from fastapi_app.realtime import manager
+from fastapi_app.repositories import emergency_contacts as contacts_repo
 from fastapi_app.repositories import fcm_tokens
 from fastapi_app.schemas import (
     EmergencyAlertRequest,
@@ -23,7 +25,12 @@ from fastapi_app.schemas import (
 )
 from fastapi_app.security import get_current_user
 from fastapi_app.services import threat_fusion, threat_models
-from fastapi_app.services.emergency_dispatch import dispatch_to_contacts
+from fastapi_app.services.emergency_dispatch import (
+    DISPATCH_COMPLETE,
+    DISPATCH_IN_PROGRESS,
+    dispatch_to_contacts,
+    run_dispatch_in_background,
+)
 from fastapi_app.services.notifications import send_fcm_notification
 from fastapi_app.services.processor_client import process_threat
 
@@ -43,6 +50,7 @@ _smoothed_scores: dict[str, float] = {}
 
 async def _auto_dispatch_if_threatened(
     *,
+    background_tasks: Optional[BackgroundTasks] = None,
     session: AsyncSession,
     settings: Settings,
     user_id: str,
@@ -130,20 +138,58 @@ async def _auto_dispatch_if_threatened(
     await session.refresh(incident)
 
     logger.warning("Auto-SOS dispatched for %s: %s", user_id, decision.reason)
-    report = await dispatch_to_contacts(
-        session=session,
-        settings=settings,
-        user=owner,
-        incident_id=incident.id,
-        evidence_url=incident.evidence_url,
-    )
+
+    contacts = await contacts_repo.list_by_user(session, user_id=user_id)
+    incident.dispatch_status = DISPATCH_IN_PROGRESS
+    incident.contacts_total = len(contacts)
+    incident.contacts_notified = 0
+    incident.contacts_reached = json.dumps([])
+    incident.contacts_failed = json.dumps([])
+    await session.commit()
+
+    if background_tasks is not None:
+        # Same reasoning as the manual SOS: a fan-out that can take minutes
+        # against a blocked channel must not be inside the request. An
+        # automatic alert has *no* countdown absorbing the wait, so this
+        # matters more here, not less.
+        background_tasks.add_task(
+            run_dispatch_in_background,
+            settings=settings,
+            user_id=user_id,
+            incident_id=incident.id,
+            evidence_url=incident.evidence_url,
+        )
+        notified = None
+    else:
+        # No background queue available (a direct internal call, or a test
+        # driving this helper). Run inline rather than silently not alerting
+        # anyone -- slow is survivable here, skipped is not.
+        report = await dispatch_to_contacts(
+            session=session,
+            settings=settings,
+            user=owner,
+            incident_id=incident.id,
+            evidence_url=incident.evidence_url,
+        )
+        incident.dispatch_status = DISPATCH_COMPLETE
+        incident.contacts_notified = report.contacts_notified
+        incident.contacts_reached = json.dumps(report.reached_contact_ids)
+        incident.contacts_failed = json.dumps(report.failed_contact_ids)
+        incident.dispatch_completed_at = datetime.utcnow()
+        await session.commit()
+        notified = report.contacts_notified
+
     return {
         "triggered": True,
         "reason": decision.reason,
         "score": round(decision.boosted_score, 3),
         "threshold": threshold,
         "incident_id": incident.id,
-        "contacts_notified": report.contacts_notified,
+        "contacts_total": len(contacts),
+        # None while the fan-out is still running. Distinct from 0, which
+        # would claim we tried everyone and reached nobody.
+        "contacts_notified": notified,
+        "dispatch_status": incident.dispatch_status,
     }
 
 
@@ -189,6 +235,7 @@ async def _best_effort_push(
 @router.post("/process-threat")
 async def process_threat_alert(
     payload: ProcessThreatRequest,
+    background_tasks: BackgroundTasks,
     current_user: UserPublic = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
     settings: Settings = Depends(get_settings),
@@ -248,6 +295,7 @@ async def process_threat_alert(
     # no help if she cannot look at it -- this is what reaches the people
     # who can come. `processor_confidence` is already on §6.2's 0-1 scale.
     auto_sos = await _auto_dispatch_if_threatened(
+        background_tasks=background_tasks,
         session=session,
         settings=settings,
         user_id=current_user.id,
@@ -282,7 +330,7 @@ async def get_alert_channels(
     sms_configured = bool(
         settings.twilio_account_sid and settings.twilio_auth_token and settings.twilio_from_number
     )
-    email_configured = bool(settings.smtp_configured) or bool(
+    email_configured = bool(settings.email_configured) or bool(
         settings.onesignal_app_id and settings.onesignal_api_key
     )
 
@@ -306,11 +354,61 @@ async def get_alert_channels(
 @router.post("/emergency", status_code=status.HTTP_201_CREATED, response_model=IncidentPublic)
 async def trigger_emergency_alert(
     payload: EmergencyAlertRequest,
+    background_tasks: BackgroundTasks,
     current_user: UserPublic = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ):
-    incident_id = str(uuid4())
+    """Records the emergency and answers immediately.
+
+    **The fan-out to emergency contacts does not happen inside this request.**
+    It used to, and that was the defect: every contact is tried on up to three
+    channels with three attempts each, and a channel whose port is blocked
+    fails by *timing out* rather than refusing. Two contacts against a blocked
+    SMTP port took around two minutes of wall clock while the app gave up at
+    fifteen seconds -- so a woman with full signal was told her alert had been
+    saved for "when you have signal", and the alert she was waiting on was
+    filed in an offline queue instead of being reported as sent.
+
+    FR-EMG-01 asks for dispatch within three seconds. What must happen inside
+    those three seconds is that the emergency becomes *durable* and the user
+    gets an answer; who has been reached is knowable a few seconds later, and
+    the client polls `GET /alerts/emergency/{id}/dispatch` for it.
+
+    The client may supply `incident_id`. When it does, a repeat of the same
+    id returns the existing incident untouched -- a phone that timed out
+    waiting and retried must not file a second emergency, and must not make
+    every contact's phone ring twice.
+    """
+    # --- idempotency -----------------------------------------------------
+    # A client that never heard back does not know whether we received it. It
+    # retries, and it must be safe to.
+    requested_id = payload.incident_id
+    if requested_id:
+        existing = await session.get(Incident, requested_id)
+        if existing is not None and existing.user_id == current_user.id:
+            return await _incident_response(session, existing)
+        if existing is not None:
+            # The id belongs to someone else. **Do not refuse the SOS.** A 404
+            # here would mean a client-side id collision -- or a client
+            # replaying a stale id after switching accounts -- silently costs
+            # someone their emergency, and no error this endpoint can return
+            # is worth that. Mint a fresh id and carry on; the caller loses
+            # only its idempotency guarantee, which it can survive.
+            logger.warning(
+                "Emergency incident id %s already belongs to another user; "
+                "issuing a new id for %s",
+                requested_id,
+                current_user.id,
+            )
+            requested_id = None
+
+    incident_id = requested_id or str(uuid4())
+
+    # Counted before the response so the client can show the right number of
+    # pending contacts straight away rather than an empty list that fills in.
+    contacts = await contacts_repo.list_by_user(session, user_id=current_user.id)
+
     incident = Incident(
         id=incident_id,
         user_id=current_user.id,
@@ -318,6 +416,11 @@ async def trigger_emergency_alert(
         description=payload.summary,
         threat_level=payload.severity,
         evidence_url=None,
+        dispatch_status=DISPATCH_IN_PROGRESS,
+        contacts_total=len(contacts),
+        contacts_notified=0,
+        contacts_reached=json.dumps([]),
+        contacts_failed=json.dumps([]),
     )
     session.add(incident)
 
@@ -363,19 +466,14 @@ async def trigger_emergency_alert(
         "updated_at": datetime.utcnow().isoformat(),
     }
 
-    # FR-EMG-04/05: notify the people who can actually help. Everything
-    # above this line only told the user's own devices about an emergency
-    # they already know they are in.
-    #
-    # The incident is committed before this runs, so a dispatch that fails
-    # wholesale still leaves a durable record to retry from, and the caller
-    # still gets a 201 rather than an error that would make the app think
-    # the SOS never landed.
-    owner = await session.get(User, current_user.id)
-    dispatch = await dispatch_to_contacts(
-        session=session,
+    # FR-EMG-04/05: notify the people who can actually help. Queued rather
+    # than awaited -- see the docstring. The incident is committed above, so
+    # the task has a durable row to record its outcome against even if this
+    # process dies before it runs.
+    background_tasks.add_task(
+        run_dispatch_in_background,
         settings=settings,
-        user=owner,
+        user_id=current_user.id,
         incident_id=incident.id,
         latitude=float(loc["latitude"]) if has_location else None,
         longitude=float(loc["longitude"]) if has_location else None,
@@ -387,15 +485,95 @@ async def trigger_emergency_alert(
         response.latitude = float(loc["latitude"])
         response.longitude = float(loc["longitude"])
         response.location_accuracy = float(loc["accuracy"]) if "accuracy" in loc else None
-    response.contacts_total = dispatch.contacts_total
-    response.contacts_notified = dispatch.contacts_notified
-    response.contacts_reached = dispatch.reached_contact_ids
+    response.dispatch_status = DISPATCH_IN_PROGRESS
+    response.contacts_total = len(contacts)
+    # Explicitly zero and empty, not null: the fan-out has started and has
+    # reached nobody *yet*. Null would mean no dispatch was attempted, which
+    # is the one thing this is not.
+    response.contacts_notified = 0
+    response.contacts_reached = []
+    response.contacts_failed = []
+    return response
+
+
+@router.get("/emergency/{incident_id}/dispatch")
+async def get_dispatch_status(
+    incident_id: str,
+    current_user: UserPublic = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """How the contact fan-out for one incident is going.
+
+    Polled by the Emergency screen while it shows "Help is on the way". The
+    screen marks exactly the contacts named in `contacts_reached` and shows
+    the ones in `contacts_failed` as unreachable -- an aggregate count alone
+    would make it guess which, and guessing wrong here tells someone in danger
+    that her sister knows when nothing arrived.
+    """
+    incident = await session.get(Incident, incident_id)
+    if incident is None or incident.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
+
+    return {
+        "incident_id": incident.id,
+        # NULL status means this incident was filed by some route that never
+        # dispatched. Reported as-is rather than coerced to "complete".
+        "status": incident.dispatch_status,
+        "contacts_total": incident.contacts_total,
+        "contacts_notified": incident.contacts_notified,
+        "contacts_reached": _json_ids(incident.contacts_reached),
+        "contacts_failed": _json_ids(incident.contacts_failed),
+        "completed_at": (
+            incident.dispatch_completed_at.isoformat()
+            if incident.dispatch_completed_at
+            else None
+        ),
+    }
+
+
+def _json_ids(raw: Optional[str]) -> list[str]:
+    """Reads a stored id list, tolerating anything that is not one.
+
+    A malformed column must not turn a status poll into a 500 -- the client
+    asking is on the Emergency screen.
+    """
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError):
+        return []
+    return [str(item) for item in parsed] if isinstance(parsed, list) else []
+
+
+async def _incident_response(session: AsyncSession, incident: Incident) -> IncidentPublic:
+    """Builds the response for an incident that already existed.
+
+    Used by the idempotent replay path, which must answer with what the first
+    request produced rather than a fresh, emptier version of it.
+    """
+    response = IncidentPublic.model_validate(incident)
+    location = (
+        await session.execute(
+            select(Location).where(Location.incident_id == incident.id).limit(1)
+        )
+    ).scalars().first()
+    if location is not None:
+        response.latitude = location.lat
+        response.longitude = location.lng
+        response.location_accuracy = location.accuracy
+    # The dispatch fields need no assignment here: they are real columns on
+    # `Incident`, and `IncidentPublic` decodes the stored JSON text itself
+    # (see its `_decode_id_list` validator). Only the location has to be
+    # attached by hand, because one incident can have several location rows
+    # and so it is not a mapped attribute.
     return response
 
 
 @router.post("/heartbeat", status_code=status.HTTP_202_ACCEPTED)
 async def submit_heartbeat(
     payload: HeartbeatRequest,
+    background_tasks: BackgroundTasks,
     current_user: UserPublic = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
     settings: Settings = Depends(get_settings),
@@ -427,6 +605,7 @@ async def submit_heartbeat(
     # normalised here rather than letting a 100 read as far above threshold
     # and a 0.8 read as far below it.
     auto_sos = await _auto_dispatch_if_threatened(
+        background_tasks=background_tasks,
         session=session,
         settings=settings,
         user_id=current_user.id,
@@ -486,6 +665,7 @@ async def get_model_registry(
 @router.post("/analyze", status_code=status.HTTP_202_ACCEPTED)
 async def analyze_model_scores(
     payload: ModelScoresRequest,
+    background_tasks: BackgroundTasks,
     current_user: UserPublic = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
     settings: Settings = Depends(get_settings),
@@ -537,6 +717,7 @@ async def analyze_model_scores(
         await session.commit()
 
     auto_sos = await _auto_dispatch_if_threatened(
+        background_tasks=background_tasks,
         session=session,
         settings=settings,
         user_id=current_user.id,

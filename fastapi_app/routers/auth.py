@@ -61,7 +61,7 @@ async def _notify_lockout(*, user, settings: Settings) -> None:
     Best-effort: a mail failure must not turn a lockout into a 500, because the
     lockout itself has already been recorded.
     """
-    if not settings.smtp_configured:
+    if not settings.email_configured:
         return
     try:
         await email_service.send_email(
@@ -142,7 +142,7 @@ async def register(
     await session.refresh(user)
 
     sent, debug_code = (False, None)
-    if required or settings.smtp_configured:
+    if required or settings.email_configured:
         sent, debug_code = await _deliver_verification_code(
             session, user=user, settings=settings
         )

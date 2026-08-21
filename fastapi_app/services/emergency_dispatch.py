@@ -24,6 +24,7 @@ Design notes that are load-bearing:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -89,6 +90,17 @@ class DispatchReport:
     @property
     def reached_contact_ids(self) -> list[str]:
         return [result.contact_id for result in self.results if result.notified]
+
+    @property
+    def failed_contact_ids(self) -> list[str]:
+        """Contacts every channel refused.
+
+        Kept apart from "not in `reached`" because the client renders the two
+        differently: a contact still being attempted and a contact nobody
+        could reach look identical in an aggregate count, and on this screen
+        that difference is the whole message.
+        """
+        return [result.contact_id for result in self.results if not result.notified]
 
     def as_dict(self) -> dict:
         return {
@@ -172,6 +184,107 @@ async def dispatch_to_contacts(
         report.results.append(result)
 
     return report
+
+
+# --------------------------------------------------------------- background run
+
+# The dispatch state machine, stored on `incidents.dispatch_status`.
+DISPATCH_IN_PROGRESS = "in_progress"
+DISPATCH_COMPLETE = "complete"
+DISPATCH_FAILED = "failed"
+
+
+async def run_dispatch_in_background(
+    *,
+    settings: Settings,
+    user_id: str,
+    incident_id: str,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    evidence_url: Optional[str] = None,
+) -> None:
+    """Fans the alert out after the response has already gone.
+
+    Owns its own session deliberately. A FastAPI background task runs *after*
+    the request completes, by which time the request-scoped `AsyncSession` the
+    router held has been closed and returned to the pool -- using it here
+    would fail on the first statement, and it would fail inside a task whose
+    exceptions nobody is waiting on.
+
+    Never raises. There is no caller left to catch anything: the client has
+    its 201 and is polling for the outcome, so a crash here would present as
+    a dispatch that stays `in_progress` forever. Every failure is recorded on
+    the incident instead, where the client will read it.
+    """
+    # Imported here rather than at module scope: `db` imports `config`, which
+    # imports this module's neighbours, and a top-level import closes that
+    # loop at startup.
+    from fastapi_app.db import SessionLocal
+    from fastapi_app.models import Incident
+    from fastapi_app.realtime import manager
+
+    try:
+        async with SessionLocal() as session:
+            user = await session.get(User, user_id)
+            if user is None:
+                logger.error("Dispatch for incident %s: user %s is gone", incident_id, user_id)
+                return
+
+            report = await dispatch_to_contacts(
+                session=session,
+                settings=settings,
+                user=user,
+                incident_id=incident_id,
+                latitude=latitude,
+                longitude=longitude,
+                evidence_url=evidence_url,
+            )
+
+            incident = await session.get(Incident, incident_id)
+            if incident is not None:
+                incident.dispatch_status = DISPATCH_COMPLETE
+                incident.contacts_total = report.contacts_total
+                incident.contacts_notified = report.contacts_notified
+                incident.contacts_reached = json.dumps(report.reached_contact_ids)
+                incident.contacts_failed = json.dumps(report.failed_contact_ids)
+                incident.dispatch_completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                await session.commit()
+
+            # Push the outcome as well as storing it.
+            #
+            # The stored row is the authority and the Emergency screen reads
+            # it by polling, because a poll works whether or not a socket
+            # happens to be open. This broadcast is for any client that is
+            # already listening -- it saves a poll interval, and it is not
+            # relied upon by anything.
+            await manager.broadcast_to_user(
+                user_id,
+                {
+                    "type": "dispatch_complete",
+                    "incident_id": incident_id,
+                    "contacts_total": report.contacts_total,
+                    "contacts_notified": report.contacts_notified,
+                    "contacts_reached": report.reached_contact_ids,
+                    "contacts_failed": report.failed_contact_ids,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+    except Exception as exc:  # noqa: BLE001 - see docstring
+        logger.exception("Emergency dispatch for incident %s failed: %s", incident_id, exc)
+        try:
+            async with SessionLocal() as session:
+                incident = await session.get(Incident, incident_id)
+                if incident is not None:
+                    incident.dispatch_status = DISPATCH_FAILED
+                    incident.dispatch_completed_at = datetime.now(timezone.utc).replace(
+                        tzinfo=None
+                    )
+                    await session.commit()
+        except Exception:  # noqa: BLE001
+            # The status column is a convenience for the client, not the
+            # record of the emergency -- the incident itself is already
+            # committed. Losing this write must not mask the error above.
+            logger.exception("Could not record dispatch failure for %s", incident_id)
 
 
 async def _notify_contact(

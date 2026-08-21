@@ -27,7 +27,18 @@ from fastapi_app.config import Settings
 # Anything whose name says it addresses, authenticates to, or pays for a
 # third party. Local infrastructure (the database, the JWT secret) is
 # deliberately not in scope.
-_OUTBOUND_HINTS = ("api_key", "auth_token", "server_key", "account_sid", "smtp_", "from_number")
+_OUTBOUND_HINTS = (
+    "api_key",
+    "auth_token",
+    "server_key",
+    "account_sid",
+    "smtp_",
+    "from_number",
+    # Brevo sends email over HTTPS, so it is reachable from the test runner
+    # even where SMTP ports are blocked — which makes it exactly the kind of
+    # credential this guard exists for.
+    "brevo",
+)
 
 # Settings that merely name a service without being able to reach it.
 _ALLOWED = {
@@ -35,6 +46,10 @@ _ALLOWED = {
     "smtp_use_tls",
     "smtp_use_ssl_override",
     "smtp_from_name",
+    # A socket timeout, not an address or a credential — it cannot reach
+    # anything by itself, and it has a non-zero default so it always reads as
+    # "set".
+    "smtp_timeout_seconds",
 }
 
 

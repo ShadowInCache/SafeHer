@@ -28,10 +28,15 @@ class _NoopEmergencyRepository implements EmergencyRepository {
     required String severity,
     required String summary,
     required bool auto,
+    String? incidentId,
     double? latitude,
     double? longitude,
     double? accuracyMeters,
   }) async => const DispatchOutcome(contactsTotal: 0, contactsNotified: 0);
+
+  @override
+  Future<DispatchOutcome> fetchDispatchStatus(String incidentId) async =>
+      DispatchOutcome(incidentId: incidentId, progress: DispatchProgress.complete);
 }
 
 class _EmptyContactsRepository implements ContactsRepository {

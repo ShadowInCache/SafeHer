@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/biometrics/biometric_providers.dart';
+import '../../../../core/biometrics/biometric_service.dart';
 import '../../../../core/local/app_preferences.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -43,20 +44,49 @@ class ProfileSecuritySection extends ConsumerWidget {
       if (context.mounted) {
         showSaToast(
           context,
-          message: 'No ${biometrics.platformLabel} enrolled on this device.',
+          message: "This phone doesn't support ${biometrics.platformLabel} unlock.",
           type: SaToastType.error,
         );
       }
       return;
     }
 
-    final authenticated = await biometrics.authenticate(reason: 'Enable ${biometrics.platformLabel} unlock for SafeHer');
-    if (authenticated) {
-      await prefs.setBiometricEnabled(true);
-      ref.invalidate(appPreferencesProvider);
-      if (context.mounted) showSaToast(context, message: '${biometrics.platformLabel} unlock enabled.');
-    } else if (context.mounted) {
-      showSaToast(context, message: 'Authentication failed or was cancelled.', type: SaToastType.error);
+    // Checked separately from `isAvailable`, which only reports that the
+    // hardware exists. A reader with nothing enrolled passes that check and
+    // then fails at the prompt, which used to surface as "authentication
+    // failed" — telling the user to retry the one thing that cannot work.
+    if (!await biometrics.hasEnrolledBiometrics) {
+      if (context.mounted) {
+        showSaToast(
+          context,
+          message:
+              'No ${biometrics.platformLabel.toLowerCase()} is set up on this phone. '
+              'Add one in your device settings, then turn this on again.',
+          type: SaToastType.error,
+        );
+      }
+      return;
+    }
+
+    final result = await biometrics.authenticate(
+      reason: 'Enable ${biometrics.platformLabel} unlock for SafeHer',
+    );
+    if (!context.mounted) return;
+
+    switch (result) {
+      case BiometricSuccess():
+        await prefs.setBiometricEnabled(true);
+        ref.invalidate(appPreferencesProvider);
+        if (context.mounted) {
+          showSaToast(context, message: '${biometrics.platformLabel} unlock enabled.');
+        }
+      case BiometricRejected(:final reason):
+        // A cancel gets no message. The user dismissed the sheet on purpose
+        // and does not need to be told what they just did.
+        final message = BiometricRejected(reason).userMessage(biometrics.platformLabel);
+        if (message != null) {
+          showSaToast(context, message: message, type: SaToastType.error);
+        }
     }
   }
 

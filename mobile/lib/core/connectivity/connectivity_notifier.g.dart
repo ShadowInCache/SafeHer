@@ -7,7 +7,7 @@ part of 'connectivity_notifier.dart';
 // **************************************************************************
 
 String _$connectivityNotifierHash() =>
-    r'070217d9df0833812fddf8f0fb6e3539637e9e70';
+    r'f4463214a198b68bd0bbd7695c7a4e0cdee22aa4';
 
 /// Whether the device currently has *some* network interface up
 /// (Wi-Fi/mobile/ethernet). This is reachability of a network, not proof

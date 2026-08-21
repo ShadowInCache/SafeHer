@@ -1,6 +1,6 @@
 # SRS Compliance Status
 
-**Last refreshed:** 2026-08-15
+**Last refreshed:** 2026-08-21
 **Governing spec:** [`SRS.md`](../SRS.md) (2,851 lines)
 
 This file answers one question: *how much of `SRS.md` is actually built, and
@@ -31,16 +31,16 @@ All four gates pass as of the last refresh.
 |------|-------------|---------------|--------|
 | `flutter analyze` | 0 issues | 0 issues | ✅ |
 | `flutter test --coverage` | > 70% line coverage | **75.2%** (6,024 / 8,009 lines) | ✅ |
-| `flutter build apk --release` | 0 errors | 68.5 MB APK, exit 0 | ✅ |
+| `flutter build apk --release` | 0 errors | 70.7 MB APK, exit 0 | ✅ |
 | `dart run build_runner build` | 0 conflicts | 46 outputs, 0 conflicts | ✅ |
 
 Beyond the SRS's four, the repo also runs:
 
 | Check | Last measured | Status |
 |-------|---------------|--------|
-| `flutter test` (full suite) | 584 passing, 0 failing | ✅ |
-| `pytest tests/` (in-process suites) | 195 passing, 0 failing | ✅ |
-| Alembic from empty → head → downgrade → head | 16 migrations, reversible | ✅ |
+| `flutter test` (full suite) | 639 passing, 0 failing | ✅ |
+| `pytest tests/` (in-process suites) | 341 passing, 0 failing | ✅ |
+| Alembic from empty → head → downgrade → head | 17 migrations, reversible | ✅ |
 
 Coverage by area — the thin spots are where next session's tests should go:
 
@@ -164,10 +164,10 @@ All 17 specified component groups exist under `lib/shared/components/`, at
 | FR-AUTH-02 | Google Sign-In via Firebase | ✅ wired; SHA-1 registered for Android |
 | FR-AUTH-03 | Apple Sign-In (iOS) | 🚧 implemented via `AppleAuthProvider` in `auth_repository_remote.dart`; unverifiable without a Mac |
 | FR-AUTH-04 | JWT 15 min + refresh 30 days | ✅ |
-| FR-AUTH-05 | Biometric unlock | 🟡 `core/biometrics/` exists; end-to-end unlock never exercised |
+| FR-AUTH-05 | Biometric unlock | 🟡 **fixed 2026-08-21** — the prompt had never rendered: `MainActivity` was a `FlutterActivity`, so `local_auth` threw `no_fragment_activity` every time and the UI reported it as a failed attempt. Now `FlutterFragmentActivity`, with typed failure reasons (6 tests). Still unverified against a real fingerprint sensor |
 | FR-AUTH-06 | Session invalidation on password change | ✅ `tokens_valid_from` |
 | FR-AUTH-07 | 5 failures → 15-min lockout | ✅ incl. `Retry-After` header |
-| FR-AUTH-08 | Deletion with 30-day grace | ✅ hourly purge worker |
+| FR-AUTH-08 | Deletion with 30-day grace | ✅ hourly purge worker. GDPR Art. 15 access added alongside it 2026-08-21 — `GET /users/me/export`, wired to the Profile screen's "Download My Data" (5 tests) |
 
 ### §4.2 Device Management
 
@@ -184,15 +184,15 @@ All 17 specified component groups exist under `lib/shared/components/`, at
 
 | ID | Requirement | Status |
 |----|-------------|--------|
-| FR-EMG-01 | Manual SOS, dispatched < 3s | 🟡 Chain complete; the < 3s budget has not been measured against a live Twilio round trip |
+| FR-EMG-01 | Manual SOS, dispatched < 3s | ✅ **2026-08-21** — the fan-out moved to a background task, so the response no longer waits on it. It previously took ~2 minutes against a blocked channel while the client timed out at 15s. The incident is committed and answered before any channel is attempted |
 | FR-EMG-02 | Auto-SOS at threat ≥ 0.75 | 🟡 backend threshold implemented |
 | FR-EMG-03 | 10s countdown, cancellable | ✅ |
-| FR-EMG-04 | FCM + SMS to all contacts | ✅ email **verified end to end**; SMS ⛔ unconfigured (paid). `emergency_dispatch.py` — priority order, per-contact isolation, 3 attempts. Channels: email (SMTP, working), SMS (Twilio, paid), push (when a contact is a SafeHer user) |
+| FR-EMG-04 | FCM + SMS to all contacts | 🟡 **unblocked 2026-08-21** — email was *blocked*, not broken: Render's free tier refuses outbound 25/465/587, so correct code with valid credentials simply timed out in production. `brevo_email.py` sends over HTTPS instead; set `BREVO_API_KEY` and it delivers. SMS ⛔ still unconfigured (paid). `emergency_dispatch.py` keeps priority order, per-contact isolation and 3 attempts, now off the request path |
 | FR-EMG-05 | Alert payload contents | ✅ name, time, maps link, within the 160-char budget. Evidence URL is carried when one exists (see FR-EMG-06) |
 | FR-EMG-06 | Auto-start evidence recording | ✅ audio, starting with the countdown (ahead of the 1s requirement). Video deliberately not attempted — see the log |
 | FR-EMG-07 | AES-256 at rest + TLS 1.3 | ✅ AES-256-GCM at rest, owner-only retrieval, 22 tests. TLS in transit is the deployment's job (cert pinning is done client-side) |
 | FR-EMG-08 | False-alarm cancellation logged | ✅ |
-| FR-EMG-09 | Offline emergency queue | ✅ `core/offline` |
+| FR-EMG-09 | Offline emergency queue | ✅ `core/offline`. **Corrected 2026-08-21** — the drainer fired only on an offline→online transition, so an alert queued after a *timeout* on a working connection never replayed at all. Now also drains on a 30s sweep and on app resume (2 tests) |
 | FR-EMG-10 | Up to 10 contacts, drag priority, OTP per contact | ✅ all three. Ten-contact cap enforced server-side; per-contact code emailed to the contact and read back by the user |
 
 ### §4.4 Live Monitoring
@@ -1480,3 +1480,126 @@ someone is waiting on. Neither is acceptable as a silent default.
 
 333 backend tests pass (up from 327), 617 Flutter tests pass, analyze clean.
 
+## 2026-08-21 — five defects from a real phone, and one cause behind three
+
+Five screenshots from a real device. Four of them traced to two root causes,
+and the most serious one had been mis-attributed to the network.
+
+### The SOS answered in two minutes, and the phone gave up at fifteen seconds
+
+`POST /alerts/emergency` awaited the whole contact fan-out before responding.
+Each contact is attempted on up to three channels, each channel retried three
+times, and a channel whose port is *blocked* fails by timing out rather than
+refusing — 20s per attempt. Two contacts against Render's blocked SMTP ports:
+roughly two minutes of wall clock. `AppConfig.apiReceiveTimeout` is 15s.
+
+So the client timed out, the catch queued the alert, and the screen said **"You
+are offline. Your alert is saved and will send the moment you have signal."**
+to a woman holding a phone with full signal — about an alert the server had in
+fact received and was still working on. The screenshot showing that sentence
+next to a full signal bar is the whole bug in one image.
+
+Three separate defects fell out of it:
+
+* The **queued alert never drained.** `OfflineQueueDrainer` fired only on an
+  offline→online transition. The device was never offline, so the transition
+  never happened, so the alert sat in Hive forever. FR-EMG-09 was not actually
+  satisfied on the path that matters most.
+* A **replay would have duplicated the emergency.** The incident is committed
+  before the fan-out, so the timeout meant "we stopped listening", not
+  "nothing happened" — and re-sending filed a second incident.
+* The **evidence was discarded.** A queued alert had no incident id, so
+  `_finishRecording(null)` cancelled the recording outright. The emergencies
+  that went worst were the only ones that also lost their evidence.
+
+The fan-out now runs as a background task. The response returns as soon as the
+incident is durable, carrying `dispatch_status: "in_progress"`, and the screen
+polls `GET /alerts/emergency/{id}/dispatch` every two seconds until it settles.
+The incident id is generated **on the device** before anything is sent, which
+is what makes the retry idempotent and what gives the recording something to
+be filed against either way.
+
+The auto-SOS path was backgrounded on the same reasoning — more so, since an
+automatic alert has no countdown absorbing the wait.
+
+### "You are offline" is now only said when it is true
+
+The connectivity flag is still never used to decide whether to *try* — that
+was fixed in an earlier session and stays fixed. It is now consulted only
+after a failure, and only to word the message. Online-but-unreachable says the
+alert is saved and still being tried, and points at the emergency number.
+
+Three states, kept apart on the contact rows too: `Sending…` while the server
+is still fanning out, `Retrying…` when queued with a live network, `Will send
+when you have signal` when genuinely offline, and `Could not reach` only once
+the server says it has finished. Showing "Could not reach" mid-fan-out is the
+same false report as the original bug, in the opposite direction.
+
+### The biometric toggle had never once shown a prompt
+
+`MainActivity` extended `FlutterActivity`. `local_auth` renders the AndroidX
+BiometricPrompt, which is a Fragment and needs a `FragmentActivity`, so the
+plugin threw `no_fragment_activity` before anything appeared on screen.
+`BiometricService` caught every exception into a bare `false`, and the UI
+reported "Authentication failed or was cancelled" — inviting the user to retry
+the one thing that could never work.
+
+One-word fix in Kotlin. The more useful change is that the service no longer
+collapses its failure modes: not-enrolled, locked out, permanently locked out,
+cancelled and *misconfigured* are now distinct, and a cancel deliberately
+produces no message at all.
+
+### Email over HTTPS, because SMTP is not coming back on this host
+
+Render's free tier blocks outbound 25, 465 and 587. That is every port SMTP
+speaks, it is policy rather than configuration, and it is why emergency email
+*and* contact verification both failed in production while passing on a
+laptop — the shape of defect that is invisible in development and total in
+production.
+
+`brevo_email.py` sends over ordinary HTTPS on 443. Brevo was chosen over
+OneSignal for one reason: it verifies an individual sender address, where
+OneSignal demands a sending domain with SPF/DKIM/DMARC and refuses Gmail
+outright, which is the wall this project already hit once. `build_email_sender`
+now prefers HTTPS and keeps SMTP as the fallback for deployments where it
+works. `send_email` routes the OTP, lockout and reset mail the same way, so
+sign-up verification stops depending on a blocked port too.
+
+Set `BREVO_API_KEY` and email starts working; nothing else changes. The SMTP
+socket timeout also dropped from a hardcoded 20s to a configurable 10s.
+
+### "Download My Data" now downloads data
+
+The button had shipped for months over a sheet that admitted no export
+endpoint existed. `GET /users/me/export` is GDPR Article 15 — the counterpart
+to the Article 17 erasure sitting directly beneath it in the same UI section.
+
+Evidence is referenced by id and download URL, never inlined: recordings are
+encrypted at rest specifically so they are not sitting in plaintext somewhere
+less careful, and an export lands in a Downloads folder. Credentials are
+excluded for the same reason, and both properties are pinned by tests rather
+than left to review.
+
+### Recorded, not answered
+
+**A dropped background task leaves an incident on `in_progress` forever.**
+FastAPI runs the fan-out in the same process after the response is sent, so a
+worker killed in that window loses it, and nothing sweeps for stale
+dispatches. The client stops polling after two minutes and shows the last
+state it saw, which degrades honestly rather than lying — but the row stays
+wrong. A real job queue, or a periodic sweep over `dispatch_status =
+'in_progress'` older than a few minutes, is the fix; neither was in scope for
+a defect-fixing pass.
+
+The evidence upload retries for two minutes when the alert was queued, holding
+the bytes **in memory only**. Persisting them would let the recording survive
+the app being killed, and would also leave a recording of an assault in the
+device's temp directory — which is what `EvidenceRecording` exists to avoid.
+The trade was taken deliberately in favour of the existing privacy decision,
+and a recording that cannot be uploaded inside the window is reported as lost
+rather than quietly written to disk.
+
+### State
+
+341 backend tests pass (up from 333), 639 Flutter tests pass (up from 617),
+`flutter analyze` clean, migration 0013 verified reversible against SQLite.

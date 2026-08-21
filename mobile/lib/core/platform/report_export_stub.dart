@@ -5,3 +5,10 @@ import 'dart:typed_data';
 /// show "Preparing PDF export…" and then do nothing at all, which is the
 /// failure mode this whole file exists to avoid.
 Future<bool> sharePdf({required Uint8List bytes, required String filename}) async => false;
+
+Future<bool> shareBytes({
+  required Uint8List bytes,
+  required String filename,
+  required String mimeType,
+  required String subject,
+}) async => false;

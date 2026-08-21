@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -71,6 +73,9 @@ class _FakeProfileRepository implements ProfileRepository {
 
   @override
   Future<UserProfile> updateProfile({String? name, String? phone, double? threatThreshold}) => throw UnimplementedError();
+
+  @override
+  Future<List<int>> exportMyData() async => utf8.encode('{"account":{}}');
 }
 
 class _FakeDeviceRepository implements DeviceRepository {

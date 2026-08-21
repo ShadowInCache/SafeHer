@@ -65,6 +65,31 @@ class Settings(BaseSettings):
     smtp_use_ssl_override: Optional[bool] = None
     smtp_from_email: Optional[str] = None
     smtp_from_name: str = "SafeHer"
+    # How long to wait on the SMTP socket.
+    #
+    # Ten seconds, not the twenty this used to hardcode, because the failure
+    # this most often meets is a *blocked port* rather than a slow server —
+    # and a blocked port does not refuse, it hangs until the timeout. At three
+    # attempts per channel per contact, twenty seconds turned two contacts
+    # into two minutes of a worker doing nothing. A real mail server answers
+    # in well under ten.
+    smtp_timeout_seconds: int = 10
+
+    # --- Brevo (HTTPS email) --------------------------------------------
+    # The channel that works where SMTP cannot.
+    #
+    # Render's free web services block outbound traffic on ports 25, 465 and
+    # 587, which is every port SMTP speaks. The credentials are fine and the
+    # code is correct; the platform simply refuses to route the packets, so
+    # emergency email and contact verification both failed in production
+    # while working perfectly from a laptop.
+    #
+    # Brevo delivers over ordinary HTTPS, which no such policy blocks, and its
+    # free tier verifies an individual sender address rather than requiring a
+    # domain you own — which is what rules OneSignal out for this project (see
+    # `services/onesignal.py`). Set BREVO_API_KEY and email starts working
+    # with no other change.
+    brevo_api_key: Optional[str] = None
     # Left unset, verification is enforced exactly when OTPs can actually be
     # delivered. Forcing it on without SMTP would lock every new account out of
     # an app it just created, so the default follows deliverability rather than
@@ -171,6 +196,23 @@ class Settings(BaseSettings):
         return bool(self.smtp_host and self.smtp_from_email)
 
     @property
+    def brevo_configured(self) -> bool:
+        # The sender address is Brevo's, but it is the same address SMTP
+        # sends from, so it is read from one setting rather than two that can
+        # drift apart.
+        return bool(self.brevo_api_key and self.smtp_from_email)
+
+    @property
+    def email_configured(self) -> bool:
+        """Whether *any* email channel can send.
+
+        Used wherever the question is "can this reach a contact by email",
+        which is not the same as "is SMTP set up" now that there are two
+        transports.
+        """
+        return self.brevo_configured or self.smtp_configured
+
+    @property
     def smtp_use_ssl(self) -> bool:
         if self.smtp_use_ssl_override is not None:
             return self.smtp_use_ssl_override
@@ -180,7 +222,10 @@ class Settings(BaseSettings):
     def email_verification_required(self) -> bool:
         if self.require_email_verification is not None:
             return self.require_email_verification
-        return self.smtp_configured
+        # Follows deliverability, not SMTP specifically: an HTTPS channel can
+        # send the OTP just as well, and requiring verification the app cannot
+        # deliver would lock every new account out of itself.
+        return self.email_configured
 
     @field_validator("api_prefix", mode="before")
     @classmethod

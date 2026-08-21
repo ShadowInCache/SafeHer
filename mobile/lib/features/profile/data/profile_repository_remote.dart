@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import '../../../core/network/api_client.dart';
 import '../domain/models/user_profile.dart';
 import '../domain/profile_repository.dart';
@@ -21,6 +23,19 @@ class ProfileRepositoryRemote implements ProfileRepository {
       safetyScore: null,
       streakDays: null,
     );
+  }
+
+  @override
+  Future<List<int>> exportMyData() async {
+    // Asked for as bytes so the document reaches the file exactly as the
+    // server wrote it — Dio would otherwise decode the JSON and the caller
+    // would re-encode it, changing key order and formatting in a document
+    // whose whole purpose is to be a faithful copy.
+    final response = await _apiClient.dio.get<List<int>>(
+      '/users/me/export',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data ?? const <int>[];
   }
 
   @override

@@ -14,4 +14,19 @@ class ReportExport {
   /// say why instead of appearing to do nothing.
   Future<bool> sharePdf({required Uint8List bytes, required String filename}) =>
       impl.sharePdf(bytes: bytes, filename: filename);
+
+  /// Shares any exported document — currently the incident PDF and the GDPR
+  /// data export, which want the same "hand it to the user, keep no copy"
+  /// behaviour and differ only in type.
+  Future<bool> shareBytes({
+    required Uint8List bytes,
+    required String filename,
+    required String mimeType,
+    required String subject,
+  }) => impl.shareBytes(
+    bytes: bytes,
+    filename: filename,
+    mimeType: mimeType,
+    subject: subject,
+  );
 }

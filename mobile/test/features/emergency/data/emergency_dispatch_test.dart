@@ -29,6 +29,7 @@ class _RecordingRepository implements EmergencyRepository {
     required String severity,
     required String summary,
     required bool auto,
+    String? incidentId,
     double? latitude,
     double? longitude,
     double? accuracyMeters,
@@ -42,6 +43,11 @@ class _RecordingRepository implements EmergencyRepository {
       reachedContactIds: ['c1', 'c2'],
     );
   }
+
+  @override
+  Future<DispatchOutcome> fetchDispatchStatus(String incidentId) async =>
+      DispatchOutcome(incidentId: incidentId, progress: DispatchProgress.complete);
+
 }
 
 ProviderContainer _container(_RecordingRepository repository, {required bool offline}) {
@@ -67,6 +73,9 @@ Future<DispatchResult> _dispatch(ProviderContainer container) async {
     severity: 'critical',
     summary: 'Emergency SOS triggered',
     auto: false,
+    // Chosen by the caller, as the real screen does — this is what makes a
+    // retry after a timeout resolve to one incident instead of two.
+    incidentId: 'incident-under-test',
     latitude: 12.85,
     longitude: 77.68,
   );

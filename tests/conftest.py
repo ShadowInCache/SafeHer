@@ -33,6 +33,10 @@ os.environ.setdefault("TWILIO_AUTH_TOKEN", "")
 os.environ.setdefault("TWILIO_FROM_NUMBER", "")
 os.environ.setdefault("ONESIGNAL_APP_ID", "")
 os.environ.setdefault("ONESIGNAL_API_KEY", "")
+# Brevo delivers over HTTPS, so unlike SMTP it is reachable from the test
+# runner on any host. Blanked for the same reason as the rest: a suite that
+# can send real mail will eventually send some.
+os.environ.setdefault("BREVO_API_KEY", "")
 os.environ.setdefault("FCM_SERVER_KEY", "")
 os.environ.setdefault("FCM_SERVICE_ACCOUNT_FILE", "")
 os.environ.setdefault("FCM_SERVICE_ACCOUNT_JSON", "")

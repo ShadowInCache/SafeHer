@@ -30,6 +30,51 @@ import '../../../test_utils/fake_evidence_recorder.dart';
 import '../../../test_utils/offline_test_overrides.dart';
 import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
+/// Answers `in_progress` first and settles only when [settle] is called.
+///
+/// The real backend now returns before the contact fan-out has finished, so a
+/// fake that returns the final answer immediately cannot exercise the state
+/// the screen spends most of its time in — which is exactly the state that
+/// used to be rendered wrong.
+class _PollingEmergencyRepository implements EmergencyRepository {
+  // Fixed at two, matching `_sampleContacts()`. Not a parameter: every test
+  // that uses this fake asserts against those same two contacts, and a knob
+  // nobody turns is one more thing that can disagree with the fixture.
+  final int contactsTotal = 2;
+  int pollCount = 0;
+  DispatchOutcome? _settled;
+
+  void settle(DispatchOutcome outcome) => _settled = outcome;
+
+  @override
+  Future<DispatchOutcome> dispatchAlert({
+    required String severity,
+    required String summary,
+    required bool auto,
+    String? incidentId,
+    double? latitude,
+    double? longitude,
+    double? accuracyMeters,
+  }) async => DispatchOutcome(
+    incidentId: incidentId,
+    contactsTotal: contactsTotal,
+    contactsNotified: 0,
+    progress: DispatchProgress.inProgress,
+  );
+
+  @override
+  Future<DispatchOutcome> fetchDispatchStatus(String incidentId) async {
+    pollCount++;
+    return _settled ??
+        DispatchOutcome(
+          incidentId: incidentId,
+          contactsTotal: contactsTotal,
+          contactsNotified: 0,
+          progress: DispatchProgress.inProgress,
+        );
+  }
+}
+
 class _RecordingEmergencyRepository implements EmergencyRepository {
   _RecordingEmergencyRepository({
     this.outcome = const DispatchOutcome(contactsTotal: 2, contactsNotified: 2),
@@ -52,6 +97,7 @@ class _RecordingEmergencyRepository implements EmergencyRepository {
     required String severity,
     required String summary,
     required bool auto,
+    String? incidentId,
     double? latitude,
     double? longitude,
     double? accuracyMeters,
@@ -67,6 +113,11 @@ class _RecordingEmergencyRepository implements EmergencyRepository {
     });
     return outcome;
   }
+
+  @override
+  Future<DispatchOutcome> fetchDispatchStatus(String incidentId) async =>
+      DispatchOutcome(incidentId: incidentId, progress: DispatchProgress.complete);
+
 }
 
 List<Contact> _sampleContacts() => const [
@@ -316,7 +367,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(recorder.stopCalls, 1);
-      expect(evidence.uploads, ['incident-42']);
+      // Filed against the id this device generated before dispatch, not one
+      // read back off the response. That is what lets the recording be
+      // attached even when the response never arrived — so the assertion is
+      // "exactly one upload, against a real id", not a literal from the fake.
+      expect(evidence.uploads, hasLength(1));
+      expect(evidence.uploads.single, isNotEmpty);
       expect(find.text('Evidence saved and encrypted'), findsOneWidget);
     });
 
@@ -391,7 +447,16 @@ void main() {
       );
     });
 
-    testWidgets('an offline alert discards the recording it cannot attach', (tester) async {
+    testWidgets('a queued alert keeps its recording instead of discarding it', (tester) async {
+      // Regression, and a reversal of the previous behaviour. This used to
+      // assert that a queued alert threw its recording away, on the reasoning
+      // that no incident existed to attach it to. That reasoning was sound
+      // and the consequence was not: the alert that fails to send is the one
+      // most likely to matter, and it was the only one that also lost its
+      // evidence.
+      //
+      // The incident id is now chosen on the device before anything is sent,
+      // so the recording has something to be filed against either way.
       final queue = OfflineQueueService(FakeOfflineQueueBox());
       final recorder = FakeEvidenceRecorder();
       final evidence = FakeEvidenceRepository();
@@ -407,9 +472,145 @@ void main() {
       await tester.pump(const Duration(seconds: 21));
       await tester.pump(const Duration(milliseconds: 300));
 
-      // No incident id exists yet, so there is nothing to attach it to.
-      expect(evidence.uploads, isEmpty);
-      expect(recorder.cancelCalls, greaterThanOrEqualTo(1));
+      expect(evidence.uploads, hasLength(1));
+      expect(evidence.uploads.single, isNotEmpty);
+      expect(
+        recorder.cancelCalls,
+        0,
+        reason: 'the recording must be stopped and kept, not abandoned',
+      );
+    });
+
+    testWidgets('a contact still being tried reads as sending, not as failed', (tester) async {
+      // The server answers the SOS before it has contacted anyone, so for the
+      // first seconds every contact is legitimately "not yet reached".
+      // Rendering that as "Could not reach" would tell a woman her sister is
+      // unreachable while the message is still going out.
+      final repo = _PollingEmergencyRepository();
+      await tester.pumpWidget(_harness(emergencyRepo: repo));
+      await tester.pump(const Duration(milliseconds: 100));
+      await _holdSos(tester);
+      for (var i = 0; i < 11; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Sending\u2026'), findsNWidgets(2));
+      expect(find.text('Could not reach'), findsNothing);
+      expect(find.text('Alerting your 2 emergency contacts\u2026'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 25));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('polling turns sending into a real answer', (tester) async {
+      // The defect this replaces: contacts sat on "Sending\u2026" forever,
+      // because the only thing that could ever change them was the dispatch
+      // response — and that response now comes back before the answer exists.
+      final repo = _PollingEmergencyRepository();
+      await tester.pumpWidget(_harness(emergencyRepo: repo));
+      await tester.pump(const Duration(milliseconds: 100));
+      await _holdSos(tester);
+      for (var i = 0; i < 11; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+
+      repo.settle(
+        const DispatchOutcome(
+          contactsTotal: 2,
+          contactsNotified: 1,
+          reachedContactIds: ['1'],
+          failedContactIds: ['2'],
+          progress: DispatchProgress.complete,
+        ),
+      );
+      // One poll interval.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(repo.pollCount, greaterThan(0));
+      expect(find.text('1 of 2 emergency contacts alerted.'), findsOneWidget);
+      expect(find.text('Could not reach'), findsOneWidget);
+      expect(find.text('Sending\u2026'), findsNothing);
+
+      await tester.pump(const Duration(seconds: 25));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a failed send while online never claims the phone is offline', (tester) async {
+      // The reported bug, exactly. The phone had full signal; the request
+      // timed out because the server was still fanning out; the screen said
+      // "You are offline. Your alert is saved and will send the moment you
+      // have signal." That sentence tells someone in danger to wait for a
+      // signal she already has.
+      final queue = OfflineQueueService(FakeOfflineQueueBox());
+      final repo = _RecordingEmergencyRepository()..unreachable = true;
+      await tester.pumpWidget(
+        _harness(offline: false, queueService: queue, emergencyRepo: repo),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await _holdSos(tester);
+      for (var i = 0; i < 11; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.textContaining('You are offline'), findsNothing);
+      expect(find.textContaining('still trying to send it'), findsOneWidget);
+      expect(find.text('Will send when you have signal'), findsNothing);
+      expect(find.text('Retrying\u2026'), findsNWidgets(2));
+
+      await tester.pump(const Duration(seconds: 25));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a genuinely offline phone is still told it is offline', (tester) async {
+      // The other half of the same fix: the offline message is correct when
+      // the device really has no network, and must not be lost in making the
+      // online case honest.
+      final queue = OfflineQueueService(FakeOfflineQueueBox());
+      final repo = _RecordingEmergencyRepository()..unreachable = true;
+      await tester.pumpWidget(
+        _harness(offline: true, queueService: queue, emergencyRepo: repo),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await _holdSos(tester);
+      for (var i = 0; i < 11; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.textContaining('You are offline'), findsOneWidget);
+      expect(find.text('Will send when you have signal'), findsNWidgets(2));
+
+      await tester.pump(const Duration(seconds: 25));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the queued alert carries the id so a replay cannot duplicate it', (tester) async {
+      final queue = OfflineQueueService(FakeOfflineQueueBox());
+      final repo = _RecordingEmergencyRepository()..unreachable = true;
+      await tester.pumpWidget(
+        _harness(offline: true, queueService: queue, emergencyRepo: repo),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await _holdSos(tester);
+      for (var i = 0; i < 11; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(queue.pending, hasLength(1));
+      final payload = queue.pending.single.payload;
+      expect(
+        payload['incidentId'],
+        isA<String>().having((id) => id.isNotEmpty, 'is a real id', isTrue),
+        reason: 'without this the replay files a second emergency',
+      );
+
+      await tester.pump(const Duration(seconds: 25));
+      await tester.pumpAndSettle();
     });
 
     testWidgets('contacts are marked reached only when the server says so', (tester) async {

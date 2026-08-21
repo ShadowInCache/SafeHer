@@ -52,13 +52,13 @@ def _send_blocking(settings: Settings, message: EmailMessage) -> None:
     happened here.
     """
     if settings.smtp_use_ssl:
-        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=20) as client:
+        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=settings.smtp_timeout_seconds) as client:
             if settings.smtp_username:
                 client.login(settings.smtp_username, settings.smtp_password or "")
             client.send_message(message)
         return
 
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as client:
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=settings.smtp_timeout_seconds) as client:
         if settings.smtp_use_tls:
             client.starttls()
         if settings.smtp_username:
@@ -79,8 +79,41 @@ async def send_email(
     `smtplib` is blocking, so it runs in a worker thread; doing it inline would
     stall every other request for the duration of the SMTP handshake.
     """
+    # HTTPS first when it is available. Everything this function sends — the
+    # sign-up OTP, the lockout notice, the password reset — died silently in
+    # production for the same reason the emergency email did: the host blocks
+    # every SMTP port, so a correct implementation with valid credentials
+    # simply hung. See `brevo_email.py`.
+    if settings.brevo_configured:
+        from fastapi_app.services.brevo_email import BrevoDeliveryError, BrevoEmailSender
+
+        sender = BrevoEmailSender(
+            api_key=settings.brevo_api_key,
+            from_email=settings.smtp_from_email,
+            from_name=settings.smtp_from_name,
+        )
+        try:
+            await sender.send(
+                to=to,
+                subject=subject,
+                # Brevo takes HTML. A plain-text-only caller (the OTP mail)
+                # gets its newlines preserved rather than collapsed into one
+                # run-on line, which is what an unescaped <pre>-less body does.
+                html_body=html_body or _as_html(body),
+            )
+            return
+        except BrevoDeliveryError as exc:
+            logger.warning("Brevo delivery to %s failed: %s", to, exc)
+            # Fall through to SMTP rather than giving up: on a host where SMTP
+            # does work, a Brevo outage should not take email down with it.
+            if not settings.smtp_configured:
+                raise EmailDeliveryError(str(exc)) from exc
+
     if not settings.smtp_configured:
-        raise EmailNotConfigured("SMTP_HOST and SMTP_FROM_EMAIL are not set")
+        raise EmailNotConfigured(
+            "No email channel is configured. Set BREVO_API_KEY (HTTPS) or "
+            "SMTP_HOST and SMTP_FROM_EMAIL."
+        )
 
     message = _build_message(
         settings=settings, to=to, subject=subject, body=body, html_body=html_body
@@ -90,6 +123,19 @@ async def send_email(
     except (smtplib.SMTPException, OSError) as exc:
         logger.warning("SMTP delivery to %s failed: %s", to, exc)
         raise EmailDeliveryError(str(exc)) from exc
+
+
+def _as_html(body: str) -> str:
+    """Wraps a plain-text body for a channel that only takes HTML.
+
+    Escaped, then line breaks restored. Escaping matters even here: a
+    verification mail interpolates nothing user-supplied today, but the next
+    caller of `send_email` might, and an unescaped body is how that becomes an
+    injection into someone's inbox.
+    """
+    import html as _html
+
+    return "<p>" + _html.escape(body).replace("\n", "<br />") + "</p>"
 
 
 async def send_verification_code(*, settings: Settings, to: str, code: str) -> None:

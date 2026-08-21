@@ -112,6 +112,23 @@ class Incident(Base):
     # a migration during a live deployment.
     detections = Column(Text, nullable=True)
 
+    # SRS FR-EMG-01/04 -- the state of the contact fan-out, which now runs in
+    # the background so the SOS response is not held behind it.
+    #
+    # NULL means no dispatch was ever attempted for this incident. That is a
+    # different fact from "attempted and reached nobody", and the two must not
+    # collapse: one is an incident filed by some other route, the other is the
+    # worst outcome the product has.
+    dispatch_status = Column(String, nullable=True)
+    contacts_total = Column(Integer, nullable=True)
+    contacts_notified = Column(Integer, nullable=True)
+    # JSON arrays of contact ids. A snapshot of one dispatch attempt, not a
+    # fact about the contacts themselves -- see migration 0013 for why this
+    # is not modelled as rows.
+    contacts_reached = Column(Text, nullable=True)
+    contacts_failed = Column(Text, nullable=True)
+    dispatch_completed_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, nullable=False, default=_utcnow)
     updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
 

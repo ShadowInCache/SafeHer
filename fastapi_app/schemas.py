@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class UserBase(BaseModel):
@@ -211,8 +211,47 @@ class IncidentPublic(BaseModel):
     # guess *which* contacts were reached, and guessing wrong on this screen
     # tells a woman in danger that help is coming when it is not.
     contacts_reached: Optional[list[str]] = None
+    # Contacts every channel refused. Sent separately from "absent from
+    # `contacts_reached`" because until the fan-out finishes those are the
+    # same list, and the screen must not show a contact still being tried as
+    # one nobody could reach.
+    contacts_failed: Optional[list[str]] = None
+
+    # "in_progress" while the background fan-out is still running,
+    # "complete" once it has finished, "failed" if it crashed. None means no
+    # dispatch was ever attempted for this incident.
+    dispatch_status: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("contacts_reached", "contacts_failed", mode="before")
+    @classmethod
+    def _decode_id_list(cls, value: Any) -> Any:
+        """Accepts the JSON text the column stores, or a list from a router.
+
+        `Incident.contacts_reached` is a Text column holding a JSON array,
+        because it is a snapshot of one dispatch rather than a relation. That
+        means `model_validate(incident)` hands this field a `str`, and without
+        this it fails validation — which took out every endpoint that returns
+        an incident, not just the dispatch ones.
+
+        A malformed value degrades to an empty list rather than raising. The
+        alternative is a 500 on the incident list because one row's audit
+        column is unparseable.
+        """
+        if value is None or isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            if not value:
+                return None
+            import json as _json
+
+            try:
+                parsed = _json.loads(value)
+            except ValueError:
+                return []
+            return parsed if isinstance(parsed, list) else []
+        return value
 
 
 class DeviceRegisterRequest(BaseModel):

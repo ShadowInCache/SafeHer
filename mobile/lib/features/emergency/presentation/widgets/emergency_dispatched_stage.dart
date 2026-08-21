@@ -66,7 +66,23 @@ class EmergencyDispatchedStage extends StatelessWidget {
       return ('Sending…', Colors.white.withValues(alpha: 0.5));
     }
     if (result.isQueued) {
-      return ('Will send when you have signal', Colors.white.withValues(alpha: 0.5));
+      return switch (result.queueReason) {
+        QueueReason.offline => (
+          'Will send when you have signal',
+          Colors.white.withValues(alpha: 0.5),
+        ),
+        // The phone has a network; SafeHer just could not be reached. Saying
+        // "when you have signal" here told a woman with five bars to wait for
+        // something she already had.
+        _ => ('Retrying…', Colors.white.withValues(alpha: 0.5)),
+      };
+    }
+    // The server answers before it has finished contacting anyone. Until it
+    // says it is done, a contact that is not yet reached is still being
+    // tried — calling that "Could not reach" is the same false report in the
+    // opposite direction.
+    if (!result.outcome.progress.isSettled) {
+      return ('Sending…', Colors.white.withValues(alpha: 0.5));
     }
     return ('Could not reach', AppColors.warning500);
   }
@@ -80,15 +96,37 @@ class EmergencyDispatchedStage extends StatelessWidget {
   String get _statusLine {
     final result = dispatchResult;
     if (result == null) return 'Alerting your emergency contacts…';
+
     if (result.isQueued) {
-      return 'You are offline. Your alert is saved and will send the moment '
-          'you have signal.';
+      return switch (result.queueReason) {
+        QueueReason.offline =>
+          'You are offline. Your alert is saved and will send the moment you '
+              'have signal.',
+        // Deliberately does not claim the alert failed *or* that it was
+        // delivered. Neither is known: the request did not come back, which
+        // is not the same as it not arriving. It says what SafeHer is doing
+        // and what she can do that does not depend on us.
+        _ =>
+          'Your alert is saved and SafeHer is still trying to send it. If you '
+              'need help now, call your emergency number.',
+      };
     }
+
     final total = result.outcome.contactsTotal ?? 0;
     final reached = result.outcome.contactsNotified ?? 0;
+
     if (total == 0) {
       return 'No emergency contacts are set up, so nobody could be alerted.';
     }
+
+    // Still fanning out. Reporting a final count here would be a guess that
+    // gets more wrong the more contacts there are.
+    if (!result.outcome.progress.isSettled) {
+      return reached == 0
+          ? 'Alerting your $total emergency contacts…'
+          : '$reached of $total alerted so far…';
+    }
+
     if (reached == 0) return 'Your alert could not be delivered to anyone.';
     if (reached == total) {
       return reached == 1
@@ -158,12 +196,12 @@ class EmergencyDispatchedStage extends StatelessWidget {
                   priority: contact.priority,
                   confirmed: notifiedContactIds.contains(contact.id),
                 ),
-                if (_labelFor(contact.id) != null)
+                if (_labelFor(contact.id) case (final label, final colour))
                   Padding(
                     padding: const EdgeInsets.only(left: AppSpacing.space4, top: 2),
                     child: Text(
-                      _labelFor(contact.id)!.$1,
-                      style: AppTypography.bodyS.copyWith(color: _labelFor(contact.id)!.$2),
+                      label,
+                      style: AppTypography.bodyS.copyWith(color: colour),
                     ),
                   ),
                 const SizedBox(height: AppSpacing.space3),

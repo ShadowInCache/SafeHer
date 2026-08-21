@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi_app.config import Settings
+from fastapi_app.services.brevo_email import BrevoEmailSender
 from fastapi_app.services.email import EmailDeliveryError, EmailNotConfigured, send_email
 
 
@@ -70,10 +71,28 @@ def plain_text_fallback(*, subject: str, html_body: str) -> str:
 def build_email_sender(settings: Settings, *, onesignal_sender=None):
     """Picks the email channel to use.
 
-    SMTP first, not because it is better but because it is the one that can
-    be configured without a domain. Falls back to OneSignal, which has the
-    better deliverability once a sending domain is verified.
+    **Brevo first, over HTTPS.** This order was reversed after production
+    taught us why. SMTP was preferred because it needs no domain — true, and
+    useless on a host that blocks the ports. Render's free tier refuses
+    outbound 25, 465 and 587, so every emergency email and every contact
+    verification failed there while passing locally, which is the worst shape
+    a defect can have: invisible in development, total in production.
+
+    HTTPS on 443 is not blocked by anything. So the channel that is *reachable
+    from where the code runs* is tried first, and SMTP stays as the fallback
+    for a local or self-hosted deployment where it works fine.
+
+    OneSignal remains last: its deliverability is the best of the three once a
+    sending domain exists, and it is unusable until one does.
     """
+    brevo = BrevoEmailSender(
+        api_key=settings.brevo_api_key,
+        from_email=settings.smtp_from_email,
+        from_name=settings.smtp_from_name,
+    )
+    if brevo.is_configured:
+        return brevo
+
     smtp = SmtpEmailSender(settings)
     if smtp.is_configured:
         return smtp

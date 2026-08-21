@@ -581,9 +581,55 @@ class TestEmergencyDispatch(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 201, response.text)
         body = response.json()
         self.assertEqual(body["contacts_total"], 1)
-        # Twilio is unconfigured in CI, so nothing can actually be delivered
-        # — and the endpoint says so instead of claiming a send.
+        # Zero *so far*: the fan-out is queued, not finished, and the response
+        # says `in_progress` rather than pretending to a final count. What the
+        # dispatch actually achieved is asserted against the poll endpoint in
+        # `test_the_background_fan_out_actually_runs_and_records_its_outcome`.
         self.assertEqual(body["contacts_notified"], 0)
+        self.assertEqual(body["dispatch_status"], "in_progress")
+
+    async def test_the_background_fan_out_actually_runs_and_records_its_outcome(self):
+        """Proves the fan-out is wired, not merely scheduled.
+
+        This is the test that would fail if the background task were dropped —
+        the endpoint would still return a cheerful 201 and the incident would
+        sit on `in_progress` forever, which from the app looks like an alert
+        that is permanently "Sending…". That is the exact failure this whole
+        change set exists to remove, so it gets its own assertion rather than
+        being implied by the 201.
+
+        `httpx.ASGITransport` completes the ASGI cycle before `post()`
+        returns, and Starlette runs background tasks inside that cycle, so by
+        this point the dispatch has finished.
+        """
+        await self._add_contact(name="Anika", phone="+911111111111")
+
+        response = await self.client.post(
+            "/api/v1/alerts/emergency",
+            headers=self.headers,
+            json={
+                "severity": "critical",
+                "summary": "SOS",
+                "location": {"latitude": 17.3850, "longitude": 78.4867},
+            },
+        )
+        incident_id = response.json()["id"]
+
+        status = await self.client.get(
+            f"/api/v1/alerts/emergency/{incident_id}/dispatch", headers=self.headers
+        )
+        self.assertEqual(status.status_code, 200, status.text)
+        body = status.json()
+
+        self.assertEqual(body["status"], "complete")
+        self.assertEqual(body["contacts_total"], 1)
+        # No channel is configured in the suite, so the honest outcome is that
+        # the one contact could not be reached — named, not just counted, so
+        # the screen can mark that specific person rather than guessing.
+        self.assertEqual(body["contacts_notified"], 0)
+        self.assertEqual(body["contacts_reached"], [])
+        self.assertEqual(len(body["contacts_failed"]), 1)
+        self.assertIsNotNone(body["completed_at"])
 
     async def test_the_sos_still_succeeds_when_dispatch_reaches_nobody(self):
         response = await self.client.post(
@@ -602,18 +648,115 @@ class TestEmergencyDispatch(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.json()["contacts_total"], 0)
 
     async def test_listing_incidents_does_not_claim_a_dispatch_happened(self):
-        await self.client.post(
-            "/api/v1/alerts/emergency",
+        """An incident nobody dispatched must not report a dispatch result.
+
+        The dispatch outcome now lives on the incident row rather than only in
+        the POST response, so a listing *can* say who was reached -- which is
+        what the Reports screen needs. The invariant that still has to hold is
+        the one this test is named for: an incident created by some other
+        route has no dispatch, and must say None rather than 0. Zero would
+        read as "we tried everyone and reached nobody", which is the worst
+        outcome this product has and must never be reported by accident.
+        """
+        created = await self.client.post(
+            "/api/v1/incidents/",
             headers=self.headers,
-            json={"severity": "high", "summary": "SOS", "location": {"latitude": 1.0, "longitude": 2.0}},
+            json={"title": "Filed by hand", "threat_level": "low"},
         )
+        self.assertEqual(created.status_code, 201, created.text)
 
         response = await self.client.get("/api/v1/incidents/", headers=self.headers)
         self.assertEqual(response.status_code, 200, response.text)
 
-        # None, not 0: no dispatch was attempted on this endpoint, which is
-        # a different fact from "attempted and reached nobody".
-        self.assertIsNone(response.json()[0]["contacts_notified"])
+        incident = next(
+            item for item in response.json() if item["id"] == created.json()["id"]
+        )
+        self.assertIsNone(incident["contacts_notified"])
+        self.assertIsNone(incident["dispatch_status"])
+
+    async def test_an_sos_records_its_dispatch_state_on_the_incident(self):
+        """The SOS answers before the fan-out finishes, so it says so.
+
+        `in_progress` with an explicit zero reached is the honest report at
+        the moment the response is written: the dispatch has started and has
+        reached nobody *yet*. The client renders those contacts as pending and
+        polls for the outcome -- it must not render them as failed.
+        """
+        response = await self.client.post(
+            "/api/v1/alerts/emergency",
+            headers=self.headers,
+            json={"severity": "high", "summary": "SOS", "location": {"latitude": 1.0, "longitude": 2.0}},
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        body = response.json()
+
+        self.assertEqual(body["dispatch_status"], "in_progress")
+        self.assertEqual(body["contacts_notified"], 0)
+        self.assertEqual(body["contacts_reached"], [])
+        self.assertEqual(body["contacts_failed"], [])
+
+    async def test_replaying_the_same_incident_id_does_not_file_a_second_sos(self):
+        """A phone that timed out and retried must not alert everyone twice.
+
+        The client generates the incident id precisely so this is safe: it
+        cannot know whether a request it never got an answer to arrived, and
+        the previous behaviour filed a fresh incident every time -- so one
+        emergency became two, and every contact was messaged again.
+        """
+        # Unique per run: the test database persists between runs, and a
+        # hardcoded id collides with the row the previous run left behind.
+        incident_id = str(uuid4())
+        payload = {
+            "incident_id": incident_id,
+            "severity": "critical",
+            "summary": "SOS",
+            "location": {"latitude": 1.0, "longitude": 2.0},
+        }
+
+        first = await self.client.post(
+            "/api/v1/alerts/emergency", headers=self.headers, json=payload
+        )
+        second = await self.client.post(
+            "/api/v1/alerts/emergency", headers=self.headers, json=payload
+        )
+
+        self.assertEqual(first.status_code, 201, first.text)
+        self.assertEqual(second.status_code, 201, second.text)
+        self.assertEqual(first.json()["id"], incident_id)
+        self.assertEqual(second.json()["id"], incident_id)
+
+        listing = await self.client.get("/api/v1/incidents/", headers=self.headers)
+        matching = [item for item in listing.json() if item["id"] == incident_id]
+        self.assertEqual(len(matching), 1, "the replay filed a second incident")
+
+    async def test_dispatch_status_is_not_readable_by_another_account(self):
+        """The poll endpoint is owner-only, like every other incident route."""
+        response = await self.client.post(
+            "/api/v1/alerts/emergency",
+            headers=self.headers,
+            json={"severity": "high", "summary": "SOS", "location": {"latitude": 1.0, "longitude": 2.0}},
+        )
+        incident_id = response.json()["id"]
+
+        stranger_email = f"stranger-{uuid4().hex}@safeherapp.com"
+        await self.client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": stranger_email,
+                "password": "TestPass123!",
+                "full_name": "Someone Else",
+                "role": "user",
+            },
+        )
+        stranger_login = await self.client.post(
+            "/api/v1/auth/login",
+            json={"email": stranger_email, "password": "TestPass123!"},
+        )
+        probe = await self.client.get(
+            f"/api/v1/alerts/emergency/{incident_id}/dispatch",
+            headers={"Authorization": f"Bearer {stranger_login.json()['access_token']}"},
+        )
+        self.assertEqual(probe.status_code, 404, probe.text)
 
 
 if __name__ == "__main__":

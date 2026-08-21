@@ -1,7 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/platform/report_export.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -11,6 +14,8 @@ import '../../../../shared/components/overlays/sa_confirm_dialog.dart';
 import '../../../../shared/components/overlays/sa_toast.dart';
 import '../../../auth/data/auth_providers.dart';
 import '../../../auth/domain/auth_repository.dart';
+import '../../../../shared/utils/user_error.dart';
+import '../../data/profile_providers.dart';
 
 /// Profile > Data & Privacy — export and account deletion. Deletion
 /// requires typing "DELETE" (via [SaConfirmDialog]) before it's armed, and
@@ -29,35 +34,75 @@ class ProfileDataPrivacySection extends ConsumerStatefulWidget {
 
 class _ProfileDataPrivacySectionState extends ConsumerState<ProfileDataPrivacySection> {
   bool _deleting = false;
+  bool _exporting = false;
 
+  /// Matches how the rest of the app hands a document to the user — the
+  /// system share sheet, with no copy left behind in app storage.
+  static const _export = ReportExport();
+
+  /// Fetches the account's data and hands it to the share sheet.
+  ///
+  /// This used to open a sheet that summarised what an export *would*
+  /// contain and admitted no endpoint existed. `GET /users/me/export` now
+  /// does, so the button does what its label says: account, contacts,
+  /// devices, incidents, locations, journeys and the notification log, as
+  /// one JSON document.
+  ///
+  /// Evidence recordings are referenced by id and download URL rather than
+  /// embedded — they are encrypted at rest for a reason, and inlining an
+  /// assault recording into a file bound for a Downloads folder would undo
+  /// it.
   Future<void> _downloadData(BuildContext context) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.space5),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Your Data', style: AppTypography.headingM.copyWith(color: Theme.of(context).colorScheme.onSurface)),
-              const SizedBox(height: AppSpacing.space3),
-              Text(
-                widget.userDataSummary,
-                style: AppTypography.bodyM.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)),
-              ),
-              const SizedBox(height: AppSpacing.space4),
-              Text(
-                'A full export requires a live backend export endpoint, which isn\'t wired up in this build yet.',
-                style: AppTypography.bodyS.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      final bytes = await ref.read(profileRepositoryProvider).exportMyData();
+      if (!context.mounted) return;
+
+      if (bytes.isEmpty) {
+        showSaToast(
+          context,
+          message: 'The export came back empty. Please try again.',
+          type: SaToastType.error,
+        );
+        return;
+      }
+
+      final stamp = DateTime.now().toIso8601String().split('T').first;
+      final shared = await _export.shareBytes(
+        bytes: Uint8List.fromList(bytes),
+        filename: 'safeher-data-$stamp.json',
+        mimeType: 'application/json',
+        subject: 'My SafeHer data',
+      );
+      if (!context.mounted) return;
+      if (!shared) {
+        // Never fails silently: a button that appears to do nothing is what
+        // this whole change is replacing.
+        showSaToast(
+          context,
+          message: "Couldn't open the share sheet on this device.",
+          type: SaToastType.error,
+        );
+      }
+    } catch (error) {
+      if (context.mounted) {
+        showSaToast(
+          context,
+          // describeError maps a 404 on this route to "Server needs
+          // updating", which is exactly right here: the export endpoint is
+          // new, and the most likely failure is an app talking to a backend
+          // that has not been redeployed yet.
+          message: describeError(
+            error,
+            fallbackTitle: "Couldn't prepare your data export",
+          ).message,
+          type: SaToastType.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   Future<void> _deleteAccount(BuildContext context) async {
@@ -91,13 +136,21 @@ class _ProfileDataPrivacySectionState extends ConsumerState<ProfileDataPrivacySe
         const SizedBox(height: AppSpacing.space3),
         SaCard(
           semanticsLabel: 'Download my data',
-          onTap: () => _downloadData(context),
+          onTap: _exporting ? null : () => _downloadData(context),
           child: Row(
             children: [
               const SaIcon(SaIconGlyph.download, size: 20, color: AppColors.violet500),
               const SizedBox(width: AppSpacing.space3),
-              Expanded(child: Text('Download My Data', style: AppTypography.bodyL.copyWith(color: onSurface))),
-              SaIcon(SaIconGlyph.chevronRight, size: 18, color: onSurface.withValues(alpha: 0.4)),
+              Expanded(
+                child: Text(
+                  _exporting ? 'Preparing your data…' : 'Download My Data',
+                  style: AppTypography.bodyL.copyWith(color: onSurface),
+                ),
+              ),
+              if (_exporting)
+                const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              else
+                SaIcon(SaIconGlyph.chevronRight, size: 18, color: onSurface.withValues(alpha: 0.4)),
             ],
           ),
         ),

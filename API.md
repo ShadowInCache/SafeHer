@@ -66,6 +66,7 @@ Tokens are HS256-signed (`python-jose`), carry `sub` (email), `role`, `exp`, and
 | POST | `/me/emergency-contacts` | Bearer | `{name, phone, email?, relationship?, priority?}` → `EmergencyContactPublic` |
 | PUT | `/me/emergency-contacts/{contact_id}` | Bearer | partial update → `EmergencyContactPublic` |
 | DELETE | `/me/emergency-contacts/{contact_id}` | Bearer | 204 |
+| GET | `/me/export` | Bearer | → one JSON document with the account, emergency contacts, devices, incidents, locations, safe journeys, evidence *references* and notification log. GDPR Art. 15, the counterpart to `DELETE /auth/account`. Carries no password/OTP/PIN hashes or share tokens, and links evidence by id rather than inlining it — an export ends up in a Downloads folder. |
 
 ### Media (`/api/v1/media`)
 
@@ -101,12 +102,34 @@ Tokens are HS256-signed (`python-jose`), carry `sub` (email), `role`, `exp`, and
 | Method | Path | Auth | Body → Response |
 |---|---|---|---|
 | POST | `/process-threat` | Bearer | `{device_id, threat_type, confidence, summary, details?, location?}` — forwards to the external processor (`services/processor_client.py`), creates an `Incident` + WebSocket broadcast + best-effort FCM push if a threat is detected. → `{processor, threat_detected, live_score}` |
-| POST | `/emergency` | Bearer | `{incident_id?, auto?, severity, summary, location, contacts?, metadata?}` — user- or system-initiated SOS. Always creates an `Incident` + `Location` row, broadcasts, and pushes. → `IncidentPublic` (201) |
+| POST | `/emergency` | Bearer | `{incident_id?, auto?, severity, summary, location, contacts?, metadata?}` — user- or system-initiated SOS. Creates an `Incident` + `Location` row, broadcasts, pushes, and **queues** the contact fan-out. Returns as soon as the incident is durable, with `dispatch_status: "in_progress"`. → `IncidentPublic` (201) |
+| GET | `/emergency/{incident_id}/dispatch` | Bearer, owner-only | → `{incident_id, status, contacts_total, contacts_notified, contacts_reached[], contacts_failed[], completed_at}` — poll this for the fan-out result. 404 for an incident belonging to anyone else. |
 | POST | `/heartbeat` | Bearer | `{timestamp, threat_score, location}` — periodic monitoring ping, updates the live score. → `{status, score, level}` (202) |
 | GET | `/live` | Bearer | → `{live_score: {score, level, updated_at}, recent_incidents: [...]}` |
 
 Threat levels are derived from a 0–100 score: `< 35` low, `35–59` medium, `60–79`
 high, `≥ 80` critical.
+
+**The SOS does not wait for the fan-out.** Every contact is attempted on up to
+three channels with three attempts each, and a channel whose port is blocked
+fails by *timing out* rather than refusing — two contacts against a blocked
+SMTP port measured around two minutes, while the mobile client gives up at
+fifteen seconds. `POST /emergency` therefore commits the incident, schedules
+the fan-out as a background task and answers immediately; the outcome is read
+from `GET /emergency/{id}/dispatch` or pushed as a `dispatch_complete`
+WebSocket event.
+
+**`incident_id` is the idempotency key, and the client should send one.** A
+phone that never received a response cannot know whether the request arrived.
+Replaying the same id returns the existing incident untouched instead of
+filing a second emergency and messaging every contact twice. An id that
+belongs to *another* user does not fail the request — a new id is issued and
+the SOS proceeds, because no error is worth refusing an emergency over.
+
+`dispatch_status` is `null` on any incident that was never dispatched, which
+is deliberately distinct from `"complete"` with zero reached. Likewise
+`contacts_notified: null` means "no dispatch attempted", `0` means "attempted
+and reached nobody".
 
 **Known limitation:** `/alerts/live` reads from an in-process `dict`
 (`_latest_scores` in `routers/alerts.py`), not the database. It resets on every
@@ -117,7 +140,7 @@ fine for a single dev/staging instance, not safe to scale horizontally as-is.
 
 | Path | Description |
 |---|---|
-| `WS /api/v1/ws/alerts/{user_id}` | Live feed of `threat_alert` / `emergency_alert` events for that user, broadcast by `fastapi_app/realtime.py` whenever `/alerts/process-threat` or `/alerts/emergency` create an incident. |
+| `WS /api/v1/ws/alerts/{user_id}` | Live feed of `threat_alert` / `emergency_alert` events for that user, broadcast by `fastapi_app/realtime.py` whenever `/alerts/process-threat` or `/alerts/emergency` create an incident. Also carries `dispatch_complete` (`{incident_id, contacts_total, contacts_notified, contacts_reached[], contacts_failed[]}`) when the background fan-out finishes — the push counterpart to polling `GET /alerts/emergency/{id}/dispatch`. |
 
 ## Error responses
 
