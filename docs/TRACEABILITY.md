@@ -59,13 +59,13 @@ refuses to run it), **not built**.
 | FR-EMG-01 | done | `mobile/lib/features/emergency/presentation/emergency_screen.dart` |
 | FR-EMG-02 | partial | `fastapi_app/services/threat_fusion.py`, `fastapi_app/routers/alerts.py` — the decision path is complete and tested end to end, but no model produces a score to decide on, so it never fires in practice. `mobile/lib/core/detection/detection_status.dart` says so on the Profile screen rather than letting the threshold slider imply protection. The phone's own honest trigger (deliberate shake → countdown) does work. |
 | FR-EMG-03 | done | `mobile/lib/features/emergency/presentation/emergency_screen.dart` |
-| FR-EMG-04 | blocked | `fastapi_app/services/emergency_dispatch.py` — the dispatch runs and push is configured, but **email fails on the deployed host**: Render's free tier blocks outbound SMTP ports 25/465/587 (policy change, Sept 2025), so every send returns `[Errno 101] Network is unreachable`. The same block breaks contact verification. Fixed by any paid Render instance, or by moving to an HTTP email API. SMS remains unconfigured (Twilio is paid). |
+| FR-EMG-04 | partial | `fastapi_app/services/emergency_dispatch.py` — **unblocked 2026-08-22**. Email was blocked, not broken: Render's free tier refuses outbound SMTP 25/465/587, so correct code with valid credentials timed out in production. `fastapi_app/services/brevo_email.py` delivers over HTTPS instead; a real send with the incident report attached was accepted by Brevo (messageId returned) and the sender address is verified. Push is configured. **SMS remains unconfigured** (Twilio is paid), which is the stated limitation keeping this partial rather than done. |
 | FR-EMG-05 | partial | `fastapi_app/services/emergency_dispatch.py` — evidence URL follows in a second email, not the alert |
 | FR-EMG-06 | partial | `mobile/lib/core/evidence/evidence_recorder_io.dart` (audio), `video_recorder_io.dart` (video) — both capture on device; the camera is the phone's, not the glasses', so video only helps when the lens happens to be pointed at something |
 | FR-EMG-07 | done | `fastapi_app/services/evidence_store.py` — AES-256-GCM |
 | FR-EMG-08 | done | `mobile/lib/features/emergency/presentation/emergency_screen.dart` |
 | FR-EMG-09 | done | `mobile/lib/core/offline/offline_queue_service.dart` |
-| FR-EMG-10 | partial | `fastapi_app/services/contact_verification.py`, `fastapi_app/routers/users.py` — max 10 per spec, but the OTP cannot be delivered from the deployed host: same Render SMTP block as FR-EMG-04. |
+| FR-EMG-10 | partial | `fastapi_app/services/contact_verification.py`, `fastapi_app/routers/users.py` — max 10 per spec, drag-priority and per-contact OTP all implemented. The delivery block that made this partial is resolved with FR-EMG-04's move to HTTPS email; remains partial only until the OTP round trip is confirmed on the deployed host. |
 
 ## §4.4 Live Monitoring
 
