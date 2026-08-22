@@ -52,6 +52,34 @@ issue.
   requesting user, rather than 403ing after a lookup that would otherwise leak
   existence. Apply the same pattern to any new per-user resource route.
 
+## Evidence at rest
+
+Emergency recordings are the most sensitive data this system holds — audio and
+video of an assault in progress — and they are handled on three rules:
+
+- **Sealed before storage.** `EvidenceStore` encrypts with AES-256-GCM before
+  any backend receives a byte (`services/evidence_store.py`). The encryption
+  deliberately did not move down into the storage layer, so no backend can
+  accidentally persist plaintext: it is never given any. A failed
+  authentication tag is refused rather than returned, because bytes that may
+  have been altered are not evidence of anything.
+- **Never reachable by URL alone.** Retrieval goes through
+  `GET /api/v1/media/evidence/{id}` — authenticated, ownership-checked and
+  streamed. No public bucket, no CDN path, no signed URL is ever issued, so a
+  leaked link is not enough to view a recording.
+- **Stored somewhere durable.** Set `SUPABASE_URL` and `SUPABASE_SECRET_KEY`
+  and evidence goes to a private Supabase Storage bucket. Left unset it falls
+  back to `EVIDENCE_STORAGE_DIR` on the application server's own disk —
+  correct for a self-hosted deployment with a real volume, and **silently
+  destructive on any host with an ephemeral filesystem**, where every deploy
+  and restart deletes it. Uploads still return 201 and the database row still
+  persists, so nothing looks wrong until the recording is asked for.
+
+The bucket must be private, and `deployment/sql/supabase_setup.sql` creates it
+that way with a service-role-only policy rather than leaving it to a dashboard
+click. Use the secret (service_role) key, never the publishable one — the
+publishable key is designed to be distributed to clients.
+
 ## Known limitations / recommendations
 
 Carried forward from the archived project reports and reconfirmed in the 2026-08-08

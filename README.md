@@ -48,7 +48,7 @@ That requirement shapes the engineering in ways worth stating up front:
 | **One-tap SOS** | 10-second cancellable countdown (5/10/15s configurable), then dispatch. A centre FAB on the main navigation, plus shake-to-trigger and voice from anywhere. |
 | **Auto-SOS** | Fires without interaction when the fused threat score crosses your threshold. *Decision path complete; no trained model is producing scores yet — the app says so rather than implying it's watching.* |
 | **Contact fan-out** | Up to 10 contacts in your own priority order, each attempted independently on SMS → email → push, 3 attempts per channel. |
-| **Evidence capture** | Audio (and video when the camera can open) starts **with the countdown**, not after dispatch — so it covers the seconds spent deciding. AES-256-GCM at rest, owner-only retrieval. |
+| **Evidence capture** | Audio (and video when the camera can open) starts **with the countdown**, not after dispatch — so it covers the seconds spent deciding. AES-256-GCM at rest in a private Supabase bucket, owner-only retrieval — the provider holds ciphertext it cannot read. |
 | **Offline queue** | No signal? The alert is stored and replays on reconnect — driven by a periodic sweep and app-resume, not just a connectivity event. |
 | **Cancel PIN** | Optional server-side hashed PIN required to stand an alert down. Never stored on the device. |
 | **One-tap 112** | Fills the dialler. It cannot auto-dial — Android forbids `ACTION_CALL` for emergency numbers, and that's the right behaviour anyway. |
@@ -122,7 +122,7 @@ deliberate deviations: [docs/SRS_STATUS.md](docs/SRS_STATUS.md#deliberate-deviat
 | Layer | Technology |
 |---|---|
 | **Backend** | FastAPI · SQLAlchemy 2.0 (async) · Alembic · python-jose · passlib |
-| **Data** | Postgres (prod, Neon) / SQLite (dev) · Redis · Supabase events archive |
+| **Data** | Postgres (prod, Neon) / SQLite (dev) · Redis · Supabase (events archive + encrypted evidence bucket) |
 | **Realtime** | MQTT (Mosquitto) · WebSocket |
 | **Mobile** | Flutter · Riverpod (codegen) · GoRouter · Hive · Dio · golden_toolkit |
 | **ML** | XGBoost · scikit-learn · PyTorch/Ultralytics · librosa |

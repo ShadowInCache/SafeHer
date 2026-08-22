@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import secrets
 from datetime import datetime, timedelta
@@ -91,7 +92,10 @@ async def upload_evidence(
         )
 
     try:
-        storage_id = store.write(data)
+        # Off the event loop: with an object-store backend this is a network
+        # round trip of tens of megabytes, and blocking here would stall every
+        # other request on the worker -- including someone else's SOS.
+        storage_id = await asyncio.to_thread(store.write, data)
     except EvidenceStoreError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 
@@ -110,7 +114,11 @@ async def upload_evidence(
     followup = {"contacts_notified": 0, "share_expires_at": None}
     if notify_contacts:
         followup = await _send_evidence_followup(
-            session=session, settings=settings, user_id=current_user.id, incident=incident
+            session=session,
+            settings=settings,
+            user_id=current_user.id,
+            incident=incident,
+            store=store,
         )
 
     return {
@@ -126,7 +134,12 @@ async def upload_evidence(
 
 
 async def _send_evidence_followup(
-    *, session: AsyncSession, settings: Settings, user_id: str, incident: Incident
+    *,
+    session: AsyncSession,
+    settings: Settings,
+    user_id: str,
+    incident: Incident,
+    store: EvidenceStore,
 ) -> dict:
     """Mints a share link for the incident and emails it to the contacts.
 
@@ -156,6 +169,10 @@ async def _send_evidence_followup(
             user=owner,
             incident_id=incident.id,
             share_url=f"{settings.public_base_url.rstrip('/')}/share/{token}",
+            # Lets the follow-up attach the incident report. The recording
+            # this upload just stored is now hashable, which is exactly what
+            # makes the report worth sending.
+            evidence_store=store,
         )
         return {
             "contacts_notified": report.contacts_notified,
@@ -181,7 +198,7 @@ async def download_evidence(
     await _owned_incident(session, incident_id=media.incident_id, user_id=current_user.id)
 
     try:
-        data = store.read(media.url)
+        data = await asyncio.to_thread(store.read, media.url)
     except EvidenceStoreError as exc:
         raise HTTPException(status_code=status.HTTP_410_GONE, detail=str(exc))
 

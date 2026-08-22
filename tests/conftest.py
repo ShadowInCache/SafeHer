@@ -37,6 +37,11 @@ os.environ.setdefault("ONESIGNAL_API_KEY", "")
 # runner on any host. Blanked for the same reason as the rest: a suite that
 # can send real mail will eventually send some.
 os.environ.setdefault("BREVO_API_KEY", "")
+# Supabase holds evidence blobs now. Blanked so the suite falls back to a
+# local directory rather than reaching a real bucket -- a test that uploaded
+# there would put fixture data in the same store as real recordings.
+os.environ.setdefault("SUPABASE_URL", "")
+os.environ.setdefault("SUPABASE_SECRET_KEY", "")
 os.environ.setdefault("FCM_SERVER_KEY", "")
 os.environ.setdefault("FCM_SERVICE_ACCOUNT_FILE", "")
 os.environ.setdefault("FCM_SERVICE_ACCOUNT_JSON", "")

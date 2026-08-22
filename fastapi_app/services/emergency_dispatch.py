@@ -480,6 +480,7 @@ async def send_evidence_followup(
     incident_id: str,
     share_url: str,
     email_sender=None,
+    evidence_store=None,
 ) -> DispatchReport:
     """Tells the contacts already alerted that evidence is now available.
 
@@ -508,6 +509,30 @@ async def send_evidence_followup(
     display_name = (user.full_name or user.email or "A SafeHer user").strip()
     subject = f"Evidence from {display_name}'s SafeHer alert"
 
+    # The incident report, attached to this message rather than only linked.
+    #
+    # **Why here and not on the alert itself.** The alert leaves the instant
+    # the countdown ends, while the recording is still being made -- a report
+    # generated then would say "No evidence was captured for this incident"
+    # and carry no hashes, because there is nothing yet to hash. Attaching it
+    # would also put PDF rendering, evidence decryption and hashing on the
+    # critical path of the one request that must not wait (FR-EMG-01).
+    #
+    # So the alert stays fast and text-only, and the report follows here,
+    # once there is something to report.
+    #
+    # Built once for all contacts: it is the same document, and rendering it
+    # per recipient would waste work and risk two contacts holding reports
+    # with different generation timestamps for one incident.
+    attachments = None
+    if evidence_store is not None:
+        attachments = await _build_report_attachment(
+            session=session,
+            store=evidence_store,
+            incident_id=incident_id,
+            reported_by=display_name,
+        )
+
     for contact in contacts:
         result = ContactDispatchResult(contact_id=contact.id, contact_name=contact.name)
         if contact.email and emailer is not None and emailer.is_configured:
@@ -515,7 +540,12 @@ async def send_evidence_followup(
                 user_name=display_name, contact_name=contact.name, share_url=share_url
             )
             error = await _with_retries(
-                lambda: emailer.send(to=contact.email, subject=subject, html_body=body)
+                lambda: emailer.send(
+                    to=contact.email,
+                    subject=subject,
+                    html_body=body,
+                    attachments=attachments,
+                )
             )
             if error is None:
                 result.delivered_channels.append("email")
@@ -528,6 +558,54 @@ async def send_evidence_followup(
         report.results.append(result)
 
     return report
+
+
+# Gmail rejects messages over 25MB and other providers are stricter still. The
+# report only *hashes* recordings rather than embedding them, so it is a few
+# kilobytes whatever the recording weighs -- but a cap belongs here anyway,
+# because the failure it prevents is silent: an oversized attachment bounces
+# the whole message, so a contact would receive nothing at all rather than an
+# alert without its report.
+MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
+
+
+async def _build_report_attachment(
+    *,
+    session: AsyncSession,
+    store,
+    incident_id: str,
+    reported_by: str,
+) -> Optional[list[tuple[str, bytes]]]:
+    """Renders the incident report for attachment, or None if it cannot be.
+
+    Never raises. A report that fails to render must not stop the follow-up
+    email: the share link in the body still reaches the same document, and a
+    contact told nothing is worse off than a contact told something without a
+    PDF stapled to it.
+    """
+    from fastapi_app.models import Incident
+    from fastapi_app.services.incident_pdf import assemble_incident_pdf
+
+    try:
+        incident = await session.get(Incident, incident_id)
+        if incident is None:
+            return None
+        pdf = await assemble_incident_pdf(
+            session=session, store=store, incident=incident, reported_by=reported_by
+        )
+    except Exception as exc:  # noqa: BLE001 - see docstring
+        logger.warning("Could not build the report for incident %s: %s", incident_id, exc)
+        return None
+
+    if len(pdf) > MAX_ATTACHMENT_BYTES:
+        logger.warning(
+            "Report for incident %s is %d bytes; sending the link only",
+            incident_id,
+            len(pdf),
+        )
+        return None
+
+    return [(f"safeher-incident-{incident_id}.pdf", pdf)]
 
 
 def build_evidence_followup_email(

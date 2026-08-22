@@ -1603,3 +1603,208 @@ rather than quietly written to disk.
 
 341 backend tests pass (up from 333), 639 Flutter tests pass (up from 617),
 `flutter analyze` clean, migration 0013 verified reversible against SQLite.
+
+## 2026-08-21 (second session) — the AI topology the SRS never stated
+
+`SRS.md` specified three models and a fusion formula, and never said **which
+device produces which score, or where each model runs**. That gap mattered:
+the whole auto-SOS requirement rests on a combined score, and nothing recorded
+how the parts reach it. Filled in from the project owner's stated design.
+
+### What was added
+
+**§6.1.1 — per-device scoring topology.** The glove scores only motion; the
+glasses score only audio and vision; no device computes the combined value.
+Sub-scores, their fusion weights, and what it means for one to be absent are
+now stated explicitly — including that a missing sub-score is treated as
+*absent*, never as `0.0`, because substituting zero claims the sensor observed
+calm and drags the weighted sum down, suppressing alerts the remaining sensors
+justify.
+
+**§6.1.2 — inference placement.** The intent is edge inference on the ESP32
+wherever the model fits, cloud where it does not. Resolved per modality rather
+than as a blanket policy, because it genuinely differs:
+
+* **Motion — edge.** A 500-tree, depth-6 XGBoost ensemble compiles to
+  flash-resident C and evaluates by traversal in microseconds. Feasible today
+  from the already-trained `xgboost_motion_model.json`.
+* **Audio — split.** A ≤200KB screening CNN fits and can run continuously;
+  EfficientNet-B0 at ~5.3M params does not, and stays in the cloud for
+  confirmation of what the screen flags.
+* **Vision — cloud only.** YOLOv8-nano at ~3.2M params exceeds what an
+  ESP32-CAM can hold and evaluate at usable frame rates even INT8-quantised.
+
+Two consequences are recorded as deliberate: the authoritative fused score is
+computed in the cloud, because one of its three inputs can only be produced
+there; and the glove keeps a degraded motion-only local escalation path, so a
+lift or an underground car park does not disarm the product.
+
+**§9.5 — smart-glasses MQTT topics**, which did not exist. Also records that
+media does **not** travel over MQTT for evidence purposes — the analysis path
+is lossy and droppable, while retention goes to the §9.4 MicroSD buffer and
+the authenticated media endpoint. Publishing base64 media through a telemetry
+broker inflates payloads ~33%, exceeds default packet limits, and puts
+evidence on a transport with no delivery guarantee.
+
+### A contradiction resolved rather than documented
+
+§6.1 specified the Motion Classifier as **BiLSTM(128)+Attention** over a
+250×11 tensor including five flex channels, output over five classes.
+`ml_training/motion_detection/train_motion_model.py` trains **XGBoost** over
+seven features — accel x/y/z, gyro x/y/z, magnitude — with flex readings not
+entering the model at all, and the owner confirms XGBoost is the intent.
+
+The spec was corrected to the design rather than the design bent to a spec
+nobody implemented. Flex sensors stay in the §9.1 BOM for gesture recognition,
+which is a separate concern from the threat score.
+
+### Still true, and unchanged by this
+
+Writing the topology down does not train a model. `motion_training_results.json`
+reports 98.2% accuracy on `"dataset_type": "synthetic_realistic_combined"` —
+synthetic data, so that number describes the model's fit to generated
+distributions and not its behaviour on a real arm. FR-EMG-02 remains partial
+for the same reason as before: the decision path is complete and no producer
+exists.
+
+Two firmware gaps are now visible against the spec rather than hidden by it:
+the glasses firmware has **no microphone code at all** despite the INMP441
+being in the §9.4 BOM since the beginning, and `send_frame_to_evidence_storage()`
+publishes to `safeher/evidence/store`, a topic **nothing subscribes to**.
+
+### The glove's sensor set, corrected
+
+The owner confirmed the glove carries **accelerometer, gyroscope and a heart-rate
+sensor — no flex sensors**. §9.1 listed 5× resistive flex sensors and an ADS1115
+ADC to read them; both are removed.
+
+Nothing consumed those channels anywhere: they are absent from the trained
+model's seven features, absent from `smart_glove.ino`, and absent from the §9.3
+payload. Carrying them implied a gesture-recognition capability no part of the
+system provides, and spent two components, an I²C address and power on a device
+budgeted for eight hours. Six downstream references were corrected with them —
+§3.3's data-flow diagram, §7.3's `sensor_stream` payload, §9.2's
+`flex_reader_task()`, §9.3's `f0-f4` fields, and the Device Detail screen, which
+specified a 3D glove whose fingers articulated from flex values.
+
+**The pulse sensor is now specified hardware**, which retroactively settles a
+decision this file recorded as "open for the product owner to overrule".
+`heart_rate_boost()` was written when §9.1 had no pulse sensor at all, and
+treated bpm as a small additive booster (+0.05 at ≥120) rather than a fourth
+fusion weight. That implementation stands and is now documented in §6.1.1 as
+the specified behaviour: a racing pulse is evidence of running for a bus at
+least as often as evidence of an assault, so it may tip a score other sensors
+already find alarming and must not raise the alarm alone. Keeping it additive
+also leaves §6.2's arithmetic exactly as written and independently testable.
+
+Still open, and still the owner's call: whether bpm should instead earn a
+weight in the fusion sum. That would require retraining, since the current
+XGBoost model takes seven motion features and no pulse input.
+
+### State
+
+341 backend tests pass, traceability guard green (37 requirements, all mapped).
+
+## 2026-08-21 (third session) — evidence that survives a deploy
+
+### The bug: encrypted carefully, deleted by the next `git push`
+
+`evidence_storage_dir` defaults to `./evidence_store`, a directory on the
+application server. Render's filesystem is ephemeral — wiped on every deploy
+and every restart. So emergency recordings were being sealed with AES-256-GCM,
+written atomically, and destroyed within days.
+
+It had no symptom. The upload returned 201, the `media` row persisted in
+Postgres, and the `sha256` in the PDF still matched a file that no longer
+existed. For a feature whose entire purpose is producing something that still
+exists weeks later in front of a court, nothing failed loudly until the
+recording was asked for.
+
+### Built
+
+`services/evidence_backends.py` — a `BlobBackend` seam with two
+implementations. `LocalBlobBackend` keeps the previous atomic temp-then-rename
+behaviour; `SupabaseBlobBackend` speaks Supabase Storage over HTTPS.
+`build_backend()` prefers Supabase whenever it is configured, deliberately
+never the reverse: the local default is the one that loses data, so a
+configured object store always beats it. A half-configured deployment (URL set,
+key missing) falls back rather than failing every upload on a 401.
+
+Supabase was chosen because the project already runs it for the events
+archive — no new vendor, no new bill, no new credential class, and a free tier
+that covers this comfortably.
+
+### The property that makes it defensible
+
+**The provider never receives plaintext.** Encryption stays in `EvidenceStore`
+rather than moving down with the I/O, so no backend can accidentally persist
+plaintext — it is never given any. Supabase, and anyone holding its
+service-role key, has bytes it cannot read. Pinned by
+`test_the_backend_is_handed_ciphertext_only`, which asserts the recording's
+bytes do not appear in what the backend was handed.
+
+`deployment/sql/supabase_setup.sql` creates the bucket `public => false` with a
+service-role-only policy, rather than leaving privacy to a dashboard click that
+the next deployment forgets. No signed URL is ever issued; retrieval stays on
+`GET /api/v1/media/evidence/{id}`, authenticated and ownership-checked.
+
+### Fixed on the way
+
+`store.write` and `store.read` were called synchronously inside `async def`
+handlers. That was harmless against local disk and would not have been against
+an object store: a multi-megabyte upload would have blocked the event loop for
+its whole duration, stalling every other request on the worker — including
+someone else's SOS. Both now run through `asyncio.to_thread`.
+
+The isolation guard gained `supabase` as an outbound hint and conftest blanks
+the credentials. Supabase now holds recordings of real people, not just an
+events archive, so a suite that could write there would eventually write there.
+
+### Still open
+
+The **migration of existing blobs is not automated.** Anything already in a
+local `evidence_store/` directory stays there and is not visible to a
+Supabase-configured instance. On the deployed host this is academic — those
+files are already gone — but a self-hosted deployment switching backends needs
+to move them by hand. Worth a script if anyone actually has data to move.
+
+### State
+
+356 backend tests pass (up from 342), traceability guard green.
+
+### 2026-08-22 — Supabase evidence storage, verified live
+
+Credentials configured and the path exercised end to end against the real
+project: write → read-back → byte-comparison → anonymous-access probe →
+delete. The bucket is private, the stored object is opaque, and an
+unauthenticated fetch is refused (400).
+
+Two things the live run found that no unit test would have:
+
+**The bucket's MIME allow-list rejected the upload.** It was configured for
+`image/png, image/jpeg, audio/mp3, video/mp4` — plaintext media types. What
+SafeHer stores is AES-256-GCM ciphertext, which has no media type at all;
+encryption erases it. A media-type allow-list on this bucket could therefore
+only ever match if the content were *not* encrypted.
+
+Narrowed to `application/octet-stream` alone rather than widened to include
+it. That turns the allow-list into a guard for the encryption invariant: a
+future change that tried to store a plaintext MP4 here would be refused by the
+storage layer rather than quietly accepted. The file size limit was also
+brought from 50MB down to 25MB to match the app's own cap, so an oversized
+upload meets two independent limits rather than one a config change could
+silently widen.
+
+**Bucket names are case-sensitive.** The project's bucket is `Evidence`; the
+code default was `evidence`, which fails with `NoSuchBucket` — at the first
+upload, which is to say during someone's emergency. The default now matches
+the bucket this project actually provisions, and `.env.example` and
+`supabase_setup.sql` say so explicitly.
+
+`test_isolation` was re-run with live credentials present in `.env` and still
+passes, confirming the suite cannot reach the real bucket.
+
+### State
+
+356 backend tests pass. Evidence storage is durable in this environment for
+the first time; production still needs the three variables set on the host.
