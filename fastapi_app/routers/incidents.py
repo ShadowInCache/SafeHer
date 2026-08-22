@@ -10,7 +10,7 @@ from fastapi_app.models import Incident, Location, Media
 from fastapi_app.schemas import IncidentCreate, IncidentPublic, UserPublic
 from fastapi_app.security import get_current_user
 from fastapi_app.services.evidence_store import EvidenceStore, EvidenceStoreError
-from fastapi_app.services.incident_pdf import build_incident_pdf
+from fastapi_app.services.incident_pdf import assemble_incident_pdf
 from fastapi_app.services.incident_summary import (
     IncidentSummarizer,
     SummaryGenerationError,
@@ -140,56 +140,11 @@ async def export_incident_pdf(
     if incident is None or incident.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
 
-    location = (
-        (
-            await session.execute(
-                select(Location)
-                .where(Location.incident_id == incident.id)
-                .order_by(Location.captured_at)
-            )
-        )
-        .scalars()
-        .first()
-    )
-    media_rows = (
-        (
-            await session.execute(
-                select(Media).where(Media.incident_id == incident.id).order_by(Media.created_at)
-            )
-        )
-        .scalars()
-        .all()
-    )
-
-    evidence = []
-    for row in media_rows:
-        try:
-            evidence.append((row.id, row.media_type, store.read(row.url)))
-        except EvidenceStoreError:
-            # A recording that cannot be read is omitted rather than faked
-            # with a placeholder hash -- a chain of custody with an invented
-            # link in it is worse than one that is honestly short.
-            continue
-
-    pdf = build_incident_pdf(
-        incident_title=incident.title,
-        incident_description=incident.description,
-        threat_level=incident.threat_level,
-        occurred_at=incident.created_at,
+    pdf = await assemble_incident_pdf(
+        session=session,
+        store=store,
+        incident=incident,
         reported_by=current_user.full_name or current_user.email,
-        latitude=location.lat if location else None,
-        longitude=location.lng if location else None,
-        evidence=evidence,
-        ai_summary=incident.ai_summary,
-        detections=incident.detections,
-        scores={
-            "Motion (glove)": incident.motion_score,
-            "Audio (glasses)": incident.audio_score,
-            "Vision (glasses)": incident.vision_score,
-            "Weapon confidence": incident.weapon_confidence,
-            "Combined score": incident.fused_score,
-            "Threshold": incident.threshold_used,
-        },
     )
 
     return Response(

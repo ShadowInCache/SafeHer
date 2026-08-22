@@ -213,3 +213,82 @@ def build_incident_pdf(
     pdf.multi_cell(0, 6, _grouped(document_digest), new_x="LMARGIN", new_y="NEXT")
 
     return bytes(pdf.output())
+
+
+# --------------------------------------------------------------- assembly
+
+async def assemble_incident_pdf(
+    *,
+    session,
+    store,
+    incident,
+    reported_by: str,
+) -> bytes:
+    """Gathers an incident's location and evidence, and renders the report.
+
+    Extracted so the download route and the emergency follow-up email render
+    the *same* document. They previously could not diverge because only one
+    existed; now that a contact receives a copy by email, a second assembly
+    would eventually drift from the first, and two reports disagreeing about
+    the same incident is precisely the failure a chain of custody exists to
+    prevent.
+    """
+    # Imported here rather than at module scope: this module is a renderer
+    # first, and a top-level model import would make it impossible to use
+    # without a database.
+    from sqlalchemy import select
+
+    from fastapi_app.models import Location, Media
+    from fastapi_app.services.evidence_store import EvidenceStoreError
+
+    location = (
+        (
+            await session.execute(
+                select(Location)
+                .where(Location.incident_id == incident.id)
+                .order_by(Location.captured_at)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    media_rows = (
+        (
+            await session.execute(
+                select(Media).where(Media.incident_id == incident.id).order_by(Media.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    evidence = []
+    for row in media_rows:
+        try:
+            evidence.append((row.id, row.media_type, store.read(row.url)))
+        except EvidenceStoreError:
+            # A recording that cannot be read is omitted rather than faked
+            # with a placeholder hash -- a chain of custody with an invented
+            # link in it is worse than one that is honestly short.
+            continue
+
+    return build_incident_pdf(
+        incident_title=incident.title,
+        incident_description=incident.description,
+        threat_level=incident.threat_level,
+        occurred_at=incident.created_at,
+        reported_by=reported_by,
+        latitude=location.lat if location else None,
+        longitude=location.lng if location else None,
+        evidence=evidence,
+        ai_summary=incident.ai_summary,
+        detections=incident.detections,
+        scores={
+            "Motion (glove)": incident.motion_score,
+            "Audio (glasses)": incident.audio_score,
+            "Vision (glasses)": incident.vision_score,
+            "Weapon confidence": incident.weapon_confidence,
+            "Combined score": incident.fused_score,
+            "Threshold": incident.threshold_used,
+        },
+    )

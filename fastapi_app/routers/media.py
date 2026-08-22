@@ -114,7 +114,11 @@ async def upload_evidence(
     followup = {"contacts_notified": 0, "share_expires_at": None}
     if notify_contacts:
         followup = await _send_evidence_followup(
-            session=session, settings=settings, user_id=current_user.id, incident=incident
+            session=session,
+            settings=settings,
+            user_id=current_user.id,
+            incident=incident,
+            store=store,
         )
 
     return {
@@ -130,7 +134,12 @@ async def upload_evidence(
 
 
 async def _send_evidence_followup(
-    *, session: AsyncSession, settings: Settings, user_id: str, incident: Incident
+    *,
+    session: AsyncSession,
+    settings: Settings,
+    user_id: str,
+    incident: Incident,
+    store: EvidenceStore,
 ) -> dict:
     """Mints a share link for the incident and emails it to the contacts.
 
@@ -160,6 +169,10 @@ async def _send_evidence_followup(
             user=owner,
             incident_id=incident.id,
             share_url=f"{settings.public_base_url.rstrip('/')}/share/{token}",
+            # Lets the follow-up attach the incident report. The recording
+            # this upload just stored is now hashable, which is exactly what
+            # makes the report worth sending.
+            evidence_store=store,
         )
         return {
             "contacts_notified": report.contacts_notified,

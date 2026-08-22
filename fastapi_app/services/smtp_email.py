@@ -16,7 +16,7 @@ actually be configured. Move to `onesignal.py` once a domain exists.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Sequence
 
 from fastapi_app.config import Settings
 from fastapi_app.services.brevo_email import BrevoEmailSender
@@ -35,7 +35,14 @@ class SmtpEmailSender:
     def is_configured(self) -> bool:
         return self._settings.smtp_configured
 
-    async def send(self, *, to: str, subject: str, html_body: str) -> str:
+    async def send(
+        self,
+        *,
+        to: str,
+        subject: str,
+        html_body: str,
+        attachments: Optional[Sequence[tuple[str, bytes]]] = None,
+    ) -> str:
         if not self.is_configured:
             raise EmailNotConfigured("SMTP_HOST and SMTP_FROM_EMAIL are not set")
         await send_email(
@@ -44,6 +51,7 @@ class SmtpEmailSender:
             subject=subject,
             body=plain_text_fallback(subject=subject, html_body=html_body),
             html_body=html_body,
+            attachments=attachments,
         )
         # SMTP has no message id to hand back the way a REST API does; the
         # absence of an exception is the receipt.

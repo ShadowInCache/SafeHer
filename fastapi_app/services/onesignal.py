@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import html
 import logging
-from typing import Optional
+from typing import Optional, Sequence
 
 import httpx
 
@@ -65,7 +65,29 @@ class OneSignalEmailSender:
     def is_configured(self) -> bool:
         return bool(self._app_id and self._api_key)
 
-    async def send(self, *, to: str, subject: str, html_body: str) -> str:
+    async def send(
+        self,
+        *,
+        to: str,
+        subject: str,
+        html_body: str,
+        attachments: Optional[Sequence[tuple[str, bytes]]] = None,
+    ) -> str:
+        """Sends one email. **Attachments are accepted and dropped.**
+
+        OneSignal's notification API has no clean file-attachment path in
+        email mode. Dropping them is the deliberate choice over raising:
+        every caller that attaches the incident report also puts the share
+        link in the body, so the report stays reachable -- whereas refusing
+        the send would lose the message that tells a contact anything at all.
+        """
+        if attachments:
+            logger.warning(
+                "OneSignal cannot attach files; sending %s without %d attachment(s). "
+                "The share link in the body still reaches the report.",
+                to,
+                len(attachments),
+            )
         """Sends one email and returns OneSignal's notification id."""
         if not self.is_configured:
             raise OneSignalNotConfigured(

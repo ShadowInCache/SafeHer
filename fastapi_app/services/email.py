@@ -41,6 +41,20 @@ def _build_message(
     return message
 
 
+def _attach_all(message: EmailMessage, attachments) -> None:
+    """Adds each `(filename, content)` as a binary attachment.
+
+    Typed as octet-stream rather than sniffed: the only caller sends a PDF,
+    and guessing a type from a filename is how a renamed file ends up
+    mislabelled in someone's mail client.
+    """
+    for name, content in attachments or ():
+        subtype = "pdf" if name.lower().endswith(".pdf") else "octet-stream"
+        message.add_attachment(
+            content, maintype="application", subtype=subtype, filename=name
+        )
+
+
 def _send_blocking(settings: Settings, message: EmailMessage) -> None:
     """Deliver over whichever TLS style the port implies.
 
@@ -73,6 +87,7 @@ async def send_email(
     subject: str,
     body: str,
     html_body: str | None = None,
+    attachments=None,
 ) -> None:
     """Send one message, off the event loop.
 
@@ -96,6 +111,7 @@ async def send_email(
             await sender.send(
                 to=to,
                 subject=subject,
+                attachments=attachments,
                 # Brevo takes HTML. A plain-text-only caller (the OTP mail)
                 # gets its newlines preserved rather than collapsed into one
                 # run-on line, which is what an unescaped <pre>-less body does.
@@ -118,6 +134,7 @@ async def send_email(
     message = _build_message(
         settings=settings, to=to, subject=subject, body=body, html_body=html_body
     )
+    _attach_all(message, attachments)
     try:
         await asyncio.to_thread(_send_blocking, settings, message)
     except (smtplib.SMTPException, OSError) as exc:

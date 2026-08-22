@@ -41,7 +41,7 @@ class _Emailer:
         self._fails = fails
         self.sent: list[tuple[str, str]] = []
 
-    async def send(self, *, to: str, subject: str, html_body: str) -> None:
+    async def send(self, *, to: str, subject: str, html_body: str, attachments=None) -> None:
         if self._fails:
             raise RuntimeError("smtp said no")
         self.sent.append((to, subject))

@@ -27,8 +27,9 @@ channel actually arrive. It does not make it the right primary channel, and
 
 from __future__ import annotations
 
+import base64
 import logging
-from typing import Optional
+from typing import Optional, Sequence
 
 import httpx
 
@@ -70,8 +71,19 @@ class BrevoEmailSender:
     def is_configured(self) -> bool:
         return bool(self._api_key and self._from_email)
 
-    async def send(self, *, to: str, subject: str, html_body: str) -> str:
-        """Sends one email and returns Brevo's message id."""
+    async def send(
+        self,
+        *,
+        to: str,
+        subject: str,
+        html_body: str,
+        attachments: Optional[Sequence[tuple[str, bytes]]] = None,
+    ) -> str:
+        """Sends one email and returns Brevo's message id.
+
+        [attachments] is `(filename, content)`. Used for the incident report
+        that follows an emergency -- see `emergency_dispatch.send_evidence_followup`.
+        """
         if not self.is_configured:
             raise BrevoNotConfigured(
                 "Brevo is not configured. Set BREVO_API_KEY and SMTP_FROM_EMAIL "
@@ -84,6 +96,11 @@ class BrevoEmailSender:
             "subject": subject,
             "htmlContent": html_body,
         }
+        if attachments:
+            payload["attachment"] = [
+                {"name": name, "content": base64.b64encode(content).decode("ascii")}
+                for name, content in attachments
+            ]
         headers = {
             "api-key": self._api_key,
             "content-type": "application/json",
