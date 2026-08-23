@@ -1,10 +1,7 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/animations/animation_helpers.dart';
-import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_typography.dart';
@@ -69,6 +66,7 @@ class SaBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final saColors = context.saColors;
     final reducedMotion = AnimationHelpers.reducedMotion(context);
     return AnimatedSlide(
       duration: const Duration(milliseconds: 200),
@@ -90,15 +88,18 @@ class SaBottomNavBar extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: ClipRRect(
                 borderRadius: AppRadius.fullRadius,
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                  child: Container(
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: AppColors.dark800.withValues(alpha: 0.3),
-                      borderRadius: AppRadius.fullRadius,
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-                    ),
+                // Opaque, and resolved per brightness. This was a 20px blur
+                // behind `dark800` at 30% with a white-10% border — a *dark*
+                // fill whatever the theme, so on the light ground it read as a
+                // murky grey slab rather than as a surface. Geometry is
+                // untouched: same pill, same 64 height, same hit targets.
+                child: Container(
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: saColors.surfaceElevated,
+                    borderRadius: AppRadius.fullRadius,
+                    border: Border.all(color: saColors.line),
+                  ),
                     child: Row(
                       children: [
                         Expanded(
@@ -125,7 +126,6 @@ class SaBottomNavBar extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
             Positioned(bottom: 76, child: _SosFab(onTap: onSosTap)),
           ],
         ),
@@ -148,6 +148,7 @@ class _NavTabItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final saColors = context.saColors;
     return Semantics(
       label: tab.label,
       selected: isActive,
@@ -176,7 +177,7 @@ class _NavTabItem extends StatelessWidget {
                   child: AnimatedOpacity(
                     opacity: isActive ? 1.0 : 0.5,
                     duration: const Duration(milliseconds: 200),
-                    child: SaIcon(tab.glyph, size: 24, color: Colors.white),
+                    child: SaIcon(tab.glyph, size: 24, color: saColors.ink),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -186,7 +187,7 @@ class _NavTabItem extends StatelessWidget {
                       ? Text(
                           tab.label,
                           key: ValueKey(tab),
-                          style: AppTypography.labelM.copyWith(color: Colors.white),
+                          style: AppTypography.labelM.copyWith(color: saColors.ink),
                           maxLines: 1,
                           softWrap: false,
                           overflow: TextOverflow.ellipsis,
@@ -200,7 +201,7 @@ class _NavTabItem extends StatelessWidget {
                   height: 6,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: isActive ? AppColors.violet500 : Colors.transparent,
+                    color: isActive ? saColors.interactive : Colors.transparent,
                   ),
                 ),
               ],

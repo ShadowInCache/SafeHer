@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -195,14 +193,13 @@ class _BlurAppBar extends StatelessWidget {
         child: AnimatedOpacity(
           duration: const Duration(milliseconds: 150),
           opacity: opacity,
-          child: ClipRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-              child: Container(
-                height: MediaQuery.of(context).padding.top + 56,
-                color: saColors.surfaceElevated.withValues(alpha: 0.8),
-              ),
-            ),
+          // The ground itself, opaque, rather than a translucent blur. This
+          // header exists to hide content scrolling under the status bar, and
+          // painting it in the page's own ground makes that read as the page
+          // ending — which a frosted panel never quite did.
+          child: Container(
+            height: MediaQuery.of(context).padding.top + 56,
+            color: saColors.surfaceBase,
           ),
         ),
       ),
