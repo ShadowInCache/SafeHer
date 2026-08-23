@@ -1,23 +1,22 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/theme_extensions.dart';
 
-/// The aurora field painted behind every screen.
+/// Paints the ground behind every screen.
 ///
-/// SRS Frontend section 1 asks for "warm violet glows", "layered depth" and
-/// glassmorphism. Glass only reads as glass when there is something behind it
-/// to refract; over a flat fill it collapses into a slightly lighter rectangle.
-/// This widget is that something — overlapping radial gradients that give the
-/// page a light source, so cards feel lit rather than drawn.
+/// This used to be an aurora field: four overlapping radial gradients in
+/// violet and rose, there so that glassmorphic cards would have a light source
+/// to refract. That was the right widget for the old direction and the wrong
+/// one for this: the palette is warm stone and ink, hierarchy now comes from
+/// hairlines and space rather than from depth, and a violet wash behind it
+/// fought every semantic colour on the page -- a green "safe" dot and an ochre
+/// "caution" label both picked up the same cast.
 ///
-/// Two hues only. The SRS calls for restrained accent use, and the same brief
-/// rules out cyberpunk neon-on-black, so the stops stay low-alpha: the effect
-/// should read as depth, not as a light show.
-///
-/// Static by design. A drifting field would be prettier in isolation, but it
-/// sits above the router and would therefore animate forever on every screen —
-/// which never settles for `pumpAndSettle` and would make all ~200 golden tests
-/// flaky. Motion belongs on the elements a user is actually looking at.
+/// It stays a widget rather than folding into `scaffoldBackgroundColor`
+/// because `AppTheme` deliberately leaves the scaffold transparent and mounts
+/// this above the router in `main.dart`, so one ground covers every route
+/// including the gaps between them. The public API is unchanged.
 class SaAmbientBackground extends StatelessWidget {
   const SaAmbientBackground({super.key, required this.child});
 
@@ -25,99 +24,17 @@ class SaAmbientBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Read through the extension when it is there, and fall back to the raw
+    // token otherwise. The old painter only needed `Theme.of(context)
+    // .brightness`, which is always present, so it could not throw however it
+    // was mounted; a bare `context.saColors` here would swap that for a null
+    // assertion on any host that forgot the extension. Not worth the risk for
+    // the widget that paints every screen's ground.
+    final theme = Theme.of(context);
+    final ground =
+        theme.extension<SafeHerColors>()?.surfaceBase ??
+        (theme.brightness == Brightness.dark ? AppColors.dark900 : AppColors.light50);
 
-    // `CustomPaint` with a child paints the painter *behind* that child and
-    // passes its own constraints straight through. A Stack was wrong here: only
-    // positioned children are excluded from sizing, so the app content became a
-    // loosely-constrained child and shrink-wrapped instead of filling the
-    // screen, which silently moved widgets out of hit-test range.
-    // `CustomPaint` with a child paints the painter behind that child and passes
-    // its own constraints straight through, so the app still fills the screen.
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.dark900 : AppColors.light50,
-      ),
-      child: CustomPaint(
-        painter: _AuroraPainter(isDark: isDark),
-        // The field is static, so it should not repaint when content above it
-        // scrolls or animates.
-        isComplex: true,
-        willChange: false,
-        child: child,
-      ),
-    );
+    return DecoratedBox(decoration: BoxDecoration(color: ground), child: child);
   }
-}
-
-class _AuroraPainter extends CustomPainter {
-  const _AuroraPainter({required this.isDark});
-
-  final bool isDark;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Alpha is the whole design here. In dark mode the field has to lift the
-    // page off near-black without ever becoming a glow; in light mode it has to
-    // tint an off-white page warm without muddying text contrast.
-    final violetAlpha = isDark ? 0.30 : 0.20;
-    final roseAlpha = isDark ? 0.16 : 0.14;
-    final deepAlpha = isDark ? 0.55 : 0.0;
-
-    // Offsets are fractions of the canvas so the composition holds from a
-    // 360dp phone to a tablet.
-    _glow(
-      canvas,
-      size,
-      centre: Offset(size.width * 0.08, size.height * -0.04),
-      radius: size.width * 1.15,
-      colour: AppColors.auroraViolet.withValues(alpha: violetAlpha),
-    );
-    _glow(
-      canvas,
-      size,
-      centre: Offset(size.width * 1.02, size.height * 0.22),
-      radius: size.width * 0.95,
-      colour: AppColors.auroraRose.withValues(alpha: roseAlpha),
-    );
-    // Anchors the lower half so the composition does not fade into a dead
-    // rectangle below the fold — the flat-void problem this replaces.
-    _glow(
-      canvas,
-      size,
-      centre: Offset(size.width * 0.22, size.height * 1.05),
-      radius: size.width * 1.30,
-      colour: (isDark ? AppColors.auroraDeep : AppColors.auroraViolet).withValues(
-        alpha: isDark ? deepAlpha : 0.10,
-      ),
-    );
-    _glow(
-      canvas,
-      size,
-      centre: Offset(size.width * 0.95, size.height * 0.92),
-      radius: size.width * 0.80,
-      colour: AppColors.auroraRose.withValues(alpha: isDark ? 0.10 : 0.09),
-    );
-  }
-
-  void _glow(
-    Canvas canvas,
-    Size size, {
-    required Offset centre,
-    required double radius,
-    required Color colour,
-  }) {
-    if (colour.a == 0) return;
-    final paint = Paint()
-      ..shader = RadialGradient(
-        // A hard stop at the edge would draw a visible disc. Fading to fully
-        // transparent well before the radius keeps the falloff organic.
-        colors: [colour, colour.withValues(alpha: 0), colour.withValues(alpha: 0)],
-        stops: const [0.0, 0.72, 1.0],
-      ).createShader(Rect.fromCircle(center: centre, radius: radius));
-    canvas.drawCircle(centre, radius, paint);
-  }
-
-  @override
-  bool shouldRepaint(_AuroraPainter oldDelegate) => oldDelegate.isDark != isDark;
 }

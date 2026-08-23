@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/animations/animation_helpers.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/theme_extensions.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_typography.dart';
 import '../icons/sa_icon.dart';
@@ -240,6 +241,7 @@ class _SosFabState extends State<_SosFab> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final sos = context.saColors.sos;
     final breathe = Tween<double>(
       begin: 1.0,
       end: 1.06,
@@ -259,10 +261,14 @@ class _SosFabState extends State<_SosFab> with SingleTickerProviderStateMixin {
               height: 56,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.coral500,
+                // Resolved per brightness rather than pinned to the day red.
+                // `coral500` is tuned for the stone ground; on night it drops
+                // to 3.5:1, and the SOS button is the last control in the app
+                // that should get quieter.
+                color: sos,
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.coral500.withValues(alpha: 0.4),
+                    color: sos.withValues(alpha: 0.4),
                     blurRadius: 16,
                     spreadRadius: 2,
                   ),

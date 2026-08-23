@@ -4,8 +4,16 @@ import 'app_colors.dart';
 import 'app_shadows.dart';
 
 /// Brightness-aware brand tokens that don't map cleanly onto Material's
-/// [ColorScheme] (glassmorphism fills/borders, threat-state colors,
-/// violet-tinted elevation shadows). Access via `context.saColors`.
+/// [ColorScheme]: grounds and hairlines, ink, the interactive colour, and the
+/// threat-state scale.
+///
+/// **Why these exist even though [AppColors] has the same names.** A colour
+/// used as foreground cannot clear 4.5:1 against both the day ground and the
+/// night one -- there is no value in that intersection. [AppColors] therefore
+/// holds one mid value per role, tuned to clear 3:1 on either ground, and this
+/// extension holds the properly resolved pair. Screens should read from here
+/// (`context.saColors.safe`) rather than from [AppColors] directly; the
+/// remaining direct references get migrated screen by screen.
 @immutable
 class SafeHerColors extends ThemeExtension<SafeHerColors> {
   const SafeHerColors({
@@ -14,6 +22,11 @@ class SafeHerColors extends ThemeExtension<SafeHerColors> {
     required this.surfaceBase,
     required this.surfaceElevated,
     required this.surfaceHighest,
+    required this.line,
+    required this.ink,
+    required this.inkMuted,
+    required this.interactive,
+    required this.sos,
     required this.threatSafe,
     required this.threatSafeGlow,
     required this.threatCaution,
@@ -35,6 +48,27 @@ class SafeHerColors extends ThemeExtension<SafeHerColors> {
   final Color surfaceElevated;
   final Color surfaceHighest;
 
+  /// The hairline that separates sections. In this direction a 1px rule and
+  /// space do the work that a filled card used to do.
+  final Color line;
+
+  /// Body and heading ink on [surfaceBase].
+  final Color ink;
+
+  /// Secondary ink: labels, captions, anything supporting.
+  final Color inkMuted;
+
+  /// "You can tap this." Reserved for interactive affordances, and never used
+  /// to convey state.
+  final Color interactive;
+
+  /// The SOS red, and nothing else. Resolved per ground because this is the
+  /// one control that must never read as *less* urgent than it is: the shared
+  /// [AppColors.coral500] is tuned for the day ground and drops to 3.5:1 on
+  /// night, which is the wrong direction to compromise for an emergency
+  /// button.
+  final Color sos;
+
   final Color threatSafe;
   final Color threatSafeGlow;
   final Color threatCaution;
@@ -53,20 +87,27 @@ class SafeHerColors extends ThemeExtension<SafeHerColors> {
   static const dark = SafeHerColors(
     glassFill: AppColors.glassFillDark,
     glassBorder: AppColors.glassBorderDark,
-    // Translucent rather than opaque: a card over the aurora should be lit by
-    // it, which is what makes the glass in the SRS read as glass. Alpha stays
-    // high enough that body text keeps its WCAG AA contrast (SRS 5.4).
-    surfaceBase: Color(0xD90A0A0F),
-    surfaceElevated: Color(0xD112121A),
-    surfaceHighest: Color(0xDB1C1C28),
-    threatSafe: AppColors.threatSafe,
-    threatSafeGlow: AppColors.threatSafeGlow,
-    threatCaution: AppColors.threatCaution,
-    threatCautionGlow: AppColors.threatCautionGlow,
-    threatElevated: AppColors.threatElevated,
-    threatElevatedGlow: AppColors.threatElevatedGlow,
-    threatDanger: AppColors.threatDanger,
-    threatDangerGlow: AppColors.threatDangerGlow,
+    // Opaque, where these used to be translucent. Translucency existed so the
+    // aurora behind them would tint every card; with the aurora retired it
+    // would only sample the flat ground, at the cost of a saved layer.
+    surfaceBase: AppColors.dark900,
+    surfaceElevated: AppColors.dark800,
+    surfaceHighest: AppColors.dark700,
+    line: AppColors.dark700,
+    ink: AppColors.neutral100,
+    inkMuted: AppColors.neutral400,
+    interactive: AppColors.violet400,
+    sos: AppColors.coral400,
+    // Lifted off the shared mid values: on a near-black ground the semantic
+    // colours have to come up to stay legible.
+    threatSafe: Color(0xFF4FB183),
+    threatSafeGlow: Color(0x334FB183),
+    threatCaution: Color(0xFFD9A22E),
+    threatCautionGlow: Color(0x33D9A22E),
+    threatElevated: Color(0xFFE8823C),
+    threatElevatedGlow: Color(0x33E8823C),
+    threatDanger: AppColors.dangerOnDark,
+    threatDangerGlow: Color(0x4DE4573F),
     shadowLevel1: [],
     shadowLevel2: [],
     shadowLevel3: [],
@@ -77,20 +118,23 @@ class SafeHerColors extends ThemeExtension<SafeHerColors> {
   static const light = SafeHerColors(
     glassFill: AppColors.glassFillLight,
     glassBorder: AppColors.glassBorderLight,
-    // Light mode was flat grey-on-white with no brand presence at all. These
-    // are translucent whites, so the violet/rose wash behind them warms every
-    // card instead of leaving the page neutral.
-    surfaceBase: Color(0xCCFFFFFF),
-    surfaceElevated: Color(0xDBFFFFFF),
-    surfaceHighest: Color(0xF2FFFFFF),
-    threatSafe: AppColors.threatSafe,
-    threatSafeGlow: AppColors.threatSafeGlow,
-    threatCaution: AppColors.threatCaution,
-    threatCautionGlow: AppColors.threatCautionGlow,
-    threatElevated: AppColors.threatElevated,
-    threatElevatedGlow: AppColors.threatElevatedGlow,
-    threatDanger: AppColors.threatDanger,
-    threatDangerGlow: AppColors.threatDangerGlow,
+    surfaceBase: AppColors.light50,
+    surfaceElevated: Color(0xFFF1EFEA),
+    surfaceHighest: AppColors.neutral50,
+    line: AppColors.light100,
+    ink: AppColors.neutral900,
+    inkMuted: AppColors.neutral500,
+    interactive: AppColors.violet600,
+    sos: AppColors.coral500,
+    // Pushed down for the same reason, in the other direction.
+    threatSafe: Color(0xFF276B4E),
+    threatSafeGlow: Color(0x33276B4E),
+    threatCaution: Color(0xFF8C6210),
+    threatCautionGlow: Color(0x338C6210),
+    threatElevated: Color(0xFFB4551A),
+    threatElevatedGlow: Color(0x33B4551A),
+    threatDanger: AppColors.dangerOnLight,
+    threatDangerGlow: Color(0x4DB9291D),
     shadowLevel1: [],
     shadowLevel2: [],
     shadowLevel3: [],
@@ -123,6 +167,11 @@ class SafeHerColors extends ThemeExtension<SafeHerColors> {
     Color? surfaceBase,
     Color? surfaceElevated,
     Color? surfaceHighest,
+    Color? line,
+    Color? ink,
+    Color? inkMuted,
+    Color? interactive,
+    Color? sos,
     Color? threatSafe,
     Color? threatSafeGlow,
     Color? threatCaution,
@@ -143,6 +192,11 @@ class SafeHerColors extends ThemeExtension<SafeHerColors> {
       surfaceBase: surfaceBase ?? this.surfaceBase,
       surfaceElevated: surfaceElevated ?? this.surfaceElevated,
       surfaceHighest: surfaceHighest ?? this.surfaceHighest,
+      line: line ?? this.line,
+      ink: ink ?? this.ink,
+      inkMuted: inkMuted ?? this.inkMuted,
+      interactive: interactive ?? this.interactive,
+      sos: sos ?? this.sos,
       threatSafe: threatSafe ?? this.threatSafe,
       threatSafeGlow: threatSafeGlow ?? this.threatSafeGlow,
       threatCaution: threatCaution ?? this.threatCaution,
@@ -168,6 +222,11 @@ class SafeHerColors extends ThemeExtension<SafeHerColors> {
       surfaceBase: Color.lerp(surfaceBase, other.surfaceBase, t)!,
       surfaceElevated: Color.lerp(surfaceElevated, other.surfaceElevated, t)!,
       surfaceHighest: Color.lerp(surfaceHighest, other.surfaceHighest, t)!,
+      line: Color.lerp(line, other.line, t)!,
+      ink: Color.lerp(ink, other.ink, t)!,
+      inkMuted: Color.lerp(inkMuted, other.inkMuted, t)!,
+      interactive: Color.lerp(interactive, other.interactive, t)!,
+      sos: Color.lerp(sos, other.sos, t)!,
       threatSafe: Color.lerp(threatSafe, other.threatSafe, t)!,
       threatSafeGlow: Color.lerp(threatSafeGlow, other.threatSafeGlow, t)!,
       threatCaution: Color.lerp(threatCaution, other.threatCaution, t)!,

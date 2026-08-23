@@ -10,18 +10,18 @@ void main() {
     testWidgets('renders in light mode without exception', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
-    // Mirrors main.dart's shell so screens render over the same ambient
-    // field users see; the scaffold background is transparent by design.
+    // Mirrors main.dart's shell so screens render over the same ground
+    // users see; the scaffold background is transparent by design.
     builder: (context, child) =>
         SaAmbientBackground(child: child ?? const SizedBox.shrink()),
           theme: AppTheme.light,
           home: Builder(
             builder: (context) {
               final saColors = context.saColors;
-              // Surfaces are translucent so the ambient aurora tints them;
-              // the underlying hue is still the light-mode base.
-              expect(saColors.surfaceBase.a, lessThan(1.0));
-              expect(saColors.surfaceBase.r, closeTo(1.0, 0.02));
+              // Surfaces are opaque: translucency existed so the ambient
+              // aurora could tint them, and that field has been retired.
+              expect(saColors.surfaceBase.a, 1.0);
+              expect(saColors.surfaceBase, AppColors.light50);
               return const Scaffold(body: Text('light'));
             },
           ),
@@ -35,21 +35,18 @@ void main() {
     testWidgets('renders in dark mode without exception', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
-    // Mirrors main.dart's shell so screens render over the same ambient
-    // field users see; the scaffold background is transparent by design.
+    // Mirrors main.dart's shell so screens render over the same ground
+    // users see; the scaffold background is transparent by design.
     builder: (context, child) =>
         SaAmbientBackground(child: child ?? const SizedBox.shrink()),
           theme: AppTheme.dark,
           home: Builder(
             builder: (context) {
               final saColors = context.saColors;
-              // Translucent for the same reason as light mode, over the
-              // dark-mode base hue.
-              expect(saColors.surfaceBase.a, lessThan(1.0));
-              expect(
-                saColors.surfaceBase.toARGB32() & 0x00FFFFFF,
-                AppColors.dark900.toARGB32() & 0x00FFFFFF,
-              );
+              // Opaque for the same reason as light mode, over the
+              // dark-mode ground.
+              expect(saColors.surfaceBase.a, 1.0);
+              expect(saColors.surfaceBase, AppColors.dark900);
               return const Scaffold(body: Text('dark'));
             },
           ),

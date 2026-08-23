@@ -163,10 +163,14 @@ class _OfflineBanner extends ConsumerWidget {
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space4, vertical: AppSpacing.space2),
-        color: AppColors.warning500,
+        // The deep end of the caution ramp, not the mid one. `warning500` is
+        // tuned to be legible *as foreground* on either ground, which makes it
+        // too dark to carry black text as a fill -- it lands at 4.5:1, right on
+        // the line. This pairing is 8.8:1.
+        color: AppColors.warning900,
         child: Text(
           "You're offline — changes will sync when you're back online.",
-          style: AppTypography.labelM.copyWith(color: Colors.black),
+          style: AppTypography.labelM.copyWith(color: AppColors.neutral50),
           textAlign: TextAlign.center,
         ),
       ),
