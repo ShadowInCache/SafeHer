@@ -172,13 +172,17 @@ class _DurationChip extends StatelessWidget {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space4, vertical: AppSpacing.space2),
           decoration: BoxDecoration(
-            color: selected ? AppColors.violet500 : Colors.transparent,
+            color: selected ? Theme.of(context).colorScheme.primary : Colors.transparent,
             borderRadius: AppRadius.fullRadius,
-            border: Border.all(color: selected ? AppColors.violet500 : onSurface.withValues(alpha: 0.2)),
+            border: Border.all(
+              color: selected ? Theme.of(context).colorScheme.primary : onSurface.withValues(alpha: 0.2),
+            ),
           ),
           child: Text(
             '${seconds}s',
-            style: AppTypography.labelL.copyWith(color: selected ? Colors.white : onSurface),
+            style: AppTypography.labelL.copyWith(
+              color: selected ? Theme.of(context).colorScheme.onPrimary : onSurface,
+            ),
           ),
         ),
       ),

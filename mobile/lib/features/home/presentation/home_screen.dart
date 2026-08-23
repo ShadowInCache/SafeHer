@@ -431,12 +431,8 @@ class _SafetyStatusCard extends StatelessWidget {
         padding: const EdgeInsets.all(AppSpacing.space5),
         decoration: BoxDecoration(
           borderRadius: AppRadius.xl2Radius,
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [tint.withValues(alpha: 0.18), tint.withValues(alpha: 0.04)],
-          ),
-          border: Border.all(color: tint.withValues(alpha: 0.28)),
+          color: tint.withValues(alpha: 0.10),
+          border: Border.all(color: tint.withValues(alpha: 0.38)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -73,97 +71,94 @@ class SaToastCard extends StatelessWidget {
       label: '${type.semanticPrefix()}. ${title == null ? '' : '$title. '}$message',
       child: ClipRRect(
         borderRadius: AppRadius.lgRadius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            decoration: BoxDecoration(
-              color: saColors.surfaceElevated,
-              borderRadius: AppRadius.lgRadius,
-              border: Border.all(color: accent.withValues(alpha: 0.35)),
-              boxShadow: saColors.shadowLevel4,
-            ),
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Severity spine. Colour alone never carries the meaning
-                  // — the icon and the spoken prefix do too — but it makes
-                  // the kind readable in peripheral vision.
-                  Container(width: 4, color: accent),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.space4,
-                        vertical: AppSpacing.space3,
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 28,
-                            height: 28,
-                            decoration: BoxDecoration(
-                              color: accent.withValues(alpha: 0.16),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Center(
-                              child: SaIcon(type.icon(), size: 15, color: accent),
-                            ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: saColors.surfaceElevated,
+            borderRadius: AppRadius.lgRadius,
+            border: Border.all(color: accent.withValues(alpha: 0.35)),
+            boxShadow: saColors.shadowLevel4,
+          ),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Severity spine. Colour alone never carries the meaning
+                // — the icon and the spoken prefix do too — but it makes
+                // the kind readable in peripheral vision.
+                Container(width: 4, color: accent),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.space4,
+                      vertical: AppSpacing.space3,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.16),
+                            shape: BoxShape.circle,
                           ),
-                          const SizedBox(width: AppSpacing.space3),
-                          Expanded(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (title != null) ...[
-                                  Text(
-                                    title!,
-                                    style: AppTypography.labelL.copyWith(color: onSurface),
-                                  ),
-                                  const SizedBox(height: 2),
-                                ],
+                          child: Center(
+                            child: SaIcon(type.icon(), size: 15, color: accent),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.space3),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (title != null) ...[
                                 Text(
-                                  message,
-                                  style: AppTypography.bodyM.copyWith(
-                                    color: title == null
-                                        ? onSurface
-                                        : onSurface.withValues(alpha: 0.75),
-                                  ),
+                                  title!,
+                                  style: AppTypography.labelL.copyWith(color: onSurface),
                                 ),
+                                const SizedBox(height: 2),
                               ],
-                            ),
+                              Text(
+                                message,
+                                style: AppTypography.bodyM.copyWith(
+                                  color: title == null
+                                      ? onSurface
+                                      : onSurface.withValues(alpha: 0.75),
+                                ),
+                              ),
+                            ],
                           ),
-                          if (onDismiss != null) ...[
-                            const SizedBox(width: AppSpacing.space2),
-                            Semantics(
-                              button: true,
-                              label: 'Dismiss',
-                              child: GestureDetector(
-                                onTap: onDismiss,
-                                behavior: HitTestBehavior.opaque,
-                                child: Padding(
-                                  // Pads a 15dp glyph out to a 44dp target
-                                  // without moving it visually.
-                                  padding: const EdgeInsets.all(AppSpacing.space2),
-                                  child: SaIcon(
-                                    SaIconGlyph.close,
-                                    size: 15,
-                                    color: onSurface.withValues(alpha: 0.5),
-                                  ),
+                        ),
+                        if (onDismiss != null) ...[
+                          const SizedBox(width: AppSpacing.space2),
+                          Semantics(
+                            button: true,
+                            label: 'Dismiss',
+                            child: GestureDetector(
+                              onTap: onDismiss,
+                              behavior: HitTestBehavior.opaque,
+                              child: Padding(
+                                // Pads a 15dp glyph out to a 44dp target
+                                // without moving it visually.
+                                padding: const EdgeInsets.all(AppSpacing.space2),
+                                child: SaIcon(
+                                  SaIconGlyph.close,
+                                  size: 15,
+                                  color: onSurface.withValues(alpha: 0.5),
                                 ),
                               ),
                             ),
-                          ],
+                          ),
                         ],
-                      ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-        ),
+        )
       ),
     );
   }

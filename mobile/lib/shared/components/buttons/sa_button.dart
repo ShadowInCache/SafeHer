@@ -161,8 +161,7 @@ class _SaButtonState extends State<SaButton> with SingleTickerProviderStateMixin
                 padding: EdgeInsets.symmetric(horizontal: widget.size.horizontalPadding),
                 constraints: const BoxConstraints(minWidth: AppSpacing.minTouchTarget),
                 decoration: BoxDecoration(
-                  gradient: colors.gradient,
-                  color: colors.gradient == null ? colors.background : null,
+                  color: colors.background,
                   borderRadius: AppRadius.mdRadius,
                   border: colors.border != null ? Border.all(color: colors.border!, width: 1.5) : null,
                 ),
@@ -209,8 +208,8 @@ class _SaButtonState extends State<SaButton> with SingleTickerProviderStateMixin
     final saColors = context.saColors;
     return switch (variant) {
       SaButtonVariant.primary => _SaButtonColors(
-        gradient: const LinearGradient(colors: [AppColors.violet500, AppColors.violet700]),
-        foreground: Colors.white,
+        background: Theme.of(context).colorScheme.primary,
+        foreground: Theme.of(context).colorScheme.onPrimary,
       ),
       SaButtonVariant.secondary => _SaButtonColors(
         background: saColors.surfaceHighest,
@@ -218,8 +217,8 @@ class _SaButtonState extends State<SaButton> with SingleTickerProviderStateMixin
       ),
       SaButtonVariant.ghost => _SaButtonColors(
         background: Colors.transparent,
-        foreground: AppColors.violet500,
-        border: AppColors.violet500,
+        foreground: saColors.interactive,
+        border: saColors.interactive,
       ),
       SaButtonVariant.danger => _SaButtonColors(
         background: _armed ? AppColors.coral600 : AppColors.coral500,
@@ -230,10 +229,9 @@ class _SaButtonState extends State<SaButton> with SingleTickerProviderStateMixin
 }
 
 class _SaButtonColors {
-  _SaButtonColors({this.background, this.gradient, required this.foreground, this.border});
+  _SaButtonColors({this.background, required this.foreground, this.border});
 
   final Color? background;
-  final Gradient? gradient;
   final Color foreground;
   final Color? border;
 }

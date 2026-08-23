@@ -514,7 +514,7 @@ class _DeviceTypePicker extends StatelessWidget {
                   vertical: AppSpacing.space2,
                 ),
                 decoration: BoxDecoration(
-                  color: type == selected ? AppColors.violet500 : Colors.transparent,
+                  color: type == selected ? Theme.of(context).colorScheme.primary : Colors.transparent,
                   border: Border.all(
                     color: type == selected ? AppColors.violet500 : onSurface.withValues(alpha: 0.3),
                   ),
@@ -523,7 +523,7 @@ class _DeviceTypePicker extends StatelessWidget {
                 child: Text(
                   type.label,
                   style: AppTypography.labelM.copyWith(
-                    color: type == selected ? Colors.white : onSurface,
+                    color: type == selected ? Theme.of(context).colorScheme.onPrimary : onSurface,
                   ),
                 ),
               ),
