@@ -63,6 +63,14 @@ abstract final class AppColors {
   static const dangerOnDark = Color(0xFFE4573F);
   static const dangerOnLight = Color(0xFFB9291D);
 
+  /// The emergency register. Once an alert is out, the whole screen becomes
+  /// this — not a tinted version of the app, a different surface. It is the
+  /// one place a colour is allowed to be the entire ground, and it is
+  /// deliberately the same red as [dangerOnLight] so the escalation reads as
+  /// the same signal turned all the way up. [neutral50] is its ink: 5.5:1,
+  /// legible at arm's length, at night, badly.
+  static const emergencyField = Color(0xFFB9291D);
+
   // Backgrounds. The `dark*` ramp is the night ground and its surfaces; the
   // `light*` pair is the day ground and its hairline.
   static const dark900 = Color(0xFF14130E); // night ground

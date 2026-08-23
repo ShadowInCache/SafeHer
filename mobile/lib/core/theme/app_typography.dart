@@ -50,8 +50,14 @@ abstract final class AppTypography {
 
   /// The alert register. Used only where a screen has escalated -- the
   /// dispatched emergency headline -- never for ordinary display copy.
+  ///
+  /// Sized against the screen it lives on rather than for maximum impact. At
+  /// 56 it pushed "I'm Safe -- Cancel Alert" past the viewport's build range,
+  /// which on a real phone means extra scrolling to call off a false alarm.
+  /// A headline is not worth putting distance between a woman and the control
+  /// that stops the thing she triggered by accident.
   static TextStyle get displayCondensed => GoogleFonts.archivoNarrow(
-    fontSize: 56,
+    fontSize: 42,
     fontWeight: FontWeight.w800,
     height: 0.95,
     letterSpacing: -0.5,

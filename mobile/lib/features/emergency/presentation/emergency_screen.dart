@@ -509,7 +509,15 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
     final canLeave = _stage == EmergencyStage.preActivation || _stage == EmergencyStage.cancelled;
 
     return Scaffold(
-      backgroundColor: _stage == EmergencyStage.preActivation ? null : AppColors.dark900,
+      // Dispatched is the alert register: the whole field turns over. The
+      // countdown and cancelled stages stay on the ordinary night ground —
+      // one is still cancellable and the other is a resolution, so neither
+      // should shout the way a sent alert does.
+      backgroundColor: switch (_stage) {
+        EmergencyStage.preActivation => null,
+        EmergencyStage.dispatched => AppColors.emergencyField,
+        _ => AppColors.dark900,
+      },
       body: SafeArea(
         child: Column(
           children: [

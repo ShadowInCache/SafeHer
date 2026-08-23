@@ -9,7 +9,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/theme/theme_extensions.dart';
 
-enum SaButtonVariant { primary, secondary, ghost, danger }
+enum SaButtonVariant { primary, secondary, ghost, danger, inverse, inverseOutline }
 
 enum SaButtonSize { sm, md, lg }
 
@@ -117,7 +117,12 @@ class _SaButtonState extends State<SaButton> with SingleTickerProviderStateMixin
 
   void _handleTap() {
     if (_disabled) return;
-    if (widget.variant == SaButtonVariant.danger && widget.confirmRequired && !_armed) {
+    // Gated on the caller's intent, not on the colour. This used to also
+    // require `variant == danger`, which meant `confirmRequired: true` on any
+    // other variant silently did nothing — a two-tap guard that was not there.
+    // Every current caller pairs it with danger, so this changes no existing
+    // behaviour; it just stops the guard from depending on the palette.
+    if (widget.confirmRequired && !_armed) {
       _armTimer?.cancel();
       setState(() => _armed = true);
       _armTimer = Timer(const Duration(seconds: 3), () {
@@ -223,6 +228,20 @@ class _SaButtonState extends State<SaButton> with SingleTickerProviderStateMixin
       SaButtonVariant.danger => _SaButtonColors(
         background: _armed ? AppColors.coral600 : AppColors.coral500,
         foreground: Colors.white,
+      ),
+      // The two treatments that work on `AppColors.emergencyField`. Nothing
+      // tinted survives on that ground — coral on oxide red is barely a
+      // colour change — so the contrast has to come from the paper.
+      SaButtonVariant.inverse => _SaButtonColors(
+        background: _armed ? AppColors.neutral300 : AppColors.neutral50,
+        foreground: AppColors.emergencyField,
+      ),
+      SaButtonVariant.inverseOutline => _SaButtonColors(
+        background: _armed
+            ? AppColors.neutral50.withValues(alpha: 0.22)
+            : Colors.transparent,
+        foreground: AppColors.neutral50,
+        border: AppColors.neutral50.withValues(alpha: 0.55),
       ),
     };
   }
