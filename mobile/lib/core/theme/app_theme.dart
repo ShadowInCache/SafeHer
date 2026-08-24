@@ -15,27 +15,31 @@ abstract final class AppTheme {
 
   static ThemeData _build({required Brightness brightness}) {
     final isDark = brightness == Brightness.dark;
+    final sa = isDark ? SafeHerColors.darkResolved() : SafeHerColors.lightResolved();
 
     final colorScheme = isDark
         ? const ColorScheme.dark(
-            primary: AppColors.violet500,
-            onPrimary: Colors.white,
-            secondary: AppColors.coral500,
-            onSecondary: Colors.white,
+            // Material wants a light primary against a dark ground, with dark
+            // ink on top of it -- which is also what the design asks for: the
+            // interactive colour lifts on night, rather than darkening.
+            primary: AppColors.violet400,
+            onPrimary: AppColors.dark900,
+            secondary: AppColors.coral400,
+            onSecondary: AppColors.dark900,
             surface: AppColors.dark800,
             onSurface: AppColors.neutral100,
-            error: AppColors.danger500,
-            onError: Colors.white,
+            error: AppColors.dangerOnDark,
+            onError: AppColors.dark900,
           )
         : const ColorScheme.light(
             primary: AppColors.violet600,
-            onPrimary: Colors.white,
+            onPrimary: AppColors.neutral50,
             secondary: AppColors.coral500,
-            onSecondary: Colors.white,
+            onSecondary: AppColors.neutral50,
             surface: AppColors.light50,
             onSurface: AppColors.neutral900,
-            error: AppColors.danger500,
-            onError: Colors.white,
+            error: AppColors.dangerOnLight,
+            onError: AppColors.neutral50,
           );
 
     final onSurface = colorScheme.onSurface;
@@ -60,8 +64,8 @@ abstract final class AppTheme {
       brightness: brightness,
       colorScheme: colorScheme,
       // Transparent so `SaAmbientBackground` (mounted above the router in
-      // main.dart) shows through every screen. The aurora paints the base
-      // colour, so nothing here is left unpainted.
+      // main.dart) shows through every screen. That widget paints the ground,
+      // so nothing here is left unpainted.
       scaffoldBackgroundColor: Colors.transparent,
       textTheme: textTheme,
       splashFactory: NoSplash.splashFactory,
@@ -72,44 +76,33 @@ abstract final class AppTheme {
         elevation: 0,
         foregroundColor: onSurface,
       ),
-      dividerColor: isDark
-          ? AppColors.violet400.withValues(alpha: 0.14)
-          : AppColors.violet600.withValues(alpha: 0.12),
-      extensions: [
-        isDark ? SafeHerColors.darkResolved() : SafeHerColors.lightResolved(),
-      ],
+      // A plain hairline. This was a violet-tinted rule at 12-14% alpha, which
+      // read as a smudge rather than a line; separation is now the divider's
+      // whole job, so it gets a real colour.
+      dividerColor: sa.line,
+      extensions: [sa],
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        // Translucent so fields pick up the aurora behind them instead of
-        // reading as grey slabs cut out of the page.
-        fillColor: isDark
-            ? AppColors.dark700.withValues(alpha: 0.66)
-            : Colors.white.withValues(alpha: 0.72),
+        // Opaque, matching the rest of the surfaces. These were translucent so
+        // the aurora could tint them; with the aurora gone that would only
+        // sample the flat ground.
+        fillColor: sa.surfaceElevated,
         border: OutlineInputBorder(
           borderRadius: AppRadius.mdRadius,
-          borderSide: BorderSide(color: isDark ? AppColors.dark600 : AppColors.light100),
+          borderSide: BorderSide(color: sa.line),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: AppRadius.mdRadius,
-          borderSide: BorderSide(
-            // A violet-tinted hairline instead of flat grey, so the field edge
-            // belongs to the brand rather than to Material's defaults.
-            color: isDark
-                ? AppColors.violet400.withValues(alpha: 0.20)
-                : AppColors.violet600.withValues(alpha: 0.16),
-          ),
+          borderSide: BorderSide(color: sa.line),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppRadius.mdRadius,
-          // SRS Frontend 3.3: focus goes 1dp -> 2dp violet.
-          borderSide: BorderSide(
-            color: isDark ? AppColors.violet400 : AppColors.violet600,
-            width: 2,
-          ),
+          // SRS Frontend 3.3: focus goes 1dp -> 2dp, in the interactive colour.
+          borderSide: BorderSide(color: sa.interactive, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: AppRadius.mdRadius,
-          borderSide: const BorderSide(color: AppColors.coral500, width: 1),
+          borderSide: BorderSide(color: colorScheme.error, width: 1),
         ),
       ),
     );

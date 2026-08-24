@@ -6,13 +6,23 @@ import '../../../core/animations/animation_helpers.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/theme_extensions.dart';
 
-/// Base glassmorphic card used throughout SafeHer. Specialized cards
-/// (SaDeviceCard, SaAlertCard, ...) compose this rather than reimplementing
-/// the glass fill/border/shadow treatment.
+/// Base card used throughout SafeHer. Specialized cards (SaDeviceCard,
+/// SaAlertCard, ...) compose this rather than reimplementing the
+/// fill/border/shadow treatment.
 ///
-/// Per the glassmorphism spec, no more than 3 [SaCard]s with [useBlur] true
-/// should be visible on screen simultaneously — screens with long lists
-/// should set `useBlur: false` on cards past the first few.
+/// **This used to be a glass card** — a 16px [BackdropFilter] behind a
+/// translucent white fill, on every surface in the app. Two things were wrong
+/// with that. Visually, it gave a dark-mode toggle and an SOS contact exactly
+/// the same weight, so nothing had hierarchy. Mechanically, the filter ran
+/// whether or not it was wanted: [useBlur] `false` still built a
+/// `BackdropFilter`, just with a zero-sigma blur, which costs a saveLayer and
+/// a GPU pass to produce no effect at all.
+///
+/// The fills are opaque now, so a backdrop filter has nothing left to reveal —
+/// it blurs pixels that are then painted over. [useBlur] therefore defaults to
+/// false and, when false, no filter is built at all. The flag survives only so
+/// a surface that genuinely wants to sample what is behind it can ask; when
+/// nothing does, it should go.
 class SaCard extends StatefulWidget {
   const SaCard({
     required this.child,
@@ -21,7 +31,7 @@ class SaCard extends StatefulWidget {
     this.elevation = 2,
     this.padding = const EdgeInsets.all(16),
     this.borderRadius,
-    this.useBlur = true,
+    this.useBlur = false,
     this.semanticsLabel,
   });
 
@@ -74,25 +84,41 @@ class _SaCardState extends State<SaCard> with SingleTickerProviderStateMixin {
       CurvedAnimation(parent: _pressController, curve: Curves.easeInOut),
     );
 
-    Widget content = ClipRRect(
-      borderRadius: radius,
-      child: BackdropFilter(
-        filter: widget.useBlur
-            ? ImageFilter.blur(sigmaX: 16, sigmaY: 16)
-            : ImageFilter.blur(sigmaX: 0, sigmaY: 0),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: widget.padding,
-          decoration: BoxDecoration(
-            color: saColors.glassFill,
-            borderRadius: radius,
-            border: Border.all(color: saColors.glassBorder, width: 1),
-            boxShadow: _shadowFor(widget.elevation, saColors),
-          ),
-          child: widget.child,
-        ),
+    // [elevation] has been dead for as long as this was a glass card. The
+    // ClipRRect below existed for the filter's benefit, but a clip applies to
+    // everything its child paints — including the drop shadow, which falls
+    // *outside* the rounded rect and was therefore clipped away every time. No
+    // SaCard has ever actually painted one.
+    //
+    // Removing the clip switched them all on at once, which is not a change
+    // this pass is entitled to make: the direction takes its hierarchy from
+    // hairlines and space rather than depth, and turning on shadows nobody
+    // asked for is the opposite of flattening. So the flat surface keeps them
+    // off deliberately, and the blurred path keeps its old behaviour. Retiring
+    // the parameter itself belongs with the elevation work.
+    final Widget surface = AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      padding: widget.padding,
+      decoration: BoxDecoration(
+        color: saColors.glassFill,
+        borderRadius: radius,
+        border: Border.all(color: saColors.glassBorder, width: 1),
+        boxShadow: widget.useBlur ? _shadowFor(widget.elevation, saColors) : const [],
       ),
+      child: widget.child,
     );
+
+    // The decoration rounds its own corners, so with no filter to contain
+    // there is nothing left for a clip to do.
+    Widget content = widget.useBlur
+        ? ClipRRect(
+            borderRadius: radius,
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+              child: surface,
+            ),
+          )
+        : surface;
 
     if (widget.onTap != null) {
       content = GestureDetector(

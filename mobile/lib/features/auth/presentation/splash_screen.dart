@@ -12,6 +12,12 @@ import '../data/auth_providers.dart';
 /// Splash: ≤1.8s brand animation while the onboarding flag + auth session
 /// are checked in the background, then a single redirect. No spinner is
 /// ever shown — the animation itself is the loading state.
+///
+/// The mark used to sit in a violet glow that pulsed and faded. This builds
+/// the identity out of the same three devices the rest of the app uses: a
+/// stroked mark, a hairline rule, and a mono eyebrow. The rule draws outward
+/// from the centre — it is the same line that opens every section inside the
+/// app, so the first thing the user sees is the app's own grammar.
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
@@ -72,18 +78,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
       body: AnimatedBuilder(
         animation: _controller,
         builder: (context, child) {
-          final shieldIn = Curves.easeOut.transform(_intervalValue(0, 300 / 1800));
-          final lockPulse = Curves.easeOut.transform(_intervalValue(300 / 1800, 700 / 1800));
+          // Same interval boundaries as before, so the screen still occupies
+          // exactly its 1.8s budget and the redirect is unchanged.
+          final markIn = Curves.easeOut.transform(_intervalValue(0, 300 / 1800));
+          final ringIn = Curves.easeOut.transform(_intervalValue(300 / 1800, 700 / 1800));
           final wordmarkIn = Curves.easeOut.transform(_intervalValue(700 / 1800, 1100 / 1800));
-          final taglineIn = Curves.easeOut.transform(_intervalValue(900 / 1800, 1100 / 1800));
-          final glowPulse = Curves.easeOut.transform(_intervalValue(1100 / 1800, 1500 / 1800));
+          final ruleIn = Curves.easeOutCubic.transform(_intervalValue(900 / 1800, 1400 / 1800));
+          final taglineIn = Curves.easeOut.transform(_intervalValue(1100 / 1800, 1500 / 1800));
           final finalFade = 1 - _intervalValue(1500 / 1800, 1800 / 1800);
-
-          final glowDiameter = shieldIn < 1
-              ? 80 * shieldIn
-              : 80 + 40 * glowPulse;
-          final glowOpacity = shieldIn < 1 ? 0.4 * shieldIn : 0.4 * (1 - glowPulse);
-          final shieldScale = 0.6 + 0.4 * shieldIn + 0.06 * lockPulse * (1 - lockPulse) * 4;
 
           return Opacity(
             opacity: finalFade,
@@ -92,49 +94,55 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   SizedBox(
-                    width: 140,
-                    height: 140,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Container(
-                          width: glowDiameter,
-                          height: glowDiameter,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: AppColors.violet500.withValues(alpha: glowOpacity),
-                            boxShadow: [
-                              BoxShadow(color: AppColors.violet500.withValues(alpha: glowOpacity * 0.6), blurRadius: 24),
-                            ],
-                          ),
-                        ),
-                        Opacity(
-                          opacity: shieldIn,
+                    width: 132,
+                    height: 132,
+                    child: CustomPaint(
+                      painter: _MarkPainter(markIn: markIn, ringIn: ringIn),
+                      child: Center(
+                        child: Opacity(
+                          opacity: markIn,
                           child: Transform.scale(
-                            scale: shieldScale,
-                            child: const SaIcon(SaIconGlyph.shield, size: 64, color: Colors.white),
+                            scale: 0.82 + 0.18 * markIn,
+                            child: const SaIcon(
+                              SaIconGlyph.shield,
+                              size: 56,
+                              color: AppColors.neutral50,
+                              strokeWidth: 2,
+                            ),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Opacity(
-                    opacity: wordmarkIn,
-                    child: Transform.translate(
-                      offset: Offset(0, 12 * (1 - wordmarkIn)),
-                      child: Text(
-                        'SAFEHER',
-                        style: AppTypography.displayM.copyWith(color: Colors.white, letterSpacing: 2),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 28),
+                  Opacity(
+                    opacity: wordmarkIn,
+                    child: Transform.translate(
+                      offset: Offset(0, 10 * (1 - wordmarkIn)),
+                      child: Text(
+                        'SAFEHER',
+                        style: AppTypography.displayCondensed.copyWith(
+                          color: AppColors.neutral50,
+                          fontSize: 46,
+                          letterSpacing: 6,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  // The rule draws outward from the centre rather than fading
+                  // in, so the identity assembles itself instead of appearing.
+                  SizedBox(
+                    height: 1,
+                    width: 200 * ruleIn,
+                    child: const ColoredBox(color: AppColors.dark600),
+                  ),
+                  const SizedBox(height: 14),
                   Opacity(
                     opacity: taglineIn,
                     child: Text(
-                      'Always protected.',
-                      style: AppTypography.bodyM.copyWith(color: Colors.white.withValues(alpha: 0.7)),
+                      'ALWAYS PROTECTED',
+                      style: AppTypography.eyebrow.copyWith(color: AppColors.neutral400),
                     ),
                   ),
                 ],
@@ -145,4 +153,45 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
       ),
     );
   }
+}
+
+/// The ring behind the mark: a full circle in the night line colour, with an
+/// oxide-red arc sweeping over it. Red because this is a safety app and the
+/// arc is the one place on the splash that says so — everything else is ink.
+class _MarkPainter extends CustomPainter {
+  const _MarkPainter({required this.markIn, required this.ringIn});
+
+  final double markIn;
+  final double ringIn;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 6;
+
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = AppColors.dark600.withValues(alpha: markIn),
+    );
+
+    if (ringIn <= 0) return;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -1.5708, // 12 o'clock
+      6.2832 * ringIn,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round
+        ..color = AppColors.coral400,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_MarkPainter old) => old.markIn != markIn || old.ringIn != ringIn;
 }

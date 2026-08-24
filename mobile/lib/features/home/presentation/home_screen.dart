@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -13,13 +11,13 @@ import '../../../core/theme/theme_extensions.dart';
 import '../../../shared/components/buttons/sa_button.dart';
 import '../../../shared/components/cards/sa_alert_card.dart';
 import '../../../shared/components/cards/sa_analytics_card.dart';
-import '../../../shared/components/cards/sa_card.dart';
 import '../../../shared/components/charts/sa_bar_chart.dart';
 import '../../../shared/components/charts/sa_donut_chart.dart';
 import '../../../shared/components/feedback/sa_empty_state.dart';
 import '../../../shared/components/feedback/sa_loading_shimmer.dart';
 import '../../../shared/components/feedback/sa_status_dot.dart';
 import '../../../shared/components/icons/sa_icon.dart';
+import '../../../shared/components/layout/sa_section_header.dart';
 import '../../../shared/components/navigation/sa_bottom_nav_bar.dart';
 import '../../../shared/components/overlays/sa_toast.dart';
 import '../../dashboard/data/dashboard_providers.dart';
@@ -163,10 +161,14 @@ class _OfflineBanner extends ConsumerWidget {
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space4, vertical: AppSpacing.space2),
-        color: AppColors.warning500,
+        // The deep end of the caution ramp, not the mid one. `warning500` is
+        // tuned to be legible *as foreground* on either ground, which makes it
+        // too dark to carry black text as a fill -- it lands at 4.5:1, right on
+        // the line. This pairing is 8.8:1.
+        color: AppColors.warning900,
         child: Text(
           "You're offline — changes will sync when you're back online.",
-          style: AppTypography.labelM.copyWith(color: Colors.black),
+          style: AppTypography.labelM.copyWith(color: AppColors.neutral50),
           textAlign: TextAlign.center,
         ),
       ),
@@ -191,14 +193,13 @@ class _BlurAppBar extends StatelessWidget {
         child: AnimatedOpacity(
           duration: const Duration(milliseconds: 150),
           opacity: opacity,
-          child: ClipRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-              child: Container(
-                height: MediaQuery.of(context).padding.top + 56,
-                color: saColors.surfaceElevated.withValues(alpha: 0.8),
-              ),
-            ),
+          // The ground itself, opaque, rather than a translucent blur. This
+          // header exists to hide content scrolling under the status bar, and
+          // painting it in the page's own ground makes that read as the page
+          // ending — which a frosted panel never quite did.
+          child: Container(
+            height: MediaQuery.of(context).padding.top + 56,
+            color: saColors.surfaceBase,
           ),
         ),
       ),
@@ -303,7 +304,7 @@ class _HomeContent extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('This Week', style: AppTypography.headingM.copyWith(color: onSurface)),
+                const SaSectionHeader(label: 'This Week'),
                 const SizedBox(height: AppSpacing.space3),
                 SaAnalyticsCard(title: 'Threat Trend', chart: SaBarChart(data: weeklySummary.weeklyThreatTrend)),
                 if (weeklySummary.eventBreakdown.isNotEmpty) ...[
@@ -324,7 +325,11 @@ class _HomeContent extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Recent Alerts', style: AppTypography.headingM.copyWith(color: onSurface)),
+                SaSectionHeader(
+                  label: 'Recent Alerts',
+                  actionLabel: 'All reports',
+                  onAction: () => context.go('/reports'),
+                ),
                 const SizedBox(height: AppSpacing.space3),
                 if (recentAlerts.isEmpty)
                   Text(
@@ -342,17 +347,10 @@ class _HomeContent extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.space3),
                 ],
-                Semantics(
-                  button: true,
-                  label: 'View all reports',
-                  child: GestureDetector(
-                    onTap: () => context.go('/reports'),
-                    child: Text(
-                      'View all reports →',
-                      style: AppTypography.labelL.copyWith(color: Theme.of(context).colorScheme.primary),
-                    ),
-                  ),
-                ),
+                // The trailing "View all reports ->" link used to live here.
+                // The section header now carries that action, and two controls
+                // four rows apart going to the same route is a choice the
+                // reader has to think about for no gain.
               ],
             ),
           ),
@@ -430,12 +428,8 @@ class _SafetyStatusCard extends StatelessWidget {
         padding: const EdgeInsets.all(AppSpacing.space5),
         decoration: BoxDecoration(
           borderRadius: AppRadius.xl2Radius,
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [tint.withValues(alpha: 0.18), tint.withValues(alpha: 0.04)],
-          ),
-          border: Border.all(color: tint.withValues(alpha: 0.28)),
+          color: tint.withValues(alpha: 0.10),
+          border: Border.all(color: tint.withValues(alpha: 0.38)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -503,44 +497,46 @@ class _DeviceStatusSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('Devices', style: AppTypography.headingM.copyWith(color: onSurface)),
-            Semantics(
-              button: true,
-              label: 'Manage devices',
-              child: GestureDetector(
-                onTap: onManageDevices,
-                child: Text('Manage', style: AppTypography.labelL.copyWith(color: AppColors.violet500)),
-              ),
-            ),
-          ],
+        SaSectionHeader(
+          label: 'Devices',
+          actionLabel: 'Manage',
+          onAction: onManageDevices,
         ),
         const SizedBox(height: AppSpacing.space3),
         if (devices.isEmpty)
-          SaCard(
-            onTap: onManageDevices,
-            useBlur: false,
-            semanticsLabel: 'No wearable connected. Tap to connect a device.',
-            child: Row(
-              children: [
-                SaIcon(SaIconGlyph.bluetoothOff, size: 22, color: onSurface.withValues(alpha: 0.4)),
-                const SizedBox(width: AppSpacing.space3),
-                Expanded(
-                  child: Text(
-                    'No wearable connected — tap to pair a Smart Glove or Smart Glasses.',
-                    style: AppTypography.bodyM.copyWith(color: onSurface.withValues(alpha: 0.6)),
-                  ),
+          Semantics(
+            button: true,
+            label: 'No wearable connected. Tap to connect a device.',
+            child: GestureDetector(
+              onTap: onManageDevices,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.space3),
+                child: Row(
+                  children: [
+                    SaIcon(SaIconGlyph.bluetoothOff, size: 22, color: onSurface.withValues(alpha: 0.4)),
+                    const SizedBox(width: AppSpacing.space3),
+                    Expanded(
+                      child: Text(
+                        'No wearable connected — tap to pair a Smart Glove or Smart Glasses.',
+                        style: AppTypography.bodyM.copyWith(color: onSurface.withValues(alpha: 0.6)),
+                      ),
+                    ),
+                    SaIcon(SaIconGlyph.chevronRight, size: 18, color: onSurface.withValues(alpha: 0.4)),
+                  ],
                 ),
-                SaIcon(SaIconGlyph.chevronRight, size: 18, color: onSurface.withValues(alpha: 0.4)),
-              ],
+              ),
             ),
           )
         else
-          for (final device in devices) ...[
+          // A register, not a stack of cards. Each device was its own filled,
+          // bordered, rounded surface, which gave a paired smart ring exactly
+          // the same visual weight as the safety status above it. The section
+          // rule and the eyebrow already say where this list starts and ends,
+          // so the rows only need separating from each other.
+          for (final (i, device) in devices.indexed) ...[
+            if (i > 0) Container(height: 1, color: context.saColors.line),
             _DeviceStatusRow(device: device, onTap: () => onDeviceTap(device)),
-            const SizedBox(height: AppSpacing.space3),
           ],
       ],
     );
@@ -559,52 +555,58 @@ class _DeviceStatusRow extends StatelessWidget {
     final statusColor = device.isOnline ? AppColors.success500 : AppColors.neutral400;
     final syncedLabel = device.lastSeen != null ? 'Synced ${_formatRelative(device.lastSeen!)}' : 'Never synced';
 
-    return SaCard(
-      onTap: onTap,
-      useBlur: false,
-      semanticsLabel:
+    return Semantics(
+      button: true,
+      label:
           '${device.name}, ${device.isOnline ? "online" : "offline"}, $syncedLabel'
           '${device.isOnline ? ", battery ${(device.batteryPercent * 100).round()} percent" : ""}',
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.violet500.withValues(alpha: 0.15)),
-            alignment: Alignment.center,
-            child: SaIcon(_glyphForDeviceType(device.type), size: 20, color: AppColors.violet500),
-          ),
-          const SizedBox(width: AppSpacing.space3),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(device.name, style: AppTypography.headingS.copyWith(color: onSurface)),
-                const SizedBox(height: 2),
-                Row(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.space3),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.violet500.withValues(alpha: 0.15)),
+                alignment: Alignment.center,
+                child: SaIcon(_glyphForDeviceType(device.type), size: 20, color: AppColors.violet500),
+              ),
+              const SizedBox(width: AppSpacing.space3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SaStatusDot(color: statusColor, live: device.isOnline),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        '${device.isOnline ? "Online" : "Offline"} · $syncedLabel',
-                        style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.6)),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                    Text(device.name, style: AppTypography.headingS.copyWith(color: onSurface)),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        SaStatusDot(color: statusColor, live: device.isOnline),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            '${device.isOnline ? "Online" : "Offline"} · $syncedLabel',
+                            style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.6)),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              if (device.isOnline)
+                Text(
+                  '${(device.batteryPercent * 100).round()}%',
+                  style: AppTypography.monoDataS.copyWith(color: onSurface.withValues(alpha: 0.7)),
+                ),
+              const SizedBox(width: AppSpacing.space2),
+              SaIcon(SaIconGlyph.chevronRight, size: 16, color: onSurface.withValues(alpha: 0.35)),
+            ],
           ),
-          if (device.isOnline)
-            Text(
-              '${(device.batteryPercent * 100).round()}%',
-              style: AppTypography.monoDataS.copyWith(color: onSurface.withValues(alpha: 0.7)),
-            ),
-          const SizedBox(width: AppSpacing.space2),
-          SaIcon(SaIconGlyph.chevronRight, size: 16, color: onSurface.withValues(alpha: 0.35)),
-        ],
+        ),
       ),
     );
   }
@@ -626,26 +628,30 @@ class _LiveMonitoringSummaryCard extends StatelessWidget {
       MonitoringConnectionStatus.disconnected => ('Offline', AppColors.neutral400),
     };
 
-    return SaCard(
-      onTap: onTap,
-      useBlur: false,
-      semanticsLabel: 'Live Monitoring, $statusLabel',
-      child: Column(
+    // A section, not a floating card. This sat between the device register
+    // and the quick-action grid as the one block with no section rule, so the
+    // page read as three unrelated things stacked rather than one page. The
+    // live status takes the head's right-hand slot, where "Manage" sits on
+    // the section above.
+    return Semantics(
+      button: true,
+      label: 'Live Monitoring, $statusLabel',
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Live Monitoring', style: AppTypography.headingS.copyWith(color: onSurface)),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SaStatusDot(color: statusColor, live: monitoring.status == MonitoringConnectionStatus.connected),
-                  const SizedBox(width: 6),
-                  Text(statusLabel, style: AppTypography.labelM.copyWith(color: statusColor)),
-                ],
-              ),
-            ],
+          SaSectionHeader(
+            label: 'Live Monitoring',
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SaStatusDot(color: statusColor, live: monitoring.status == MonitoringConnectionStatus.connected),
+                const SizedBox(width: 6),
+                Text(statusLabel, style: AppTypography.labelM.copyWith(color: statusColor)),
+              ],
+            ),
           ),
           const SizedBox(height: AppSpacing.space3),
           if (latest == null)
@@ -667,8 +673,9 @@ class _LiveMonitoringSummaryCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: AppSpacing.space3),
-          Text('View Live Feed →', style: AppTypography.labelL.copyWith(color: AppColors.violet500)),
+          Text('View Live Feed →', style: AppTypography.labelL.copyWith(color: context.saColors.interactive)),
         ],
+        ),
       ),
     );
   }

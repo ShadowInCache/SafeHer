@@ -8,6 +8,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../shared/components/layout/sa_section_header.dart';
 import '../../../../shared/components/cards/sa_card.dart';
 import '../../../../core/detection/detection_status.dart';
 import '../../data/profile_providers.dart';
@@ -32,7 +33,7 @@ class ProfilePreferencesSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Preferences', style: AppTypography.headingM.copyWith(color: onSurface)),
+        const SaSectionHeader(label: 'Preferences'),
         const SizedBox(height: AppSpacing.space3),
         SaCard(
           semanticsLabel: 'Threat threshold, ${(prefs.threatThreshold * 100).round()} percent',
@@ -172,13 +173,17 @@ class _DurationChip extends StatelessWidget {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space4, vertical: AppSpacing.space2),
           decoration: BoxDecoration(
-            color: selected ? AppColors.violet500 : Colors.transparent,
+            color: selected ? Theme.of(context).colorScheme.primary : Colors.transparent,
             borderRadius: AppRadius.fullRadius,
-            border: Border.all(color: selected ? AppColors.violet500 : onSurface.withValues(alpha: 0.2)),
+            border: Border.all(
+              color: selected ? Theme.of(context).colorScheme.primary : onSurface.withValues(alpha: 0.2),
+            ),
           ),
           child: Text(
             '${seconds}s',
-            style: AppTypography.labelL.copyWith(color: selected ? Colors.white : onSurface),
+            style: AppTypography.labelL.copyWith(
+              color: selected ? Theme.of(context).colorScheme.onPrimary : onSurface,
+            ),
           ),
         ),
       ),

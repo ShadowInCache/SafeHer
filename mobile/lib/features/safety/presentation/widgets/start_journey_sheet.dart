@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/components/buttons/sa_button.dart';
@@ -183,13 +182,13 @@ class _DurationChip extends StatelessWidget {
           vertical: AppSpacing.space2,
         ),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.violet500 : onSurface.withValues(alpha: 0.06),
+          color: isSelected ? Theme.of(context).colorScheme.primary : onSurface.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
           label,
           style: AppTypography.labelM.copyWith(
-            color: isSelected ? Colors.white : onSurface.withValues(alpha: 0.75),
+            color: isSelected ? Theme.of(context).colorScheme.onPrimary : onSurface.withValues(alpha: 0.75),
           ),
         ),
       ),

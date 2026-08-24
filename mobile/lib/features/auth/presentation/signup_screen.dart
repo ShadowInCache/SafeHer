@@ -8,6 +8,7 @@ import '../data/auth_providers.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/theme/theme_extensions.dart';
 import '../../../shared/components/buttons/sa_button.dart';
 import '../../../shared/components/icons/sa_icon.dart';
 import '../../../shared/components/inputs/sa_password_field.dart';
@@ -151,7 +152,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     final signupState = ref.watch(signupControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(title: Text('Create Account', style: AppTypography.headingM.copyWith(color: onSurface))),
+      // The bar keeps its automatic leading -- that back button is the only
+      // way out of this screen -- but gives up its title, because the header
+      // below says the same thing with room to breathe.
+      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(
@@ -163,6 +167,19 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Text(
+                'GET STARTED',
+                semanticsLabel: 'Get started',
+                style: AppTypography.eyebrow.copyWith(color: context.saColors.inkMuted),
+              ),
+              const SizedBox(height: AppSpacing.space3),
+              Text(
+                'Create your account',
+                style: AppTypography.displayCondensed.copyWith(color: onSurface, fontSize: 40),
+              ),
+              const SizedBox(height: AppSpacing.space5),
+              Container(height: 1, color: context.saColors.line),
+              const SizedBox(height: AppSpacing.space6),
               Row(
                 children: [
                   Expanded(
@@ -251,13 +268,13 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                       const TextSpan(text: 'By continuing you agree to our '),
                       TextSpan(
                         text: 'Terms of Service',
-                        style: AppTypography.bodyS.copyWith(color: AppColors.violet500, fontWeight: FontWeight.w600),
+                        style: AppTypography.bodyS.copyWith(color: context.saColors.interactive, fontWeight: FontWeight.w600),
                         recognizer: _termsTapRecognizer,
                       ),
                       const TextSpan(text: ' and '),
                       TextSpan(
                         text: 'Privacy Policy',
-                        style: AppTypography.bodyS.copyWith(color: AppColors.violet500, fontWeight: FontWeight.w600),
+                        style: AppTypography.bodyS.copyWith(color: context.saColors.interactive, fontWeight: FontWeight.w600),
                         recognizer: _privacyTapRecognizer,
                       ),
                       const TextSpan(text: '.'),
@@ -278,7 +295,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         onTap: () => context.go('/auth/login'),
                         child: Text(
                           'Sign in',
-                          style: AppTypography.bodyM.copyWith(color: AppColors.violet500, fontWeight: FontWeight.w600),
+                          style: AppTypography.bodyM.copyWith(color: context.saColors.interactive, fontWeight: FontWeight.w600),
                         ),
                       ),
                     ),

@@ -13,7 +13,6 @@ import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/components/buttons/sa_button.dart';
-import '../../../../shared/components/cards/sa_contact_card.dart';
 import '../../../../shared/components/icons/sa_icon.dart';
 import '../../../contacts/domain/models/contact.dart';
 
@@ -63,18 +62,18 @@ class EmergencyDispatchedStage extends StatelessWidget {
 
     final result = dispatchResult;
     if (result == null) {
-      return ('Sending…', Colors.white.withValues(alpha: 0.5));
+      return ('Sending…', _onFieldMuted);
     }
     if (result.isQueued) {
       return switch (result.queueReason) {
         QueueReason.offline => (
           'Will send when you have signal',
-          Colors.white.withValues(alpha: 0.5),
+          _onFieldMuted,
         ),
         // The phone has a network; SafeHer just could not be reached. Saying
         // "when you have signal" here told a woman with five bars to wait for
         // something she already had.
-        _ => ('Retrying…', Colors.white.withValues(alpha: 0.5)),
+        _ => ('Retrying…', _onFieldMuted),
       };
     }
     // The server answers before it has finished contacting anyone. Until it
@@ -82,9 +81,9 @@ class EmergencyDispatchedStage extends StatelessWidget {
     // tried — calling that "Could not reach" is the same false report in the
     // opposite direction.
     if (!result.outcome.progress.isSettled) {
-      return ('Sending…', Colors.white.withValues(alpha: 0.5));
+      return ('Sending…', _onFieldMuted);
     }
-    return ('Could not reach', AppColors.warning500);
+    return ('Could not reach', _onFieldAlarm);
   }
 
   bool get _showFallbackWarning {
@@ -149,20 +148,28 @@ class EmergencyDispatchedStage extends StatelessWidget {
         Row(
           children: [
             Container(
-              width: 10,
-              height: 10,
-              decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.coral500),
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.neutral50),
             ),
             const SizedBox(width: AppSpacing.space2),
-            Flexible(
-              child: Text(
-                'Help is on the way',
-                style: AppTypography.headingL.copyWith(color: Colors.white),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            Text(
+              'ALERT SENT',
+              style: AppTypography.labelM.copyWith(
+                color: AppColors.neutral50,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2.2,
               ),
             ),
           ],
+        ),
+        const SizedBox(height: AppSpacing.space4),
+        // Deliberately unclamped: this is the one headline in the app that
+        // should be readable at arm's length, so it wraps rather than
+        // ellipsising, and the ListView takes the height.
+        Text(
+          'Help is on the way',
+          style: AppTypography.displayCondensed.copyWith(color: AppColors.neutral50),
         ),
         const SizedBox(height: AppSpacing.space2),
         // Deliberately reports what happened rather than reassuring. The
@@ -171,7 +178,9 @@ class EmergencyDispatchedStage extends StatelessWidget {
         // the time, before the backend contacted anyone at all.
         Text(
           _statusLine,
-          style: AppTypography.bodyM.copyWith(color: Colors.white.withValues(alpha: 0.7)),
+          style: AppTypography.bodyL.copyWith(
+            color: AppColors.neutral50.withValues(alpha: 0.85),
+          ),
         ),
         if (_showFallbackWarning) ...[
           const SizedBox(height: AppSpacing.space3),
@@ -184,26 +193,31 @@ class EmergencyDispatchedStage extends StatelessWidget {
         const SizedBox(height: AppSpacing.space3),
         _LiveLocationPanel(location: location),
         const SizedBox(height: AppSpacing.space6),
-        Text('Notifying', style: AppTypography.headingS.copyWith(color: Colors.white)),
+        Text(
+          'NOTIFYING',
+          style: AppTypography.labelM.copyWith(
+            color: _onFieldMuted,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2.0,
+          ),
+        ),
         const SizedBox(height: AppSpacing.space3),
         contactsAsync.when(
           data: (contacts) => Column(
             children: [
               for (final contact in contacts) ...[
-                SaContactCard(
+                // Plain rows rather than SaContactCard. That card paints a
+                // surface fill, which on the emergency field reads as a piece
+                // of another screen pasted onto this one — and it leads with a
+                // priority badge, which is not what you need to know once the
+                // alert is already out. What matters here is who, and whether
+                // they have it.
+                _NotifiedContactRow(
                   name: contact.name,
                   relationship: contact.relationship,
-                  priority: contact.priority,
-                  confirmed: notifiedContactIds.contains(contact.id),
+                  reached: notifiedContactIds.contains(contact.id),
+                  pending: _labelFor(contact.id),
                 ),
-                if (_labelFor(contact.id) case (final label, final colour))
-                  Padding(
-                    padding: const EdgeInsets.only(left: AppSpacing.space4, top: 2),
-                    child: Text(
-                      label,
-                      style: AppTypography.bodyS.copyWith(color: colour),
-                    ),
-                  ),
                 const SizedBox(height: AppSpacing.space3),
               ],
             ],
@@ -214,13 +228,13 @@ class EmergencyDispatchedStage extends StatelessWidget {
           ),
           error: (error, stackTrace) => Text(
             "Couldn't load emergency contacts.",
-            style: AppTypography.bodyM.copyWith(color: Colors.white.withValues(alpha: 0.6)),
+            style: AppTypography.bodyM.copyWith(color: _onFieldMuted),
           ),
         ),
         const SizedBox(height: AppSpacing.space6),
         SaButton(
           label: "I'm Safe — Cancel Alert",
-          variant: SaButtonVariant.danger,
+          variant: SaButtonVariant.inverseOutline,
           confirmRequired: true,
           fullWidth: true,
           onPressed: onMarkSafe,
@@ -229,6 +243,104 @@ class EmergencyDispatchedStage extends StatelessWidget {
     );
   }
 }
+
+/// One emergency contact, and whether the alert actually reached them.
+///
+/// Every row states an outcome. A spinner with no verdict is the one thing
+/// this screen must never show: a woman who cannot tell "still trying" from
+/// "nobody came" will make the wrong decision about what to do next.
+class _NotifiedContactRow extends StatelessWidget {
+  const _NotifiedContactRow({
+    required this.name,
+    required this.relationship,
+    required this.reached,
+    required this.pending,
+  });
+
+  final String name;
+  final String relationship;
+  final bool reached;
+
+  /// `(label, colour)` while the outcome is not yet settled; null once it is.
+  final (String, Color)? pending;
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+    final (String label, Color colour) = reached
+        ? ('ALERTED', _onField)
+        : (pending ?? ('Could not reach', _onFieldAlarm));
+
+    return Semantics(
+      label: '$name, $relationship, $label',
+      child: ExcludeSemantics(
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: _onField.withValues(alpha: 0.45)),
+              ),
+              child: Text(
+                initial,
+                style: AppTypography.labelL.copyWith(color: _onField),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.space3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    name,
+                    style: AppTypography.headingS.copyWith(color: _onField),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    relationship,
+                    style: AppTypography.bodyS.copyWith(color: _onFieldMuted),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.space2),
+            if (reached) ...[
+              const SaIcon(SaIconGlyph.check, size: 15, color: _onField),
+              const SizedBox(width: AppSpacing.space1),
+            ],
+            // "ALERTED" is a token and takes the stamped treatment; "Sending…"
+            // and "Could not reach" are sentences, and letterspaced bold on a
+            // sentence reads like shouting rather than like a status.
+            Text(
+              label,
+              style: reached
+                  ? AppTypography.labelM.copyWith(
+                      color: colour,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.0,
+                    )
+                  : AppTypography.bodyS.copyWith(color: colour),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The only three inks that survive on [AppColors.emergencyField]. Anything
+/// tinted — coral, violet, the semantic green — sits too close to the ground
+/// to register as a separate colour at all.
+const _onField = AppColors.neutral50;
+const _onFieldMuted = Color(0xB3FAF8F4); // paper at 70%
+const _onFieldAlarm = Color(0xFFF5C77E); // light ochre, 4.0:1 on the field
 
 /// Shown when the alert reached nobody. On this screen the worst outcome is
 /// a user who believes help is coming and stops trying, so this is loud and
@@ -241,19 +353,19 @@ class _CouldNotReachBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.space4),
       decoration: BoxDecoration(
-        color: AppColors.warning500.withValues(alpha: 0.14),
+        color: _onFieldAlarm.withValues(alpha: 0.16),
         borderRadius: AppRadius.lgRadius,
-        border: Border.all(color: AppColors.warning500.withValues(alpha: 0.5)),
+        border: Border.all(color: _onFieldAlarm.withValues(alpha: 0.7)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SaIcon(SaIconGlyph.bell, size: 18, color: AppColors.warning500),
+          const SaIcon(SaIconGlyph.bell, size: 18, color: _onFieldAlarm),
           const SizedBox(width: AppSpacing.space3),
           Expanded(
             child: Text(
               'Nobody could be reached. Call your local emergency number now.',
-              style: AppTypography.bodyM.copyWith(color: Colors.white),
+              style: AppTypography.bodyM.copyWith(color: _onFieldAlarm),
             ),
           ),
         ],
@@ -284,29 +396,29 @@ class _EvidencePanel extends StatelessWidget {
     final (String message, Color color) = switch (state) {
       EvidenceState.recording => (
         hasVideo ? 'Recording audio and video evidence' : 'Recording audio evidence',
-        AppColors.coral500,
+        _onField,
       ),
-      EvidenceState.uploading => ('Saving evidence securely…', AppColors.violet400),
+      EvidenceState.uploading => ('Saving evidence securely…', _onField),
       EvidenceState.saved => (
         hasVideo
             ? 'Audio and video saved and encrypted'
             : 'Evidence saved and encrypted',
-        AppColors.success500,
+        _onField,
       ),
       EvidenceState.uploadFailed => (
         'Evidence recorded but not uploaded — it will be lost',
-        AppColors.warning500,
+        _onFieldAlarm,
       ),
       EvidenceState.unavailable => (
         'No audio evidence — microphone unavailable',
-        AppColors.warning500,
+        _onFieldAlarm,
       ),
       EvidenceState.unsupported => (
         'Audio evidence needs the SafeHer app on your phone',
-        AppColors.warning500,
+        _onFieldAlarm,
       ),
-      EvidenceState.discarded => ('Evidence discarded', Colors.white70),
-      EvidenceState.idle => ('', Colors.white70),
+      EvidenceState.discarded => ('Evidence discarded', _onFieldMuted),
+      EvidenceState.idle => ('', _onFieldMuted),
     };
 
     return Semantics(
@@ -332,7 +444,7 @@ class _EvidencePanel extends StatelessWidget {
             Expanded(
               child: Text(
                 message,
-                style: AppTypography.bodyM.copyWith(color: Colors.white),
+                style: AppTypography.bodyM.copyWith(color: color),
               ),
             ),
           ],
@@ -359,13 +471,13 @@ class _LiveLocationPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.space4),
       decoration: BoxDecoration(
-        color: AppColors.dark800,
+        color: _onField.withValues(alpha: 0.10),
         borderRadius: AppRadius.xl2Radius,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        border: Border.all(color: _onField.withValues(alpha: 0.28)),
       ),
       child: Row(
         children: [
-          const SaIcon(SaIconGlyph.mapPin, size: 32, color: AppColors.coral500),
+          const SaIcon(SaIconGlyph.mapPin, size: 32, color: AppColors.neutral50),
           const SizedBox(width: AppSpacing.space4),
           Expanded(
             child: Column(
@@ -377,7 +489,7 @@ class _LiveLocationPanel extends StatelessWidget {
                     Flexible(
                       child: Text(
                         'Sharing live location',
-                        style: AppTypography.headingS.copyWith(color: Colors.white),
+                        style: AppTypography.headingS.copyWith(color: _onField),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -387,7 +499,7 @@ class _LiveLocationPanel extends StatelessWidget {
                 const SizedBox(height: AppSpacing.space1),
                 Text(
                   subtitle,
-                  style: AppTypography.monoDataS.copyWith(color: Colors.white.withValues(alpha: 0.6)),
+                  style: AppTypography.monoDataS.copyWith(color: _onFieldMuted),
                 ),
               ],
             ),
@@ -429,9 +541,9 @@ class _LiveBadgeState extends State<_LiveBadge> with SingleTickerProviderStateMi
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(width: 6, height: 6, decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.coral500)),
+          Container(width: 6, height: 6, decoration: const BoxDecoration(shape: BoxShape.circle, color: _onField)),
           const SizedBox(width: AppSpacing.space1),
-          Text('LIVE', style: AppTypography.labelM.copyWith(color: AppColors.coral500)),
+          Text('LIVE', style: AppTypography.labelM.copyWith(color: _onField)),
         ],
       ),
     );
@@ -466,7 +578,7 @@ class _CallHelplineButton extends StatelessWidget {
 
     return SaButton(
       label: 'Call $number',
-      variant: SaButtonVariant.danger,
+      variant: SaButtonVariant.inverse,
       fullWidth: true,
       semanticsLabel: 'Call the emergency helpline on $number',
       onPressed: () async {

@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,25 +11,49 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/components/buttons/sa_button.dart';
-import '../../../shared/components/icons/sa_icon.dart';
 
+/// One page of the introduction.
+///
+/// [ground] and [ink] are carried per page rather than read from the theme
+/// because the sequence *is* the point: see [OnboardingScreen].
 class _OnboardingPage {
   const _OnboardingPage({
     required this.title,
     required this.body,
-    required this.gradientTop,
-    required this.illustration,
+    required this.ground,
+    required this.ink,
+    required this.inkMuted,
+    required this.mark,
   });
 
   final String title;
   final String body;
-  final Color gradientTop;
-  final Widget illustration;
+  final Color ground;
+  final Color ink;
+  final Color inkMuted;
+  final _MarkKind mark;
 }
 
-/// 3-page introduction. No design assets (Rive/Lottie) were supplied, so
-/// each page's illustration is an abstract composition built from existing
-/// glyphs/gradients rather than a literal character animation.
+enum _MarkKind { watch, sense, alert }
+
+/// 3-page introduction.
+///
+/// **The sequence teaches the app's colour language.** SafeHer's premise is
+/// "calm by default, unmistakable in emergency" -- warm stone while
+/// everything is fine, an oxide-red field the moment an alert is out. The
+/// onboarding now walks through exactly that: stone, then ink, then the
+/// emergency field itself. The third page is not a page *about* the alert
+/// screen; it is the same red the dispatched screen paints, so the first time
+/// a user triggers an SOS she has already seen what it looks like.
+///
+/// The ground lerps continuously with the swipe, so the change is something
+/// you feel rather than three unrelated backdrops. Ink, marks, indicator and
+/// buttons all take their colour from the blended pair, which is why none of
+/// them can be const.
+///
+/// This replaced three radial violet/indigo/coral gradients behind centred
+/// white text, which looked like every other onboarding and said nothing
+/// about this app in particular.
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -38,24 +65,32 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _pageController = PageController();
   int _page = 0;
 
+  static const _paperMuted = Color(0xB3FAF8F4); // paper at 70%
+
   late final List<_OnboardingPage> _pages = [
-    _OnboardingPage(
+    const _OnboardingPage(
       title: 'Always Protected',
       body: 'SafeHer watches over you silently, every step of the way.',
-      gradientTop: AppColors.violet950,
-      illustration: const _ShieldAuraIllustration(),
+      ground: AppColors.light50,
+      ink: AppColors.neutral900,
+      inkMuted: AppColors.neutral500,
+      mark: _MarkKind.watch,
     ),
-    _OnboardingPage(
+    const _OnboardingPage(
       title: 'AI That Understands',
       body: 'Motion, sound, and vision working together to keep you safe.',
-      gradientTop: AppColors.indigo900,
-      illustration: const _NeuralShieldIllustration(),
+      ground: AppColors.dark900,
+      ink: AppColors.neutral100,
+      inkMuted: AppColors.neutral400,
+      mark: _MarkKind.sense,
     ),
-    _OnboardingPage(
+    const _OnboardingPage(
       title: 'Help in Seconds',
       body: 'One tap. Your trusted people know exactly where you are.',
-      gradientTop: AppColors.coral900,
-      illustration: const _SosRippleIllustration(),
+      ground: AppColors.emergencyField,
+      ink: AppColors.neutral50,
+      inkMuted: _paperMuted,
+      mark: _MarkKind.alert,
     ),
   ];
 
@@ -64,7 +99,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     super.initState();
     _pageController.addListener(() {
       final page = _pageController.page?.round() ?? 0;
-      if (page != _page) setState(() => _page = page);
+      if (page != _page) _page = page;
+      // The ground follows the swipe continuously, so every frame of a drag
+      // needs a repaint, not only the ones that cross a page boundary.
+      setState(() {});
     });
   }
 
@@ -85,58 +123,98 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final fraction = _pageController.hasClients && _pageController.page != null
         ? _pageController.page!
         : _page.toDouble();
-    final currentGradient = _pages[fraction.floor().clamp(0, _pages.length - 1)].gradientTop;
-    final nextGradient = _pages[fraction.ceil().clamp(0, _pages.length - 1)].gradientTop;
-    final blendedTop = Color.lerp(currentGradient, nextGradient, fraction - fraction.floor())!;
+    final lower = _pages[fraction.floor().clamp(0, _pages.length - 1)];
+    final upper = _pages[fraction.ceil().clamp(0, _pages.length - 1)];
+    final t = fraction - fraction.floor();
+
+    final ground = Color.lerp(lower.ground, upper.ground, t)!;
+    final ink = Color.lerp(lower.ink, upper.ink, t)!;
+    final inkMuted = Color.lerp(lower.inkMuted, upper.inkMuted, t)!;
+    final isLast = _page == _pages.length - 1;
 
     return Scaffold(
-      body: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment.topCenter,
-            radius: 1.2,
-            colors: [blendedTop, AppColors.dark900],
-          ),
-        ),
-        child: SafeArea(
-          child: Stack(
-            children: [
-              PageView.builder(
+      backgroundColor: ground,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // Flutter's default dragDevices leave the mouse out on web and
+            // desktop, so in Chrome this PageView could not be advanced at
+            // all -- the only way past page one was Skip, which also ends the
+            // introduction. Anyone demoing or testing in a browser saw
+            // exactly one page and assumed that was all there was.
+            ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(
+                dragDevices: {
+                  PointerDeviceKind.touch,
+                  PointerDeviceKind.mouse,
+                  PointerDeviceKind.trackpad,
+                  PointerDeviceKind.stylus,
+                },
+              ),
+              child: PageView.builder(
                 controller: _pageController,
                 physics: const BouncingScrollPhysics(),
                 itemCount: _pages.length,
                 itemBuilder: (context, index) {
                   final parallax = _pageController.hasClients && _pageController.page != null
-                      ? (_pageController.page! - index) * 0.3
+                      ? (_pageController.page! - index)
                       : 0.0;
                   return _OnboardingPageView(
                     page: _pages[index],
-                    isLast: index == _pages.length - 1,
-                    parallaxOffset: parallax,
-                    onGetStarted: _complete,
+                    index: index,
+                    total: _pages.length,
+                    ink: ink,
+                    inkMuted: inkMuted,
+                    parallax: parallax,
                   );
                 },
               ),
-              if (_page < _pages.length - 1)
-                Positioned(
-                  top: AppSpacing.space4,
-                  right: AppSpacing.space5,
-                  child: SaButton(
-                    label: 'Skip',
-                    variant: SaButtonVariant.ghost,
-                    size: SaButtonSize.sm,
-                    onPressed: _complete,
+            ),
+            if (!isLast)
+              Positioned(
+                top: AppSpacing.space2,
+                right: AppSpacing.space4,
+                child: Semantics(
+                  button: true,
+                  label: 'Skip',
+                  child: GestureDetector(
+                    onTap: _complete,
+                    behavior: HitTestBehavior.opaque,
+                    child: Padding(
+                      // Keeps a 44dp target around a small label.
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      child: Text(
+                        'Skip',
+                        style: AppTypography.labelL.copyWith(color: inkMuted),
+                      ),
+                    ),
                   ),
                 ),
-              Positioned(
-                bottom: AppSpacing.space10,
-                left: 0,
-                right: 0,
-                child: Center(child: _PageIndicator(count: _pages.length, current: _page)),
               ),
-            ],
-          ),
+            Positioned(
+              left: AppSpacing.screenMarginPhone,
+              right: AppSpacing.screenMarginPhone,
+              bottom: AppSpacing.space8,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isLast) ...[
+                    SaButton(
+                      label: 'Get Started',
+                      size: SaButtonSize.lg,
+                      fullWidth: true,
+                      // Paper on the emergency field. The primary variant is
+                      // aubergine, which on this red reads as a bruise.
+                      variant: SaButtonVariant.inverse,
+                      onPressed: _complete,
+                    ),
+                    const SizedBox(height: AppSpacing.space6),
+                  ],
+                  _PageIndicator(count: _pages.length, current: _page, ink: ink),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -146,54 +224,57 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 class _OnboardingPageView extends StatelessWidget {
   const _OnboardingPageView({
     required this.page,
-    required this.isLast,
-    required this.parallaxOffset,
-    required this.onGetStarted,
+    required this.index,
+    required this.total,
+    required this.ink,
+    required this.inkMuted,
+    required this.parallax,
   });
 
   final _OnboardingPage page;
-  final bool isLast;
-  final double parallaxOffset;
-  final VoidCallback onGetStarted;
+  final int index;
+  final int total;
+  final Color ink;
+  final Color inkMuted;
+  final double parallax;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenMarginPhone),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          // The mark drifts at a different rate to the copy, so the two read
+          // as separate planes rather than one sliding card.
           Transform.translate(
-            offset: Offset(parallaxOffset * -40, 0),
-            child: SizedBox(height: 220, child: page.illustration),
+            offset: Offset(parallax * -56, 0),
+            child: SizedBox(
+              height: 200,
+              width: double.infinity,
+              child: CustomPaint(painter: _MarkPainter(kind: page.mark, ink: ink)),
+            ),
           ),
           const SizedBox(height: AppSpacing.space10),
+          Container(height: 1, color: ink.withValues(alpha: 0.25)),
+          const SizedBox(height: AppSpacing.space3),
+          // A real sequence, so a numbered eyebrow states something true --
+          // how far through you are -- rather than decorating.
+          Text(
+            '${(index + 1).toString().padLeft(2, '0')} / ${total.toString().padLeft(2, '0')}',
+            style: AppTypography.eyebrow.copyWith(color: inkMuted),
+          ),
+          const SizedBox(height: AppSpacing.space4),
           Text(
             page.title,
-            textAlign: TextAlign.center,
-            style: AppTypography.displayXL.copyWith(color: AppColors.violet600, fontSize: 34),
+            style: AppTypography.displayCondensed.copyWith(color: ink, fontSize: 46),
           ),
           const SizedBox(height: AppSpacing.space4),
           Text(
             page.body,
-            textAlign: TextAlign.center,
-            style: AppTypography.bodyL.copyWith(color: Colors.white.withValues(alpha: 0.8)),
+            style: AppTypography.bodyL.copyWith(color: inkMuted),
           ),
-          if (isLast) ...[
-            const SizedBox(height: AppSpacing.space8),
-            TweenAnimationBuilder<double>(
-              tween: Tween(begin: 20, end: 0),
-              duration: const Duration(milliseconds: 350),
-              curve: Curves.easeOutCubic,
-              builder: (context, offsetY, child) => Transform.translate(offset: Offset(0, offsetY), child: child),
-              child: SaButton(
-                label: 'Get Started',
-                size: SaButtonSize.lg,
-                fullWidth: true,
-                onPressed: onGetStarted,
-              ),
-            ),
-          ],
           const SizedBox(height: AppSpacing.space16),
         ],
       ),
@@ -202,10 +283,11 @@ class _OnboardingPageView extends StatelessWidget {
 }
 
 class _PageIndicator extends StatelessWidget {
-  const _PageIndicator({required this.count, required this.current});
+  const _PageIndicator({required this.count, required this.current, required this.ink});
 
   final int count;
   final int current;
+  final Color ink;
 
   @override
   Widget build(BuildContext context) {
@@ -219,10 +301,10 @@ class _PageIndicator extends StatelessWidget {
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutBack,
             margin: const EdgeInsets.symmetric(horizontal: 4),
-            width: active ? 24 : 8,
-            height: 8,
+            width: active ? 28 : 8,
+            height: 2,
             decoration: BoxDecoration(
-              color: active ? Colors.white : Colors.white.withValues(alpha: 0.35),
+              color: ink.withValues(alpha: active ? 1 : 0.3),
               borderRadius: AppRadius.fullRadius,
             ),
           );
@@ -232,169 +314,76 @@ class _PageIndicator extends StatelessWidget {
   }
 }
 
-class _ShieldAuraIllustration extends StatelessWidget {
-  const _ShieldAuraIllustration();
+/// The three marks, drawn in one stroke language: hairline geometry, a single
+/// heavier accent, fills only where the meaning needs weight.
+///
+/// They are drawn rather than composed from the shield glyph because each has
+/// something specific to say -- a quiet sweep, three senses converging, an
+/// alert leaving -- and a scaled-up shield says only "security app".
+class _MarkPainter extends CustomPainter {
+  const _MarkPainter({required this.kind, required this.ink});
 
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Container(
-            width: 180,
-            height: 180,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(colors: [AppColors.violet500.withValues(alpha: 0.35), Colors.transparent]),
-            ),
-          ),
-          const SaIcon(SaIconGlyph.shield, size: 96, color: Colors.white, strokeWidth: 2.5),
-        ],
-      ),
-    );
-  }
-}
-
-class _NeuralShieldIllustration extends StatelessWidget {
-  const _NeuralShieldIllustration();
-
-  static const _nodeOffsets = [
-    Offset(-70, -50),
-    Offset(70, -50),
-    Offset(-90, 20),
-    Offset(90, 20),
-    Offset(0, -80),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: SizedBox(
-        width: 220,
-        height: 200,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            CustomPaint(size: const Size(220, 200), painter: _NeuralLinesPainter(_nodeOffsets)),
-            for (final offset in _nodeOffsets)
-              Transform.translate(
-                offset: offset,
-                child: Container(
-                  width: 14,
-                  height: 14,
-                  decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.violet500),
-                ),
-              ),
-            const SaIcon(SaIconGlyph.shield, size: 72, color: Colors.white, strokeWidth: 2.5),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NeuralLinesPainter extends CustomPainter {
-  _NeuralLinesPainter(this.nodes);
-
-  final List<Offset> nodes;
+  final _MarkKind kind;
+  final Color ink;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final paint = Paint()
-      ..color = AppColors.violet500.withValues(alpha: 0.4)
-      ..strokeWidth = 1.5;
-    for (final node in nodes) {
-      canvas.drawLine(center, center + node, paint);
+    final c = Offset(size.width * 0.34, size.height / 2);
+    final hair = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..color = ink.withValues(alpha: 0.30);
+    final solid = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
+      ..color = ink;
+
+    switch (kind) {
+      case _MarkKind.watch:
+        // Concentric rings at rest: watching, not scanning.
+        for (var i = 1; i <= 4; i++) {
+          canvas.drawCircle(c, 22.0 * i, hair);
+        }
+        canvas.drawCircle(c, 22, Paint()..color = ink.withValues(alpha: 0.10));
+        canvas.drawArc(Rect.fromCircle(center: c, radius: 44), -2.2, 1.5, false, solid);
+        canvas.drawCircle(c, 4, Paint()..color = ink);
+
+      case _MarkKind.sense:
+        // Three senses -- motion, sound, vision -- converging on one point.
+        const r = 76.0;
+        for (var i = 0; i < 3; i++) {
+          final a = -math.pi / 2 + i * (2 * math.pi / 3);
+          final p = c + Offset(math.cos(a) * r, math.sin(a) * r);
+          canvas.drawLine(c, p, hair);
+          canvas.drawCircle(p, 13, hair);
+          canvas.drawCircle(p, 4, Paint()..color = ink);
+        }
+        canvas.drawCircle(c, 26, hair);
+        canvas.drawArc(
+          Rect.fromCircle(center: c, radius: 26),
+          -math.pi / 2,
+          math.pi * 1.35,
+          false,
+          solid,
+        );
+
+      case _MarkKind.alert:
+        // The alert leaving: a solid centre, rings thinning as they travel.
+        for (var i = 1; i <= 4; i++) {
+          canvas.drawCircle(
+            c,
+            20.0 * i + 6,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = i == 1 ? 2 : 1
+              ..color = ink.withValues(alpha: 0.55 / i),
+          );
+        }
+        canvas.drawCircle(c, 13, Paint()..color = ink);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _NeuralLinesPainter oldDelegate) => false;
-}
-
-class _SosRippleIllustration extends StatefulWidget {
-  const _SosRippleIllustration();
-
-  @override
-  State<_SosRippleIllustration> createState() => _SosRippleIllustrationState();
-}
-
-class _SosRippleIllustrationState extends State<_SosRippleIllustration> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  static const _contactOffsets = [Offset(-90, -20), Offset(90, -20), Offset(-70, 60), Offset(70, 60)];
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: SizedBox(
-        width: 220,
-        height: 200,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            AnimatedBuilder(
-              animation: _controller,
-              builder: (context, child) {
-                return CustomPaint(size: const Size(220, 200), painter: _RipplePainter(_controller.value));
-              },
-            ),
-            for (final offset in _contactOffsets)
-              Transform.translate(
-                offset: offset,
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.dark700),
-                  child: const SaIcon(SaIconGlyph.profile, size: 16, color: Colors.white),
-                ),
-              ),
-            Container(
-              width: 64,
-              height: 64,
-              decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.coral500),
-              child: const SaIcon(SaIconGlyph.shield, size: 32, color: Colors.white),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RipplePainter extends CustomPainter {
-  _RipplePainter(this.progress);
-
-  final double progress;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    for (var i = 0; i < 3; i++) {
-      final t = (progress + i / 3) % 1.0;
-      final radius = 32 + t * 70;
-      final paint = Paint()
-        ..color = AppColors.coral500.withValues(alpha: (1 - t) * 0.5)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2;
-      canvas.drawCircle(center, radius, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _RipplePainter oldDelegate) => oldDelegate.progress != progress;
+  bool shouldRepaint(_MarkPainter old) => old.kind != kind || old.ink != ink;
 }

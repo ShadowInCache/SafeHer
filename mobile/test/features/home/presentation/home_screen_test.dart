@@ -232,11 +232,14 @@ void main() {
       expect(find.text("You're Safe"), findsOneWidget);
       expect(find.text('Smart Ring'), findsOneWidget);
 
-      await tester.scrollUntilVisible(find.text('This Week'), 200, scrollable: find.byType(Scrollable).first);
-      expect(find.text('This Week'), findsOneWidget);
+      // Section headers render as uppercase eyebrows ("THIS WEEK"); the
+      // sentence-case string survives as the Semantics label, which is what
+      // a screen reader announces.
+      await tester.scrollUntilVisible(find.text('THIS WEEK'), 200, scrollable: find.byType(Scrollable).first);
+      expect(find.text('THIS WEEK'), findsOneWidget);
 
-      await tester.scrollUntilVisible(find.text('Recent Alerts'), 200, scrollable: find.byType(Scrollable).first);
-      expect(find.text('Recent Alerts'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('RECENT ALERTS'), 200, scrollable: find.byType(Scrollable).first);
+      expect(find.text('RECENT ALERTS'), findsOneWidget);
     });
 
     testWidgets('renders_empty_state (no devices shows connect prompt, not fake data)', (tester) async {

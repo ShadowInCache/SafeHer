@@ -9,7 +9,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/theme/theme_extensions.dart';
 
-enum SaButtonVariant { primary, secondary, ghost, danger }
+enum SaButtonVariant { primary, secondary, ghost, danger, inverse, inverseOutline }
 
 enum SaButtonSize { sm, md, lg }
 
@@ -63,9 +63,15 @@ class SaButton extends StatefulWidget {
   final bool isLoading;
   final bool fullWidth;
 
-  /// When true and [variant] is [SaButtonVariant.danger], the first tap
-  /// arms the button ("Tap again to confirm") instead of firing
-  /// [onPressed]; a second tap within 3s confirms the action.
+  /// When true, the first tap arms the button ("Tap again to confirm")
+  /// instead of firing [onPressed]; a second tap within 3s confirms the
+  /// action.
+  ///
+  /// The guard follows this flag alone, not the variant. Most callers pair it
+  /// with [SaButtonVariant.danger], but "I'm Safe -- Cancel Alert" on the
+  /// dispatched emergency screen is [SaButtonVariant.inverseOutline] -- it
+  /// sits on the red emergency field, where a red button would vanish -- and
+  /// it needs the two-tap guard more than anything else in the app.
   final bool confirmRequired;
   final Widget? icon;
   final String? semanticsLabel;
@@ -117,7 +123,14 @@ class _SaButtonState extends State<SaButton> with SingleTickerProviderStateMixin
 
   void _handleTap() {
     if (_disabled) return;
-    if (widget.variant == SaButtonVariant.danger && widget.confirmRequired && !_armed) {
+    // Gated on the caller's intent, not on the colour. This used to also
+    // require `variant == danger`, which meant `confirmRequired: true` on any
+    // other variant silently did nothing — a two-tap guard that was not there.
+    // That is now load-bearing rather than theoretical: the cancel-alert
+    // button had to leave the danger variant to stay visible on the red
+    // emergency field, and under the old gate it would have quietly lost its
+    // confirmation step.
+    if (widget.confirmRequired && !_armed) {
       _armTimer?.cancel();
       setState(() => _armed = true);
       _armTimer = Timer(const Duration(seconds: 3), () {
@@ -161,8 +174,7 @@ class _SaButtonState extends State<SaButton> with SingleTickerProviderStateMixin
                 padding: EdgeInsets.symmetric(horizontal: widget.size.horizontalPadding),
                 constraints: const BoxConstraints(minWidth: AppSpacing.minTouchTarget),
                 decoration: BoxDecoration(
-                  gradient: colors.gradient,
-                  color: colors.gradient == null ? colors.background : null,
+                  color: colors.background,
                   borderRadius: AppRadius.mdRadius,
                   border: colors.border != null ? Border.all(color: colors.border!, width: 1.5) : null,
                 ),
@@ -209,8 +221,8 @@ class _SaButtonState extends State<SaButton> with SingleTickerProviderStateMixin
     final saColors = context.saColors;
     return switch (variant) {
       SaButtonVariant.primary => _SaButtonColors(
-        gradient: const LinearGradient(colors: [AppColors.violet500, AppColors.violet700]),
-        foreground: Colors.white,
+        background: Theme.of(context).colorScheme.primary,
+        foreground: Theme.of(context).colorScheme.onPrimary,
       ),
       SaButtonVariant.secondary => _SaButtonColors(
         background: saColors.surfaceHighest,
@@ -218,22 +230,35 @@ class _SaButtonState extends State<SaButton> with SingleTickerProviderStateMixin
       ),
       SaButtonVariant.ghost => _SaButtonColors(
         background: Colors.transparent,
-        foreground: AppColors.violet500,
-        border: AppColors.violet500,
+        foreground: saColors.interactive,
+        border: saColors.interactive,
       ),
       SaButtonVariant.danger => _SaButtonColors(
         background: _armed ? AppColors.coral600 : AppColors.coral500,
         foreground: Colors.white,
+      ),
+      // The two treatments that work on `AppColors.emergencyField`. Nothing
+      // tinted survives on that ground — coral on oxide red is barely a
+      // colour change — so the contrast has to come from the paper.
+      SaButtonVariant.inverse => _SaButtonColors(
+        background: _armed ? AppColors.neutral300 : AppColors.neutral50,
+        foreground: AppColors.emergencyField,
+      ),
+      SaButtonVariant.inverseOutline => _SaButtonColors(
+        background: _armed
+            ? AppColors.neutral50.withValues(alpha: 0.22)
+            : Colors.transparent,
+        foreground: AppColors.neutral50,
+        border: AppColors.neutral50.withValues(alpha: 0.55),
       ),
     };
   }
 }
 
 class _SaButtonColors {
-  _SaButtonColors({this.background, this.gradient, required this.foreground, this.border});
+  _SaButtonColors({this.background, required this.foreground, this.border});
 
   final Color? background;
-  final Gradient? gradient;
   final Color foreground;
   final Color? border;
 }

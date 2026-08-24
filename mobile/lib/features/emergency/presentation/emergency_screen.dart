@@ -14,6 +14,7 @@ import '../../../core/location/location_result.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/theme/theme_extensions.dart';
 import '../../../shared/components/icons/sa_icon.dart';
 import '../../../shared/utils/random_id.dart';
 import '../../../shared/components/overlays/sa_bottom_sheet.dart';
@@ -509,11 +510,29 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
     final canLeave = _stage == EmergencyStage.preActivation || _stage == EmergencyStage.cancelled;
 
     return Scaffold(
-      backgroundColor: _stage == EmergencyStage.preActivation ? null : AppColors.dark900,
+      // Dispatched is the alert register: the whole field turns over. The
+      // countdown and cancelled stages stay on the ordinary night ground —
+      // one is still cancellable and the other is a resolution, so neither
+      // should shout the way a sent alert does.
+      backgroundColor: switch (_stage) {
+        EmergencyStage.preActivation => null,
+        EmergencyStage.dispatched => AppColors.emergencyField,
+        _ => AppColors.dark900,
+      },
       body: SafeArea(
         child: Column(
           children: [
-            _EmergencyHeader(visible: canLeave, onBack: _handleBack),
+            // The header's ink comes off the same switch as the scaffold's
+            // ground, because it shows over two different ones: the theme
+            // ground before activation, and dark900 once an alert has been
+            // cancelled. It was pinned to white, which was correct back when
+            // every stage of this screen was near-black -- and invisible on
+            // the stone ground the light theme now paints behind it.
+            _EmergencyHeader(
+              visible: canLeave,
+              onBack: _handleBack,
+              ink: _stage == EmergencyStage.preActivation ? context.saColors.ink : AppColors.neutral100,
+            ),
             Expanded(
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 250),
@@ -554,10 +573,11 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
 }
 
 class _EmergencyHeader extends StatelessWidget {
-  const _EmergencyHeader({required this.visible, required this.onBack});
+  const _EmergencyHeader({required this.visible, required this.onBack, required this.ink});
 
   final bool visible;
   final VoidCallback onBack;
+  final Color ink;
 
   @override
   Widget build(BuildContext context) {
@@ -571,11 +591,11 @@ class _EmergencyHeader extends StatelessWidget {
           child: Row(
             children: [
               IconButton(
-                icon: const SaIcon(SaIconGlyph.close, color: Colors.white),
+                icon: SaIcon(SaIconGlyph.close, color: ink),
                 onPressed: onBack,
                 tooltip: 'Close',
               ),
-              Text('Emergency', style: AppTypography.headingM.copyWith(color: Colors.white)),
+              Text('Emergency', style: AppTypography.headingM.copyWith(color: ink)),
             ],
           ),
         ),

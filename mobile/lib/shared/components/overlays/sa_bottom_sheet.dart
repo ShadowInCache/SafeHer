@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_radius.dart';
@@ -32,42 +30,39 @@ class SaBottomSheet extends StatelessWidget {
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
       child: ClipRRect(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.xl2)),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: Container(
-            decoration: BoxDecoration(
-              color: saColors.surfaceElevated,
-              border: Border(top: BorderSide(color: saColors.glassBorder)),
-            ),
-            padding: padding,
-            child: SafeArea(
-              top: false,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: AppSpacing.space4),
-                      decoration: BoxDecoration(
-                        color: saColors.glassBorder,
-                        borderRadius: AppRadius.fullRadius,
-                      ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: saColors.surfaceElevated,
+            border: Border(top: BorderSide(color: saColors.glassBorder)),
+          ),
+          padding: padding,
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: AppSpacing.space4),
+                    decoration: BoxDecoration(
+                      color: saColors.glassBorder,
+                      borderRadius: AppRadius.fullRadius,
                     ),
                   ),
-                  // Scrollable, not just tall: the sheet sizes to its content
-                  // (mainAxisSize.min) but the content can exceed the screen
-                  // once a keyboard is up, a form gains a field, or the system
-                  // font scale is turned up. Without this the last control is
-                  // simply unreachable — which is how an added email field
-                  // silently broke the "Add Contact" button.
-                  Flexible(child: SingleChildScrollView(child: child)),
-                ],
-              ),
+                ),
+                // Scrollable, not just tall: the sheet sizes to its content
+                // (mainAxisSize.min) but the content can exceed the screen
+                // once a keyboard is up, a form gains a field, or the system
+                // font scale is turned up. Without this the last control is
+                // simply unreachable — which is how an added email field
+                // silently broke the "Add Contact" button.
+                Flexible(child: SingleChildScrollView(child: child)),
+              ],
             ),
           ),
-        ),
+        )
       ),
     );
   }

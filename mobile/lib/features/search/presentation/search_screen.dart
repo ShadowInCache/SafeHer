@@ -209,13 +209,19 @@ class _CategoryChip extends StatelessWidget {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space3, vertical: AppSpacing.space2),
           decoration: BoxDecoration(
-            color: selected ? AppColors.violet500 : saColors.surfaceElevated,
+            color: selected ? Theme.of(context).colorScheme.primary : saColors.surfaceElevated,
             borderRadius: AppRadius.fullRadius,
-            border: Border.all(color: selected ? AppColors.violet500 : saColors.glassBorder),
+            border: Border.all(
+              color: selected ? Theme.of(context).colorScheme.primary : saColors.glassBorder,
+            ),
           ),
           child: Text(
             label,
-            style: AppTypography.labelM.copyWith(color: selected ? Colors.white : onSurface.withValues(alpha: 0.7)),
+            style: AppTypography.labelM.copyWith(
+              color: selected
+                  ? Theme.of(context).colorScheme.onPrimary
+                  : onSurface.withValues(alpha: 0.7),
+            ),
           ),
         ),
       ),

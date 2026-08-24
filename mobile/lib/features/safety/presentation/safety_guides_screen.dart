@@ -112,13 +112,13 @@ class _FilterChip extends StatelessWidget {
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space4),
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.violet500 : onSurface.withValues(alpha: 0.06),
+            color: isSelected ? Theme.of(context).colorScheme.primary : onSurface.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(999),
           ),
           child: Text(
             label,
             style: AppTypography.labelM.copyWith(
-              color: isSelected ? Colors.white : onSurface.withValues(alpha: 0.75),
+              color: isSelected ? Theme.of(context).colorScheme.onPrimary : onSurface.withValues(alpha: 0.75),
             ),
           ),
         ),

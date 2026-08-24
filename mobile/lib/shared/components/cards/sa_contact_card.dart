@@ -4,6 +4,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/theme/theme_extensions.dart';
 import 'sa_card.dart';
 
 /// Emergency contact row: avatar, name, relationship chip, drag handle for
@@ -58,10 +59,21 @@ class SaContactCard extends StatelessWidget {
               children: [
                 Text(name, style: AppTypography.headingS.copyWith(color: onSurface)),
                 const SizedBox(height: 2),
+                // violet500 is the both-grounds compromise, tuned to 3:1 --
+                // enough for an icon, not for a 12px label. The resolved
+                // interactive colour clears AA on whichever ground it lands
+                // on, and the chip fill follows it instead of being a fixed
+                // light violet that all but disappeared on the day theme.
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(color: AppColors.violet100.withValues(alpha: 0.15), borderRadius: AppRadius.fullRadius),
-                  child: Text(relationship, style: AppTypography.labelM.copyWith(color: AppColors.violet500)),
+                  decoration: BoxDecoration(
+                    color: context.saColors.interactive.withValues(alpha: 0.12),
+                    borderRadius: AppRadius.fullRadius,
+                  ),
+                  child: Text(
+                    relationship,
+                    style: AppTypography.labelM.copyWith(color: context.saColors.interactive),
+                  ),
                 ),
               ],
             ),

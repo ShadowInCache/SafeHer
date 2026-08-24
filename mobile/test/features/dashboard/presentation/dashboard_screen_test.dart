@@ -272,7 +272,10 @@ void main() {
       await screenMatchesGolden(
         tester,
         'dashboard_screen_light',
-        customPump: (tester) async => tester.pump(const Duration(milliseconds: 100)),
+        // Long enough for the staggered card entrance to finish. At 100ms the
+        // golden caught the second card mid-fade, so the reference image
+        // showed a washed-out chart that the real screen never displays.
+        customPump: (tester) async => tester.pump(const Duration(milliseconds: 1200)),
       );
     });
 
@@ -282,7 +285,10 @@ void main() {
       await screenMatchesGolden(
         tester,
         'dashboard_screen_dark',
-        customPump: (tester) async => tester.pump(const Duration(milliseconds: 100)),
+        // Long enough for the staggered card entrance to finish. At 100ms the
+        // golden caught the second card mid-fade, so the reference image
+        // showed a washed-out chart that the real screen never displays.
+        customPump: (tester) async => tester.pump(const Duration(milliseconds: 1200)),
       );
     });
   });

@@ -315,11 +315,10 @@ class _TotalIncidentsCard extends StatelessWidget {
         padding: const EdgeInsets.all(AppSpacing.space5),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppRadius.xl2),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.violet700, AppColors.violet500],
-          ),
+          // Flat, and dark enough that the 12px label at 75% still clears AA.
+          // The gradient ran from violet700 to violet500, so the type sat on
+          // a moving target and the light end only reached 4.3:1.
+          color: AppColors.violet700,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
