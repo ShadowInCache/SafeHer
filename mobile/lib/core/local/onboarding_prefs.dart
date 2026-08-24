@@ -18,6 +18,12 @@ class OnboardingPrefs {
   bool get hasSeenOnboarding => _store.getBool(_key);
 
   Future<void> setSeenOnboarding() => _store.setBool(_key, true);
+
+  /// Puts the introduction back. Once the flag is set, Splash routes past
+  /// onboarding forever, and the only way to see it again was to clear the
+  /// app's data -- which also signs you out. Profile > Preferences > Replay
+  /// introduction calls this so the intro can be shown on demand.
+  Future<void> resetSeenOnboarding() => _store.setBool(_key, false);
 }
 
 @riverpod
