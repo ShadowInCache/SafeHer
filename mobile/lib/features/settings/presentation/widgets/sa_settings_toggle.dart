@@ -41,10 +41,18 @@ class SaSettingsToggle extends StatelessWidget {
             duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 150),
             curve: Curves.easeOut,
             alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+            // The thumb has to contrast with the track in both states, and
+            // the off-state track is surfaceHighest -- which on the light
+            // theme is #FAF8F4. A white thumb on it came to 1.03:1, so every
+            // toggle in Settings looked like it had no thumb at all until you
+            // switched it on.
             child: Container(
               width: 20,
               height: 20,
-              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: value ? AppColors.neutral50 : saColors.inkMuted,
+                shape: BoxShape.circle,
+              ),
             ),
           ),
         ),
