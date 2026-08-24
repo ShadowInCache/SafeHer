@@ -393,11 +393,7 @@ class _SectionHeader extends StatelessWidget {
               // spell an all-caps string letter by letter -- "T. H. I. S." --
               // so the accessible string stays as written.
               semanticsLabel: label,
-              style: AppTypography.monoDataS.copyWith(
-                fontSize: 10,
-                color: saColors.inkMuted,
-                letterSpacing: 1.8,
-              ),
+              style: AppTypography.eyebrow.copyWith(color: saColors.inkMuted),
             ),
             if (actionLabel != null && onAction != null)
               Semantics(

@@ -68,11 +68,33 @@ class HomeGreetingSection extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: AppSpacing.space3),
+                // Greeting above, name below. As one 28px line beside an
+                // avatar and two icon buttons there were about 210 logical
+                // pixels left, so "Good morning, Priya" ellipsised to
+                // "Good morning, P..." -- the first line of the first screen,
+                // cutting off the one word on it that belongs to the user.
+                // Stacked, the greeting stops competing for that width and
+                // the name gets the whole line.
                 Expanded(
-                  child: Text(
-                    '$_greeting, $userName',
-                    style: AppTypography.headingL.copyWith(color: onSurface),
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _greeting.toUpperCase(),
+                        semanticsLabel: _greeting,
+                        style: AppTypography.eyebrow.copyWith(
+                          color: onSurface.withValues(alpha: 0.55),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        userName,
+                        style: AppTypography.headingL.copyWith(color: onSurface),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
                 SaIconButton(

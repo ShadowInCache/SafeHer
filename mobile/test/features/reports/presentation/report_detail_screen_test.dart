@@ -231,6 +231,12 @@ void main() {
         300,
         scrollable: find.byType(Scrollable).first,
       );
+      // scrollUntilVisible stops as soon as the finder matches, and a
+      // ListView builds ~250px past the viewport -- so the button is found
+      // while still off-screen and the tap lands nowhere. ensureVisible
+      // scrolls it the rest of the way, independently of text metrics.
+      await tester.ensureVisible(find.text('Export PDF'));
+      await tester.pump();
       await tester.tap(find.text('Export PDF'));
       await tester.pump(const Duration(milliseconds: 300));
 
@@ -267,6 +273,12 @@ void main() {
         300,
         scrollable: find.byType(Scrollable).first,
       );
+      // scrollUntilVisible stops as soon as the finder matches, and a
+      // ListView builds ~250px past the viewport -- so the button is found
+      // while still off-screen and the tap lands nowhere. ensureVisible
+      // scrolls it the rest of the way, independently of text metrics.
+      await tester.ensureVisible(find.text('Share Secure Link'));
+      await tester.pump();
       await tester.tap(find.text('Share Secure Link'));
       // One frame to run the async handler, then the toast's slide-in.
       await tester.pump();
@@ -297,6 +309,12 @@ void main() {
         300,
         scrollable: find.byType(Scrollable).first,
       );
+      // scrollUntilVisible stops as soon as the finder matches, and a
+      // ListView builds ~250px past the viewport -- so the button is found
+      // while still off-screen and the tap lands nowhere. ensureVisible
+      // scrolls it the rest of the way, independently of text metrics.
+      await tester.ensureVisible(find.text('Export PDF'));
+      await tester.pump();
       await tester.tap(find.text('Export PDF'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));

@@ -72,5 +72,22 @@ abstract final class AppTypography {
   static TextStyle get monoDataS =>
       GoogleFonts.jetBrainsMono(fontSize: 14, fontWeight: FontWeight.w500, height: 1.2);
 
+  /// The eyebrow: a small mono label that names what follows without
+  /// competing with it -- "DEVICES", "ALERT SENT", "GOOD MORNING".
+  ///
+  /// It exists as a role because the pattern repeats across screens that do
+  /// not share a widget, and three copies of the same three magic numbers
+  /// drift apart the first time one of them is adjusted.
+  ///
+  /// Callers uppercase the string themselves and should pass the
+  /// sentence-case original as `semanticsLabel`: TalkBack and VoiceOver
+  /// spell an all-caps word out letter by letter.
+  static TextStyle get eyebrow => GoogleFonts.jetBrainsMono(
+    fontSize: 10,
+    fontWeight: FontWeight.w500,
+    height: 1.2,
+    letterSpacing: 1.8,
+  );
+
   const AppTypography._();
 }

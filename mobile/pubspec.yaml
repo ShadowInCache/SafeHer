@@ -133,6 +133,21 @@ flutter:
     - assets/animations/
     - assets/sounds/
     - assets/rive/
+    # Archivo / Archivo Narrow / JetBrains Mono, bundled rather than fetched.
+    #
+    # `google_fonts` downloads a family the first time it is asked for and
+    # caches it on the device, which means the first launch after install
+    # renders in Roboto until the network answers -- and on a device that is
+    # offline or behind a captive portal, it never stops rendering in Roboto.
+    # For an app whose whole job happens when something has gone wrong, the
+    # typography should not depend on connectivity.
+    #
+    # Declared as plain assets, not under `fonts:`. `google_fonts` checks the
+    # asset manifest for a file whose name matches its own API convention
+    # (`<Family>-<Variant>.ttf`) before it reaches for the network, so these
+    # names are load-bearing: rename one and it silently starts downloading
+    # again. The files are byte-identical to what it would have fetched.
+    - assets/fonts/
 
 # App icon generation. Run `dart run flutter_launcher_icons` after changing
 # assets/branding/*.
