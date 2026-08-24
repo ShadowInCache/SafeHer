@@ -107,7 +107,9 @@ class SaBottomNavBar extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
                               for (final tab in _leftTabs)
-                                _NavTabItem(tab: tab, isActive: tab == currentTab, onTap: () => _select(tab)),
+                                Expanded(
+                                  child: _NavTabItem(tab: tab, isActive: tab == currentTab, onTap: () => _select(tab)),
+                                ),
                             ],
                           ),
                         ),
@@ -117,7 +119,9 @@ class SaBottomNavBar extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
                               for (final tab in _rightTabs)
-                                _NavTabItem(tab: tab, isActive: tab == currentTab, onTap: () => _select(tab)),
+                                Expanded(
+                                  child: _NavTabItem(tab: tab, isActive: tab == currentTab, onTap: () => _select(tab)),
+                                ),
                             ],
                           ),
                         ),
@@ -164,8 +168,12 @@ class _NavTabItem extends StatelessWidget {
         child: GestureDetector(
           onTap: onTap,
           behavior: HitTestBehavior.opaque,
+          // Was a fixed 56 wide inside a row that had ~73 to give it, so
+          // "Dashboard" ellipsised to "Dashbo..." on a 390pt phone -- a
+          // permanent truncation on a label that never changes. Letting the
+          // tabs divide the row evenly gives the caption its width back and
+          // enlarges the hit target at the same time.
           child: SizedBox(
-            width: 56,
             height: 64,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
