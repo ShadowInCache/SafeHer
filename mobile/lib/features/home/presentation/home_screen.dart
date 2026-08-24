@@ -304,7 +304,7 @@ class _HomeContent extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('This Week', style: AppTypography.headingM.copyWith(color: onSurface)),
+                const _SectionHeader(label: 'This Week'),
                 const SizedBox(height: AppSpacing.space3),
                 SaAnalyticsCard(title: 'Threat Trend', chart: SaBarChart(data: weeklySummary.weeklyThreatTrend)),
                 if (weeklySummary.eventBreakdown.isNotEmpty) ...[
@@ -325,7 +325,11 @@ class _HomeContent extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Recent Alerts', style: AppTypography.headingM.copyWith(color: onSurface)),
+                _SectionHeader(
+                  label: 'Recent Alerts',
+                  actionLabel: 'All reports',
+                  onAction: () => context.go('/reports'),
+                ),
                 const SizedBox(height: AppSpacing.space3),
                 if (recentAlerts.isEmpty)
                   Text(
@@ -343,22 +347,73 @@ class _HomeContent extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.space3),
                 ],
-                Semantics(
-                  button: true,
-                  label: 'View all reports',
-                  child: GestureDetector(
-                    onTap: () => context.go('/reports'),
-                    child: Text(
-                      'View all reports →',
-                      style: AppTypography.labelL.copyWith(color: Theme.of(context).colorScheme.primary),
-                    ),
-                  ),
-                ),
+                // The trailing "View all reports ->" link used to live here.
+                // The section header now carries that action, and two controls
+                // four rows apart going to the same route is a choice the
+                // reader has to think about for no gain.
               ],
             ),
           ),
         ),
         SliverToBoxAdapter(child: const SizedBox(height: AppSpacing.space16 + AppSpacing.space10)),
+      ],
+    );
+  }
+}
+
+/// A rule, a mono label, and an optional action.
+///
+/// These were 18px semibold headings, which put "Devices" and "This Week" at
+/// nearly the same weight as the safety status directly above them -- three
+/// things competing to be the first thing read. Demoting the furniture is
+/// what lets the status win without having to shout.
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.label, this.actionLabel, this.onAction});
+
+  final String label;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final saColors = context.saColors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(height: 1, color: saColors.line),
+        const SizedBox(height: AppSpacing.space3),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              label.toUpperCase(),
+              // Uppercased for the eyebrow's look only. TalkBack and VoiceOver
+              // spell an all-caps string letter by letter -- "T. H. I. S." --
+              // so the accessible string stays as written.
+              semanticsLabel: label,
+              style: AppTypography.monoDataS.copyWith(
+                fontSize: 10,
+                color: saColors.inkMuted,
+                letterSpacing: 1.8,
+              ),
+            ),
+            if (actionLabel != null && onAction != null)
+              Semantics(
+                button: true,
+                label: actionLabel,
+                child: GestureDetector(
+                  onTap: onAction,
+                  behavior: HitTestBehavior.opaque,
+                  child: Text(
+                    actionLabel!,
+                    style: AppTypography.labelM.copyWith(color: saColors.interactive),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -500,19 +555,10 @@ class _DeviceStatusSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('Devices', style: AppTypography.headingM.copyWith(color: onSurface)),
-            Semantics(
-              button: true,
-              label: 'Manage devices',
-              child: GestureDetector(
-                onTap: onManageDevices,
-                child: Text('Manage', style: AppTypography.labelL.copyWith(color: AppColors.violet500)),
-              ),
-            ),
-          ],
+        _SectionHeader(
+          label: 'Devices',
+          actionLabel: 'Manage',
+          onAction: onManageDevices,
         ),
         const SizedBox(height: AppSpacing.space3),
         if (devices.isEmpty)
