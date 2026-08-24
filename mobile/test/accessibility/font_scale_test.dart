@@ -12,6 +12,7 @@ import 'package:safeher_app/shared/components/feedback/sa_battery_bar.dart';
 import 'package:safeher_app/shared/components/feedback/sa_empty_state.dart';
 import 'package:safeher_app/shared/components/feedback/sa_threat_chip.dart';
 import 'package:safeher_app/shared/components/inputs/sa_text_field.dart';
+import 'package:safeher_app/shared/components/layout/sa_section_header.dart';
 import 'package:safeher_app/shared/components/navigation/sa_bottom_nav_bar.dart';
 import 'package:safeher_app/shared/models/threat_level.dart';
 
@@ -46,6 +47,25 @@ Widget _scaled(Widget child, {double scale = 2.0, Brightness brightness = Bright
 
 void main() {
   group('Font scale 200%', () {
+    testWidgets('section headers keep their label and action on one row', (tester) async {
+      await tester.pumpWidget(
+        _scaled(
+          const Column(
+            children: [
+              SaSectionHeader(label: 'Recent Alerts', actionLabel: 'All reports'),
+              SizedBox(height: 8),
+              SaSectionHeader(label: 'Emergency Contacts', actionLabel: 'Manage'),
+              SizedBox(height: 8),
+              SaSectionHeader(label: 'Live Monitoring'),
+            ],
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('buttons do not overflow their pill', (tester) async {
       await tester.pumpWidget(
         _scaled(

@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 /// default icon set. New glyphs are added here as screens need them.
 enum SaIconGlyph {
   shield,
+  dragHandle,
   bell,
   chevronRight,
   chevronLeft,
@@ -122,6 +123,8 @@ class _SaIconPainter extends CustomPainter {
         _paintPendant(canvas, size, stroke, fill);
       case SaIconGlyph.refresh:
         _paintRefresh(canvas, size, stroke);
+      case SaIconGlyph.dragHandle:
+        _paintDragHandle(canvas, size, stroke);
       case SaIconGlyph.plus:
         _paintPlus(canvas, size, stroke);
       case SaIconGlyph.glasses:
@@ -429,6 +432,14 @@ class _SaIconPainter extends CustomPainter {
       ..lineTo(w * 0.82, h * 0.38)
       ..lineTo(w * 0.62, h * 0.34);
     canvas.drawPath(arrow, stroke);
+  }
+
+  /// Two stacked rules -- the conventional "drag to reorder" grip. The
+  /// reorder control used the refresh glyph, which reads as "retry".
+  void _paintDragHandle(Canvas canvas, Size size, Paint stroke) {
+    final w = size.width, h = size.height;
+    canvas.drawLine(Offset(w * 0.22, h * 0.4), Offset(w * 0.78, h * 0.4), stroke);
+    canvas.drawLine(Offset(w * 0.22, h * 0.6), Offset(w * 0.78, h * 0.6), stroke);
   }
 
   void _paintPlus(Canvas canvas, Size size, Paint stroke) {

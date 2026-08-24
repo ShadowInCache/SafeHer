@@ -79,3 +79,6 @@ replay_pid*.log
 # were committed by accident and have now been removed -- this keeps the next
 # redirect from following them in.
 mobile/flutter_*.txt
+
+# Playwright MCP scratch output (browser logs/screenshots from local QA runs)
+.playwright-mcp/

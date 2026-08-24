@@ -40,8 +40,32 @@ Future<UserProfile> userProfile(Ref ref) async {
 /// threat-threshold control lives, and a threshold is meaningless without
 /// knowing whether anything evaluates it.
 @riverpod
-DetectionRepository detectionRepository(Ref ref) =>
-    DetectionRepositoryRemote(apiClient: ref.watch(apiClientProvider));
+DetectionRepository detectionRepository(Ref ref) {
+  // Every other repository provider branches on useMockApi; this one did not,
+  // so the flavour documented as "explore the UI on fixture data without
+  // running the backend at all" still called the live API for detection
+  // status. On web that surfaced as a CORS failure against the deployed
+  // backend; on a device it meant the Profile screen's detection line waited
+  // on a server the mock flavour exists to avoid.
+  //
+  // DetectionRepositoryFake's own doc comment already claimed it was "used by
+  // widget tests and the mock flavour" -- only the first half was true.
+  //
+  // The fixture reports no trained models, which is what an unconfigured
+  // deployment actually returns. Reporting the pipeline as live here would
+  // make the threshold slider look like it governs something it does not,
+  // and that is the one thing this screen is careful not to do.
+  if (AppConfig.useMockApi) {
+    return DetectionRepositoryFake(
+      const DetectionStatus(
+        pipelineLive: false,
+        anyModelReady: false,
+        scoresAreCallerSupplied: true,
+      ),
+    );
+  }
+  return DetectionRepositoryRemote(apiClient: ref.watch(apiClientProvider));
+}
 
 @riverpod
 Future<DetectionStatus> detectionStatus(Ref ref) =>
