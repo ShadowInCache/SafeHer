@@ -20,6 +20,17 @@ ProfileRepository profileRepository(Ref ref) {
 
 @riverpod
 Future<UserProfile> userProfile(Ref ref) async {
+  // Kept alive across navigation. This is auto-dispose by default, so the
+  // profile was thrown away the moment Home was left and re-fetched on
+  // arriving at Profile -- which meant a full shimmer on every single visit,
+  // against a backend that sleeps and cold-starts. Home had already loaded
+  // the name; there was no reason to ask again.
+  //
+  // Safe to hold: the two places that need it fresh both invalidate it
+  // explicitly -- the Profile screen after an edit or retry, and
+  // session_reset on sign-out, so one account's profile can never survive
+  // into another's session.
+  ref.keepAlive();
   return ref.watch(profileRepositoryProvider).getUserProfile();
 }
 

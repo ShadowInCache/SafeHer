@@ -108,7 +108,14 @@ class ProfileScreen extends ConsumerWidget {
     final profileAsync = ref.watch(userProfileProvider);
 
     return Scaffold(
+      // StackFit.expand so the body fills the screen whatever state it is in.
+      // A Stack sizes to its largest non-positioned child, and the loading
+      // shimmer is a SingleChildScrollView that wraps its content -- so during
+      // loading the Stack was only as tall as the shimmer, and the nav bar's
+      // Positioned(bottom: 0) anchored to that instead of the screen, leaving
+      // it stranded halfway up.
       body: Stack(
+        fit: StackFit.expand,
         children: [
           profileAsync.when(
             data: (profile) => _ProfileContent(profile: profile),

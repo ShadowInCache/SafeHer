@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
+import 'package:safeher_app/shared/components/navigation/sa_bottom_nav_bar.dart';
 import 'package:safeher_app/core/local/onboarding_prefs.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
 import 'package:safeher_app/features/auth/data/auth_providers.dart';
@@ -215,6 +216,32 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.text("Couldn't load your profile"), findsOneWidget);
       expect(find.text('Retry'), findsOneWidget);
+    });
+
+    testWidgets('the nav bar stays at the bottom while the profile is loading', (tester) async {
+      // Regression: the shimmer is a SingleChildScrollView, which shrink-wraps
+      // its content, and a Stack sizes to its largest non-positioned child --
+      // so during loading the Stack was only as tall as the shimmer and the
+      // nav bar's Positioned(bottom: 0) anchored halfway up the screen.
+      const surfaceSize = Size(390, 844);
+      await tester.binding.setSurfaceSize(surfaceSize);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(_harness());
+      await tester.pump(); // still loading: the fake repo takes 50ms
+
+      expect(find.byType(SaBottomNavBar), findsOneWidget);
+      final navBottom = tester.getRect(find.byType(SaBottomNavBar)).bottom;
+      expect(
+        navBottom,
+        moreOrLessEquals(surfaceSize.height, epsilon: 0.5),
+        reason: 'nav bar should sit on the bottom edge while loading, not float mid-screen',
+      );
+
+      // Let the profile resolve and the content's own device/contact fetches
+      // finish, so nothing is left pending at teardown.
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
     });
 
     testWidgets('renders in light mode', (tester) async {
