@@ -63,9 +63,15 @@ class SaButton extends StatefulWidget {
   final bool isLoading;
   final bool fullWidth;
 
-  /// When true and [variant] is [SaButtonVariant.danger], the first tap
-  /// arms the button ("Tap again to confirm") instead of firing
-  /// [onPressed]; a second tap within 3s confirms the action.
+  /// When true, the first tap arms the button ("Tap again to confirm")
+  /// instead of firing [onPressed]; a second tap within 3s confirms the
+  /// action.
+  ///
+  /// The guard follows this flag alone, not the variant. Most callers pair it
+  /// with [SaButtonVariant.danger], but "I'm Safe -- Cancel Alert" on the
+  /// dispatched emergency screen is [SaButtonVariant.inverseOutline] -- it
+  /// sits on the red emergency field, where a red button would vanish -- and
+  /// it needs the two-tap guard more than anything else in the app.
   final bool confirmRequired;
   final Widget? icon;
   final String? semanticsLabel;
@@ -120,8 +126,10 @@ class _SaButtonState extends State<SaButton> with SingleTickerProviderStateMixin
     // Gated on the caller's intent, not on the colour. This used to also
     // require `variant == danger`, which meant `confirmRequired: true` on any
     // other variant silently did nothing — a two-tap guard that was not there.
-    // Every current caller pairs it with danger, so this changes no existing
-    // behaviour; it just stops the guard from depending on the palette.
+    // That is now load-bearing rather than theoretical: the cancel-alert
+    // button had to leave the danger variant to stay visible on the red
+    // emergency field, and under the old gate it would have quietly lost its
+    // confirmation step.
     if (widget.confirmRequired && !_armed) {
       _armTimer?.cancel();
       setState(() => _armed = true);
