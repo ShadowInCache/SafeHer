@@ -1,11 +1,11 @@
 {
-    "name": "safeher_app",
-    "short_name": "safeher_app",
+    "name": "SafeHer",
+    "short_name": "SafeHer",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#14130E",
+    "theme_color": "#14130E",
+    "description": "AI-powered wearable safety companion for women.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
