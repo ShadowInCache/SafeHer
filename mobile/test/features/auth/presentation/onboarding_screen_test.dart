@@ -155,5 +155,25 @@ void main() {
       // animation so pumpAndSettle already converges here.
       await screenMatchesGolden(tester, 'onboarding_screen_dark');
     });
+
+    // Pages 2 and 3 carry their own ground, ink and mark -- the sequence
+    // stone -> ink -> emergency field is the design, not a backdrop -- so
+    // page 1 alone was never a regression net for this screen.
+    testGoldens('golden - page 2, the ink ground', (tester) async {
+      const surfaceSize = Size(390, 844);
+      await tester.pumpWidgetBuilder(_harness(), surfaceSize: surfaceSize);
+      await tester.pumpAndSettle();
+      await _swipeToNextPage(tester, surfaceSize);
+      await screenMatchesGolden(tester, 'onboarding_screen_page2');
+    });
+
+    testGoldens('golden - page 3, the emergency field', (tester) async {
+      const surfaceSize = Size(390, 844);
+      await tester.pumpWidgetBuilder(_harness(), surfaceSize: surfaceSize);
+      await tester.pumpAndSettle();
+      await _swipeToNextPage(tester, surfaceSize);
+      await _swipeToNextPage(tester, surfaceSize);
+      await screenMatchesGolden(tester, 'onboarding_screen_page3');
+    });
   });
 }
