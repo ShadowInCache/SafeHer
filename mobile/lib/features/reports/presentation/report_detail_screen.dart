@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/components/layout/sa_section_header.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../shared/components/cards/sa_card.dart';
 import '../../../shared/components/charts/sa_motion_chart.dart';
@@ -239,19 +240,19 @@ class _ReportDetailContentState extends ConsumerState<_ReportDetailContent> {
         ),
         if (detail.timeline.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.space6),
-          Text('Event Timeline', style: AppTypography.headingM.copyWith(color: onSurface)),
+          const SaSectionHeader(label: 'Event Timeline'),
           const SizedBox(height: AppSpacing.space4),
           ReportTimeline(events: detail.timeline),
         ],
         if (detail.evidence.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.space6),
-          Text('Evidence', style: AppTypography.headingM.copyWith(color: onSurface)),
+          const SaSectionHeader(label: 'Evidence'),
           const SizedBox(height: AppSpacing.space3),
           ReportEvidenceGallery(items: detail.evidence),
         ],
         if (detail.gpsBreadcrumbs.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.space6),
-          Text('Location Trail', style: AppTypography.headingM.copyWith(color: onSurface)),
+          const SaSectionHeader(label: 'Location Trail'),
           const SizedBox(height: AppSpacing.space3),
           ReportBreadcrumbMap(breadcrumbs: detail.gpsBreadcrumbs),
         ],

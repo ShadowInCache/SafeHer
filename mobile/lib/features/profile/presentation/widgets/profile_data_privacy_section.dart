@@ -8,6 +8,7 @@ import '../../../../core/platform/report_export.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../shared/components/layout/sa_section_header.dart';
 import '../../../../shared/components/cards/sa_card.dart';
 import '../../../../shared/components/icons/sa_icon.dart';
 import '../../../../shared/components/overlays/sa_confirm_dialog.dart';
@@ -132,7 +133,7 @@ class _ProfileDataPrivacySectionState extends ConsumerState<ProfileDataPrivacySe
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Data & Privacy', style: AppTypography.headingM.copyWith(color: onSurface)),
+        const SaSectionHeader(label: 'Data & Privacy'),
         const SizedBox(height: AppSpacing.space3),
         SaCard(
           semanticsLabel: 'Download my data',

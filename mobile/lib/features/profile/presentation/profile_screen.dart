@@ -7,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/components/layout/sa_section_header.dart';
 import '../../../shared/components/buttons/sa_button.dart';
 import '../../../shared/components/cards/sa_card.dart';
 import '../../../shared/components/cards/sa_contact_card.dart';
@@ -219,30 +220,10 @@ class _ProfileContent extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Emergency Contacts',
-                        style: AppTypography.headingM.copyWith(color: onSurface),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.space2),
-                    Semantics(
-                      button: true,
-                      label: 'Manage emergency contacts',
-                      child: GestureDetector(
-                        onTap: () => context.go('/settings/contacts'),
-                        child: Text(
-                          'Manage',
-                          style: AppTypography.labelL.copyWith(color: AppColors.violet500),
-                        ),
-                      ),
-                    ),
-                  ],
+                SaSectionHeader(
+                  label: 'Emergency Contacts',
+                  actionLabel: 'Manage',
+                  onAction: () => context.go('/settings/contacts'),
                 ),
                 const SizedBox(height: AppSpacing.space3),
                 if (contactsPreview.isEmpty)
@@ -294,7 +275,7 @@ class _ProfileContent extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Account', style: AppTypography.headingM.copyWith(color: onSurface)),
+                const SaSectionHeader(label: 'Account'),
                 const SizedBox(height: AppSpacing.space3),
                 SaCard(
                   onTap: () => context.go('/settings'),

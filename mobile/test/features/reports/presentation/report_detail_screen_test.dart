@@ -138,11 +138,11 @@ void main() {
       expect(find.text('Elm Street, near 5th Ave'), findsOneWidget);
       expect(find.text('Audio'), findsOneWidget);
       expect(find.text('Motion'), findsOneWidget);
-      await tester.scrollUntilVisible(find.text('Event Timeline'), 300, scrollable: find.byType(Scrollable).first);
+      await tester.scrollUntilVisible(find.text('EVENT TIMELINE'), 300, scrollable: find.byType(Scrollable).first);
       expect(find.text('Sensor anomaly detected'), findsOneWidget);
       expect(find.text('82% confidence'), findsOneWidget);
-      await tester.scrollUntilVisible(find.text('Location Trail'), 300, scrollable: find.byType(Scrollable).first);
-      await tester.scrollUntilVisible(find.text('Location Trail'), 300, scrollable: find.byType(Scrollable).first);
+      await tester.scrollUntilVisible(find.text('LOCATION TRAIL'), 300, scrollable: find.byType(Scrollable).first);
+      await tester.scrollUntilVisible(find.text('LOCATION TRAIL'), 300, scrollable: find.byType(Scrollable).first);
       await tester.scrollUntilVisible(find.text('Export PDF'), 300, scrollable: find.byType(Scrollable).first);
       expect(find.text('Share Secure Link'), findsOneWidget);
       expect(find.textContaining('Chain of custody: abcdef0123456789'), findsOneWidget);
@@ -151,7 +151,7 @@ void main() {
     testWidgets('tapping a video evidence tile opens the player sheet with graceful fallback', (tester) async {
       await tester.pumpWidget(_harness());
       await tester.pump(const Duration(milliseconds: 100));
-      await tester.scrollUntilVisible(find.text('Location Trail'), 300, scrollable: find.byType(Scrollable).first);
+      await tester.scrollUntilVisible(find.text('LOCATION TRAIL'), 300, scrollable: find.byType(Scrollable).first);
       expect(find.text('0:18'), findsOneWidget);
       await tester.tap(find.text('0:18'));
       await tester.pumpAndSettle();
@@ -162,7 +162,7 @@ void main() {
     testWidgets('tapping the photo evidence tile opens the full-screen viewer', (tester) async {
       await tester.pumpWidget(_harness());
       await tester.pump(const Duration(milliseconds: 100));
-      await tester.scrollUntilVisible(find.text('Location Trail'), 300, scrollable: find.byType(Scrollable).first);
+      await tester.scrollUntilVisible(find.text('LOCATION TRAIL'), 300, scrollable: find.byType(Scrollable).first);
       await tester.tap(find.byWidgetPredicate((w) => w is SaIcon && w.glyph == SaIconGlyph.eye));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);

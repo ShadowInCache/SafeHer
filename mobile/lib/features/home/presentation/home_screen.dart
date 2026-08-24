@@ -17,6 +17,7 @@ import '../../../shared/components/feedback/sa_empty_state.dart';
 import '../../../shared/components/feedback/sa_loading_shimmer.dart';
 import '../../../shared/components/feedback/sa_status_dot.dart';
 import '../../../shared/components/icons/sa_icon.dart';
+import '../../../shared/components/layout/sa_section_header.dart';
 import '../../../shared/components/navigation/sa_bottom_nav_bar.dart';
 import '../../../shared/components/overlays/sa_toast.dart';
 import '../../dashboard/data/dashboard_providers.dart';
@@ -303,7 +304,7 @@ class _HomeContent extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const _SectionHeader(label: 'This Week'),
+                const SaSectionHeader(label: 'This Week'),
                 const SizedBox(height: AppSpacing.space3),
                 SaAnalyticsCard(title: 'Threat Trend', chart: SaBarChart(data: weeklySummary.weeklyThreatTrend)),
                 if (weeklySummary.eventBreakdown.isNotEmpty) ...[
@@ -324,7 +325,7 @@ class _HomeContent extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SectionHeader(
+                SaSectionHeader(
                   label: 'Recent Alerts',
                   actionLabel: 'All reports',
                   onAction: () => context.go('/reports'),
@@ -355,67 +356,6 @@ class _HomeContent extends ConsumerWidget {
           ),
         ),
         SliverToBoxAdapter(child: const SizedBox(height: AppSpacing.space16 + AppSpacing.space10)),
-      ],
-    );
-  }
-}
-
-/// A rule, a mono label, and an optional action.
-///
-/// These were 18px semibold headings, which put "Devices" and "This Week" at
-/// nearly the same weight as the safety status directly above them -- three
-/// things competing to be the first thing read. Demoting the furniture is
-/// what lets the status win without having to shout.
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.label, this.actionLabel, this.onAction, this.trailing});
-
-  final String label;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-
-  /// Right-hand slot for something that is not a link -- a live status, a
-  /// count. Ignored when [actionLabel] is supplied; a section head has room
-  /// for one thing on the right, and a tappable one wins.
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final saColors = context.saColors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(height: 1, color: saColors.line),
-        const SizedBox(height: AppSpacing.space3),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              label.toUpperCase(),
-              // Uppercased for the eyebrow's look only. TalkBack and VoiceOver
-              // spell an all-caps string letter by letter -- "T. H. I. S." --
-              // so the accessible string stays as written.
-              semanticsLabel: label,
-              style: AppTypography.eyebrow.copyWith(color: saColors.inkMuted),
-            ),
-            if (actionLabel != null && onAction != null)
-              Semantics(
-                button: true,
-                label: actionLabel,
-                child: GestureDetector(
-                  onTap: onAction,
-                  behavior: HitTestBehavior.opaque,
-                  child: Text(
-                    actionLabel!,
-                    style: AppTypography.labelM.copyWith(color: saColors.interactive),
-                  ),
-                ),
-              )
-            else if (trailing != null)
-              trailing!,
-          ],
-        ),
       ],
     );
   }
@@ -557,7 +497,7 @@ class _DeviceStatusSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SectionHeader(
+        SaSectionHeader(
           label: 'Devices',
           actionLabel: 'Manage',
           onAction: onManageDevices,
@@ -702,7 +642,7 @@ class _LiveMonitoringSummaryCard extends StatelessWidget {
         child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SectionHeader(
+          SaSectionHeader(
             label: 'Live Monitoring',
             trailing: Row(
               mainAxisSize: MainAxisSize.min,

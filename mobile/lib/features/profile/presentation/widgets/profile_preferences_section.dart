@@ -8,6 +8,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../shared/components/layout/sa_section_header.dart';
 import '../../../../shared/components/cards/sa_card.dart';
 import '../../../../core/detection/detection_status.dart';
 import '../../data/profile_providers.dart';
@@ -32,7 +33,7 @@ class ProfilePreferencesSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Preferences', style: AppTypography.headingM.copyWith(color: onSurface)),
+        const SaSectionHeader(label: 'Preferences'),
         const SizedBox(height: AppSpacing.space3),
         SaCard(
           semanticsLabel: 'Threat threshold, ${(prefs.threatThreshold * 100).round()} percent',

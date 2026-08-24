@@ -7,6 +7,7 @@ import '../../../../core/local/app_preferences.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../shared/components/layout/sa_section_header.dart';
 import '../../../../shared/components/cards/sa_card.dart';
 import '../../../../shared/components/icons/sa_icon.dart';
 import '../../../../shared/components/overlays/sa_toast.dart';
@@ -99,7 +100,7 @@ class ProfileSecuritySection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Security', style: AppTypography.headingM.copyWith(color: onSurface)),
+        const SaSectionHeader(label: 'Security'),
         const SizedBox(height: AppSpacing.space3),
         SaCard(
           semanticsLabel: 'Change password',
