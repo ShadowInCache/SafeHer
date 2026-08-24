@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
+import 'package:safeher_app/core/local/app_preferences.dart';
 import 'package:safeher_app/core/local/onboarding_prefs.dart';
 import 'package:safeher_app/core/location/location_providers.dart';
 import 'package:safeher_app/core/location/location_result.dart';
@@ -294,7 +295,7 @@ void main() {
       await _holdSos(tester);
       expect(tester.takeException(), isNull);
       expect(find.text('Sending alert in'), findsOneWidget);
-      expect(find.text('10'), findsOneWidget);
+      expect(find.text('$kDefaultCountdownSeconds'), findsOneWidget);
     });
 
     testWidgets('cancelling the countdown returns to pre-activation', (tester) async {

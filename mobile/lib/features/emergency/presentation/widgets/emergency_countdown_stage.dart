@@ -95,6 +95,11 @@ class _LocationStatusRow extends StatelessWidget {
               label,
               style: AppTypography.monoDataS.copyWith(color: Colors.white.withValues(alpha: 0.7)),
               textAlign: TextAlign.center,
+              // Coordinates fit on one line; the no-fix fallback sentence does
+              // not, and at one line it ellipsised to "Location unavailable —
+              // dispatching w…", which cuts off exactly the half that says the
+              // alert is still going out.
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ),

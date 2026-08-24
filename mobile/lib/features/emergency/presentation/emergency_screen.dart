@@ -30,10 +30,11 @@ import 'widgets/emergency_pre_activation_stage.dart';
 
 enum EmergencyStage { preActivation, countdown, dispatched, cancelled }
 
-// Spec default: FR-EMG-03 requires a 10-second cancellable countdown.
-// Overridable in Profile > Preferences > Countdown Duration (5/10/15s);
-// this is only the fallback before that preference has been read.
-const _defaultCountdownSeconds = 10;
+// The fallback used before the countdown preference has been read. It takes
+// its value from the same constant the preference defaults to, so the two can
+// no longer disagree -- see [kDefaultCountdownSeconds] for why it is 5 and
+// not the SRS's 10.
+const _defaultCountdownSeconds = kDefaultCountdownSeconds;
 
 /// The 4-stage SOS flow: hold-to-confirm, a cancellable countdown, the
 /// dispatched/help-is-on-the-way state (with staggered contact

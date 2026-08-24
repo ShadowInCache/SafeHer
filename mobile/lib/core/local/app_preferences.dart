@@ -11,6 +11,21 @@ part 'app_preferences.g.dart';
 
 const _kThreatThreshold = 'threatThreshold';
 const _kCountdownSeconds = 'countdownSeconds';
+
+/// How long the SOS countdown runs before the alert goes out, unless the user
+/// has chosen otherwise in Profile > Preferences > Countdown Duration.
+///
+/// A deliberate deviation from the SRS: FR-EMG-03 specifies 10 seconds, and
+/// this ships 5 on the product owner's call. The trade is real in both
+/// directions -- five seconds gets help moving sooner when the alert is
+/// genuine, and halves the time available to call off a false one -- so it is
+/// recorded rather than quietly changed.
+///
+/// It lives here, as one constant, because the value was previously written
+/// out twice: here and as the emergency screen's pre-preference fallback. Two
+/// copies of a number that decides how long someone has to stop an alert is
+/// one copy too many.
+const kDefaultCountdownSeconds = 5;
 const _kAutoRecord = 'autoRecordEnabled';
 const _kDarkMode = 'darkModeEnabled';
 const _kBiometric = 'biometricEnabled';
@@ -29,7 +44,8 @@ class AppPreferences {
   Future<void> setThreatThreshold(double value) => _store.setDouble(_kThreatThreshold, value);
 
   /// 5, 10, or 15 — the Emergency screen's cancellable countdown length.
-  int get countdownSeconds => _store.getInt(_kCountdownSeconds, defaultValue: 10);
+  /// SOS countdown length, in seconds. See [kDefaultCountdownSeconds].
+  int get countdownSeconds => _store.getInt(_kCountdownSeconds, defaultValue: kDefaultCountdownSeconds);
 
   Future<void> setCountdownSeconds(int value) => _store.setInt(_kCountdownSeconds, value);
 
