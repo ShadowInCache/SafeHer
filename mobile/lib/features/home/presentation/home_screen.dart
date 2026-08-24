@@ -11,7 +11,6 @@ import '../../../core/theme/theme_extensions.dart';
 import '../../../shared/components/buttons/sa_button.dart';
 import '../../../shared/components/cards/sa_alert_card.dart';
 import '../../../shared/components/cards/sa_analytics_card.dart';
-import '../../../shared/components/cards/sa_card.dart';
 import '../../../shared/components/charts/sa_bar_chart.dart';
 import '../../../shared/components/charts/sa_donut_chart.dart';
 import '../../../shared/components/feedback/sa_empty_state.dart';
@@ -368,11 +367,16 @@ class _HomeContent extends ConsumerWidget {
 /// things competing to be the first thing read. Demoting the furniture is
 /// what lets the status win without having to shout.
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.label, this.actionLabel, this.onAction});
+  const _SectionHeader({required this.label, this.actionLabel, this.onAction, this.trailing});
 
   final String label;
   final String? actionLabel;
   final VoidCallback? onAction;
+
+  /// Right-hand slot for something that is not a link -- a live status, a
+  /// count. Ignored when [actionLabel] is supplied; a section head has room
+  /// for one thing on the right, and a tappable one wins.
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -407,7 +411,9 @@ class _SectionHeader extends StatelessWidget {
                     style: AppTypography.labelM.copyWith(color: saColors.interactive),
                   ),
                 ),
-              ),
+              )
+            else if (trailing != null)
+              trailing!,
           ],
         ),
       ],
@@ -558,28 +564,39 @@ class _DeviceStatusSection extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.space3),
         if (devices.isEmpty)
-          SaCard(
-            onTap: onManageDevices,
-            useBlur: false,
-            semanticsLabel: 'No wearable connected. Tap to connect a device.',
-            child: Row(
-              children: [
-                SaIcon(SaIconGlyph.bluetoothOff, size: 22, color: onSurface.withValues(alpha: 0.4)),
-                const SizedBox(width: AppSpacing.space3),
-                Expanded(
-                  child: Text(
-                    'No wearable connected — tap to pair a Smart Glove or Smart Glasses.',
-                    style: AppTypography.bodyM.copyWith(color: onSurface.withValues(alpha: 0.6)),
-                  ),
+          Semantics(
+            button: true,
+            label: 'No wearable connected. Tap to connect a device.',
+            child: GestureDetector(
+              onTap: onManageDevices,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.space3),
+                child: Row(
+                  children: [
+                    SaIcon(SaIconGlyph.bluetoothOff, size: 22, color: onSurface.withValues(alpha: 0.4)),
+                    const SizedBox(width: AppSpacing.space3),
+                    Expanded(
+                      child: Text(
+                        'No wearable connected — tap to pair a Smart Glove or Smart Glasses.',
+                        style: AppTypography.bodyM.copyWith(color: onSurface.withValues(alpha: 0.6)),
+                      ),
+                    ),
+                    SaIcon(SaIconGlyph.chevronRight, size: 18, color: onSurface.withValues(alpha: 0.4)),
+                  ],
                 ),
-                SaIcon(SaIconGlyph.chevronRight, size: 18, color: onSurface.withValues(alpha: 0.4)),
-              ],
+              ),
             ),
           )
         else
-          for (final device in devices) ...[
+          // A register, not a stack of cards. Each device was its own filled,
+          // bordered, rounded surface, which gave a paired smart ring exactly
+          // the same visual weight as the safety status above it. The section
+          // rule and the eyebrow already say where this list starts and ends,
+          // so the rows only need separating from each other.
+          for (final (i, device) in devices.indexed) ...[
+            if (i > 0) Container(height: 1, color: context.saColors.line),
             _DeviceStatusRow(device: device, onTap: () => onDeviceTap(device)),
-            const SizedBox(height: AppSpacing.space3),
           ],
       ],
     );
@@ -598,52 +615,58 @@ class _DeviceStatusRow extends StatelessWidget {
     final statusColor = device.isOnline ? AppColors.success500 : AppColors.neutral400;
     final syncedLabel = device.lastSeen != null ? 'Synced ${_formatRelative(device.lastSeen!)}' : 'Never synced';
 
-    return SaCard(
-      onTap: onTap,
-      useBlur: false,
-      semanticsLabel:
+    return Semantics(
+      button: true,
+      label:
           '${device.name}, ${device.isOnline ? "online" : "offline"}, $syncedLabel'
           '${device.isOnline ? ", battery ${(device.batteryPercent * 100).round()} percent" : ""}',
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.violet500.withValues(alpha: 0.15)),
-            alignment: Alignment.center,
-            child: SaIcon(_glyphForDeviceType(device.type), size: 20, color: AppColors.violet500),
-          ),
-          const SizedBox(width: AppSpacing.space3),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(device.name, style: AppTypography.headingS.copyWith(color: onSurface)),
-                const SizedBox(height: 2),
-                Row(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.space3),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.violet500.withValues(alpha: 0.15)),
+                alignment: Alignment.center,
+                child: SaIcon(_glyphForDeviceType(device.type), size: 20, color: AppColors.violet500),
+              ),
+              const SizedBox(width: AppSpacing.space3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SaStatusDot(color: statusColor, live: device.isOnline),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        '${device.isOnline ? "Online" : "Offline"} · $syncedLabel',
-                        style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.6)),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                    Text(device.name, style: AppTypography.headingS.copyWith(color: onSurface)),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        SaStatusDot(color: statusColor, live: device.isOnline),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            '${device.isOnline ? "Online" : "Offline"} · $syncedLabel',
+                            style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.6)),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              if (device.isOnline)
+                Text(
+                  '${(device.batteryPercent * 100).round()}%',
+                  style: AppTypography.monoDataS.copyWith(color: onSurface.withValues(alpha: 0.7)),
+                ),
+              const SizedBox(width: AppSpacing.space2),
+              SaIcon(SaIconGlyph.chevronRight, size: 16, color: onSurface.withValues(alpha: 0.35)),
+            ],
           ),
-          if (device.isOnline)
-            Text(
-              '${(device.batteryPercent * 100).round()}%',
-              style: AppTypography.monoDataS.copyWith(color: onSurface.withValues(alpha: 0.7)),
-            ),
-          const SizedBox(width: AppSpacing.space2),
-          SaIcon(SaIconGlyph.chevronRight, size: 16, color: onSurface.withValues(alpha: 0.35)),
-        ],
+        ),
       ),
     );
   }
@@ -665,26 +688,30 @@ class _LiveMonitoringSummaryCard extends StatelessWidget {
       MonitoringConnectionStatus.disconnected => ('Offline', AppColors.neutral400),
     };
 
-    return SaCard(
-      onTap: onTap,
-      useBlur: false,
-      semanticsLabel: 'Live Monitoring, $statusLabel',
-      child: Column(
+    // A section, not a floating card. This sat between the device register
+    // and the quick-action grid as the one block with no section rule, so the
+    // page read as three unrelated things stacked rather than one page. The
+    // live status takes the head's right-hand slot, where "Manage" sits on
+    // the section above.
+    return Semantics(
+      button: true,
+      label: 'Live Monitoring, $statusLabel',
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Live Monitoring', style: AppTypography.headingS.copyWith(color: onSurface)),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SaStatusDot(color: statusColor, live: monitoring.status == MonitoringConnectionStatus.connected),
-                  const SizedBox(width: 6),
-                  Text(statusLabel, style: AppTypography.labelM.copyWith(color: statusColor)),
-                ],
-              ),
-            ],
+          _SectionHeader(
+            label: 'Live Monitoring',
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SaStatusDot(color: statusColor, live: monitoring.status == MonitoringConnectionStatus.connected),
+                const SizedBox(width: 6),
+                Text(statusLabel, style: AppTypography.labelM.copyWith(color: statusColor)),
+              ],
+            ),
           ),
           const SizedBox(height: AppSpacing.space3),
           if (latest == null)
@@ -706,8 +733,9 @@ class _LiveMonitoringSummaryCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: AppSpacing.space3),
-          Text('View Live Feed →', style: AppTypography.labelL.copyWith(color: AppColors.violet500)),
+          Text('View Live Feed →', style: AppTypography.labelL.copyWith(color: context.saColors.interactive)),
         ],
+        ),
       ),
     );
   }
