@@ -125,7 +125,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   scrollOffset: _scrollOffset,
                 ),
           _BlurAppBar(scrollOffset: _scrollOffset),
-          const Positioned(top: 0, left: 0, right: 0, child: SafeArea(bottom: false, child: _OfflineBanner())),
+          const Positioned(top: 0, left: 0, right: 0, child: _OfflineBanner()),
           Positioned(
             left: 0,
             right: 0,
@@ -160,7 +160,17 @@ class _OfflineBanner extends ConsumerWidget {
       curve: Curves.easeOut,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space4, vertical: AppSpacing.space2),
+        // The fill runs to the very top edge, but the text starts below the
+        // status bar. Wrapping the whole banner in a SafeArea instead left an
+        // unpainted strip above it on some devices and, where the app draws
+        // edge to edge, put this text underneath the clock -- which is how it
+        // shipped: the first line of the sentence sat behind the system icons.
+        padding: EdgeInsets.only(
+          left: AppSpacing.space4,
+          right: AppSpacing.space4,
+          top: MediaQuery.of(context).viewPadding.top + AppSpacing.space2,
+          bottom: AppSpacing.space2,
+        ),
         // The deep end of the caution ramp, not the mid one. `warning500` is
         // tuned to be legible *as foreground* on either ground, which makes it
         // too dark to carry black text as a fill -- it lands at 4.5:1, right on

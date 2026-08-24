@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -25,6 +27,9 @@ bool isDeviceOnline(List<ConnectivityResult> results) {
 /// the "online but the server rejected/timed out" case separately.
 @riverpod
 class ConnectivityNotifier extends _$ConnectivityNotifier {
+  /// How often the current state is re-read, on top of the change stream.
+  static const _recheckInterval = Duration(seconds: 10);
+
   @override
   Stream<bool> build() async* {
     final connectivity = Connectivity();
@@ -32,6 +37,35 @@ class ConnectivityNotifier extends _$ConnectivityNotifier {
     // state first — otherwise a stable connection never emits anything
     // and this provider sits in AsyncLoading forever.
     yield isDeviceOnline(await connectivity.checkConnectivity());
-    yield* connectivity.onConnectivityChanged.map(isDeviceOnline);
+
+    // ...and because it only fires on transitions, a wrong seed was
+    // permanent. If the first checkConnectivity() landed before the radio
+    // had settled it returned `none`, no transition ever followed on a
+    // stable connection, and the app insisted it was offline — showing the
+    // banner, and queueing mutations instead of sending them — on a phone
+    // with full signal. A dropped platform event did the same thing.
+    //
+    // Re-reading on a timer makes the state self-correcting: the worst a
+    // missed or mistimed event can now cost is ten seconds of being wrong.
+    // checkConnectivity() is a cheap platform call, and for an app that
+    // decides whether an SOS goes out now or goes into a queue, being
+    // right about this is worth a poll.
+    final controller = StreamController<bool>();
+    final subscriptions = <StreamSubscription<bool>>[
+      connectivity.onConnectivityChanged.map(isDeviceOnline).listen(controller.add),
+      Stream<void>.periodic(_recheckInterval)
+          .asyncMap((_) async => isDeviceOnline(await connectivity.checkConnectivity()))
+          .listen(controller.add),
+    ];
+    ref.onDispose(() {
+      for (final subscription in subscriptions) {
+        subscription.cancel();
+      }
+      controller.close();
+    });
+
+    // distinct() so the poll only rebuilds watchers when something actually
+    // changed, rather than every ten seconds.
+    yield* controller.stream.distinct();
   }
 }
