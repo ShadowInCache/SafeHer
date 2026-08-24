@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -36,7 +37,10 @@ class HomeGreetingSection extends StatelessWidget {
   };
 
   String get _greeting {
-    final hour = DateTime.now().hour;
+    // clock.now(), not DateTime.now(): this line and the date below are the
+    // only two things on Home whose rendering depends on when you look at it,
+    // which made the home goldens pass in the morning and fail after noon.
+    final hour = clock.now().hour;
     if (hour < 12) return 'Good morning';
     if (hour < 18) return 'Good afternoon';
     return 'Good evening';
@@ -114,7 +118,7 @@ class HomeGreetingSection extends StatelessWidget {
               children: [
                 Flexible(
                   child: Text(
-                    DateFormat('EEEE, MMMM d').format(DateTime.now()),
+                    DateFormat('EEEE, MMMM d').format(clock.now()),
                     style: AppTypography.bodyM.copyWith(color: onSurface.withValues(alpha: 0.6)),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

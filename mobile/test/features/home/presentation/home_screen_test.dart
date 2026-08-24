@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'dart:typed_data';
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -396,24 +397,35 @@ void main() {
       expect(slide.offset, isNot(Offset.zero));
     });
 
+    // Home renders a greeting that depends on the hour and a date that
+    // depends on the day, so these goldens quietly encoded the moment they
+    // were generated: they passed all morning, failed after noon, and would
+    // have failed again tomorrow when the date rolled over. Pinning the clock
+    // is what makes them a regression net instead of a calendar.
+    final fixedNow = DateTime(2026, 8, 24, 9, 41);
+
     testGoldens('golden - light', (tester) async {
-      await tester.pumpWidgetBuilder(_harness(brightness: Brightness.light), surfaceSize: const Size(390, 844));
-      await tester.pump(const Duration(milliseconds: 100));
-      await screenMatchesGolden(
-        tester,
-        'home_screen_light',
-        customPump: (tester) async => tester.pump(const Duration(milliseconds: 100)),
-      );
+      await withClock(Clock.fixed(fixedNow), () async {
+        await tester.pumpWidgetBuilder(_harness(brightness: Brightness.light), surfaceSize: const Size(390, 844));
+        await tester.pump(const Duration(milliseconds: 100));
+        await screenMatchesGolden(
+          tester,
+          'home_screen_light',
+          customPump: (tester) async => tester.pump(const Duration(milliseconds: 100)),
+        );
+      });
     });
 
     testGoldens('golden - dark', (tester) async {
-      await tester.pumpWidgetBuilder(_harness(), surfaceSize: const Size(390, 844));
-      await tester.pump(const Duration(milliseconds: 100));
-      await screenMatchesGolden(
-        tester,
-        'home_screen_dark',
-        customPump: (tester) async => tester.pump(const Duration(milliseconds: 100)),
-      );
+      await withClock(Clock.fixed(fixedNow), () async {
+        await tester.pumpWidgetBuilder(_harness(), surfaceSize: const Size(390, 844));
+        await tester.pump(const Duration(milliseconds: 100));
+        await screenMatchesGolden(
+          tester,
+          'home_screen_dark',
+          customPump: (tester) async => tester.pump(const Duration(milliseconds: 100)),
+        );
+      });
     });
   });
 }

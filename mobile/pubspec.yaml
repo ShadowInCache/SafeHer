@@ -101,6 +101,11 @@ dependencies:
   # Formatting
   intl: ^0.20.2
 
+  # Injectable wall clock. `clock.now()` is `DateTime.now()` in production and
+  # a fixed instant inside `withClock`, which is what lets the home goldens
+  # stop depending on what time of day the suite happens to run.
+  clock: ^1.1.1
+
   # Models
   freezed_annotation: ^2.4.1
   json_annotation: ^4.9.0
