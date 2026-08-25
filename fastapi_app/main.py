@@ -6,6 +6,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from fastapi_app.rate_limit import DEFAULT_RULES, SlidingWindowLimiter, client_key
+
 from fastapi_app.config import get_settings
 from fastapi_app.db import init_db
 from fastapi_app.workers.deletion_purge import deletion_purge_worker
@@ -53,6 +55,59 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Enabled outside development so the test suite and local work are not
+# throttled while creating accounts. The limiter object is module-level so a
+# test can reach in, force it on, and assert the behaviour directly.
+rate_limiter = SlidingWindowLimiter(DEFAULT_RULES)
+rate_limiting_enabled = not is_development
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    if rate_limiting_enabled:
+        retry_after = rate_limiter.check(client_key(request), request.url.path)
+        if retry_after is not None:
+            logger.warning(
+                "Rate limit hit: %s %s", request.method, request.url.path
+            )
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Please try again shortly."},
+                headers={"Retry-After": str(retry_after)},
+            )
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Defensive headers.
+
+    This API serves JSON to a mobile client, so most of these are belt and
+    braces -- but the share-link routes are opened in a browser, and the
+    OpenAPI docs render HTML, so the surface is not zero.
+
+    `frame-ancestors 'none'` and X-Frame-Options are the pair that matter for
+    clickjacking; nosniff stops a JSON response being coaxed into executing as
+    something else; the referrer policy keeps share tokens out of the Referer
+    header when a shared page links onward.
+    """
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+    )
+    if not is_development:
+        # Only meaningful over TLS, and actively unhelpful on a local http
+        # server, where it would pin the browser to https for localhost.
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
 
 
 @app.middleware("http")
