@@ -166,7 +166,30 @@ def _resolve_compatible_database_url(raw_url: str) -> str:
 _settings = get_settings()
 _effective_database_url = _resolve_compatible_database_url(_settings.database_url)
 DATABASE_URL = _build_async_database_url(_effective_database_url)
-engine = create_async_engine(DATABASE_URL, echo=_settings.debug, future=True)
+_is_sqlite = DATABASE_URL.startswith("sqlite")
+
+# `pool_pre_ping` is what stops the first request after an idle period from
+# failing. The hosted deployment sleeps, and Postgres closes idle connections
+# from its side; without a pre-ping SQLAlchemy hands the next request a
+# connection that is already dead, the query raises, and the client gets a
+# 500. The pool then discards it, so a retry succeeds -- which is why this
+# looked intermittent and unreproducible. Observed directly against the
+# deployed API: POST /auth/login returned 500, and the identical request a
+# moment later returned a correct 401.
+#
+# On the mobile side that 500 surfaces as "couldn't sign in / couldn't connect
+# to the server" on the first attempt after the app has been idle, which is
+# the worst possible moment for a safety app to look broken.
+#
+# `pool_recycle` retires connections before the server is likely to, so the
+# ping usually has nothing to catch. SQLite gets neither: it is a local file
+# with no idle timeout, and the pool arguments do not apply to its driver.
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=_settings.debug,
+    future=True,
+    **({} if _is_sqlite else {"pool_pre_ping": True, "pool_recycle": 280}),
+)
 SessionLocal = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
 
 
