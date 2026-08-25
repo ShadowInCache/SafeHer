@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
+import '../../../test_utils/fake_key_value_store.dart';
+import 'package:safeher_app/core/local/onboarding_prefs.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
 import 'package:safeher_app/features/auth/data/auth_providers.dart';
 import 'package:safeher_app/features/auth/domain/auth_repository.dart';
@@ -75,7 +77,12 @@ GoRouter _buildTestRouter() {
 
 Widget _harness({Brightness brightness = Brightness.dark, _FakeAuthRepository? repo}) {
   return ProviderScope(
-    overrides: [authRepositoryProvider.overrideWithValue(repo ?? _FakeAuthRepository())],
+    overrides: [
+      authRepositoryProvider.overrideWithValue(repo ?? _FakeAuthRepository()),
+      // Signing in clears the previous account's persisted
+      // preferences, so the reset needs somewhere to write.
+      localKeyValueStoreProvider.overrideWithValue(FakeKeyValueStore()),
+    ],
     child: MaterialApp.router(
     // Mirrors main.dart's shell so screens render over the same ambient
     // field users see; the scaffold background is transparent by design.

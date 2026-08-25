@@ -26,7 +26,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('an alert queued while online still drains, with no transition', (tester) async {
-    final queue = OfflineQueueService(FakeOfflineQueueBox());
+    final queue = OfflineQueueService(FakeOfflineQueueBox(), currentOwnerId: () async => 'test-account');
     var replays = 0;
     queue.registerHandler('emergency.dispatch', (payload) async => replays++);
     await queue.enqueue('emergency.dispatch', {'severity': 'critical'});
@@ -61,7 +61,7 @@ void main() {
     // Over-triggering is safe by design — three triggers overlap on purpose —
     // but only because a drained entry is removed. Replaying an emergency
     // would message every contact again.
-    final queue = OfflineQueueService(FakeOfflineQueueBox());
+    final queue = OfflineQueueService(FakeOfflineQueueBox(), currentOwnerId: () async => 'test-account');
     var replays = 0;
     queue.registerHandler('emergency.dispatch', (payload) async => replays++);
     await queue.enqueue('emergency.dispatch', {'severity': 'critical'});

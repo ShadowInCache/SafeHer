@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../local/app_preferences.dart';
 import '../../features/contacts/data/contacts_providers.dart';
 import '../../features/devices/data/device_providers.dart';
 import '../../features/emergency/data/emergency_providers.dart';
@@ -29,10 +30,29 @@ import '../../features/safety/data/safety_providers.dart';
 /// through the button — and the cost of an extra refetch is a spinner, while
 /// the cost of a miss is showing one woman another woman's emergency
 /// contacts.
-void resetSessionScopedState(WidgetRef ref) => _reset(ref.invalidate);
+void resetSessionScopedState(WidgetRef ref) {
+  _reset(ref.invalidate);
+  _clearAccountScopedPreferences(ref.read(appPreferencesProvider), ref.invalidate);
+}
 
 /// Same, for callers holding a [Ref] rather than a [WidgetRef].
-void resetSessionScopedStateFromRef(Ref ref) => _reset(ref.invalidate);
+void resetSessionScopedStateFromRef(Ref ref) {
+  _reset(ref.invalidate);
+  _clearAccountScopedPreferences(ref.read(appPreferencesProvider), ref.invalidate);
+}
+
+/// Preferences are persisted, so invalidating the provider is not enough --
+/// it would just re-read the previous account's values straight back out of
+/// Hive. They have to be written back to their defaults.
+void _clearAccountScopedPreferences(
+  AppPreferences preferences,
+  void Function(ProviderOrFamily) invalidate,
+) {
+  // Fire and forget: the write is local and the provider is invalidated
+  // immediately so the UI stops showing the old values either way.
+  preferences.clearAccountScoped();
+  invalidate(appPreferencesProvider);
+}
 
 void _reset(void Function(ProviderOrFamily) invalidate) {
   // Everything here is scoped to one person. Deliberately not a catch-all

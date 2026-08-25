@@ -7,7 +7,7 @@ void main() {
   group('OfflineQueueService', () {
     test('enqueue persists an entry with the given action type and payload', () async {
       final box = FakeOfflineQueueBox();
-      final service = OfflineQueueService(box);
+      final service = OfflineQueueService(box, currentOwnerId: () async => 'test-account');
 
       await service.enqueue('contacts.add', {'name': 'Test'});
 
@@ -18,7 +18,7 @@ void main() {
 
     test('drain replays each entry through its registered handler and removes it on success', () async {
       final box = FakeOfflineQueueBox();
-      final service = OfflineQueueService(box);
+      final service = OfflineQueueService(box, currentOwnerId: () async => 'test-account');
       final replayed = <Map<String, dynamic>>[];
       service.registerHandler('contacts.add', (payload) async => replayed.add(payload));
 
@@ -35,7 +35,7 @@ void main() {
 
     test('drain leaves an entry queued (with attempts bumped) when its handler keeps failing', () async {
       final box = FakeOfflineQueueBox();
-      final service = OfflineQueueService(box);
+      final service = OfflineQueueService(box, currentOwnerId: () async => 'test-account');
       service.registerHandler('contacts.add', (payload) async => throw Exception('still offline'));
 
       await service.enqueue('contacts.add', {'name': 'A'});
@@ -47,7 +47,7 @@ void main() {
 
     test('drain drops an entry once it exceeds the retry limit', () async {
       final box = FakeOfflineQueueBox();
-      final service = OfflineQueueService(box);
+      final service = OfflineQueueService(box, currentOwnerId: () async => 'test-account');
       service.registerHandler('contacts.add', (payload) async => throw Exception('still offline'));
 
       await service.enqueue('contacts.add', {'name': 'A'});
@@ -60,7 +60,7 @@ void main() {
 
     test('drain skips entries with no registered handler, leaving them queued', () async {
       final box = FakeOfflineQueueBox();
-      final service = OfflineQueueService(box);
+      final service = OfflineQueueService(box, currentOwnerId: () async => 'test-account');
 
       await service.enqueue('unknown.action', {});
       await service.drain();

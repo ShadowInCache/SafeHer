@@ -458,7 +458,7 @@ void main() {
       //
       // The incident id is now chosen on the device before anything is sent,
       // so the recording has something to be filed against either way.
-      final queue = OfflineQueueService(FakeOfflineQueueBox());
+      final queue = OfflineQueueService(FakeOfflineQueueBox(), currentOwnerId: () async => 'test-account');
       final recorder = FakeEvidenceRecorder();
       final evidence = FakeEvidenceRepository();
       await tester.pumpWidget(
@@ -545,7 +545,7 @@ void main() {
       // "You are offline. Your alert is saved and will send the moment you
       // have signal." That sentence tells someone in danger to wait for a
       // signal she already has.
-      final queue = OfflineQueueService(FakeOfflineQueueBox());
+      final queue = OfflineQueueService(FakeOfflineQueueBox(), currentOwnerId: () async => 'test-account');
       final repo = _RecordingEmergencyRepository()..unreachable = true;
       await tester.pumpWidget(
         _harness(offline: false, queueService: queue, emergencyRepo: repo),
@@ -570,7 +570,7 @@ void main() {
       // The other half of the same fix: the offline message is correct when
       // the device really has no network, and must not be lost in making the
       // online case honest.
-      final queue = OfflineQueueService(FakeOfflineQueueBox());
+      final queue = OfflineQueueService(FakeOfflineQueueBox(), currentOwnerId: () async => 'test-account');
       final repo = _RecordingEmergencyRepository()..unreachable = true;
       await tester.pumpWidget(
         _harness(offline: true, queueService: queue, emergencyRepo: repo),
@@ -590,7 +590,7 @@ void main() {
     });
 
     testWidgets('the queued alert carries the id so a replay cannot duplicate it', (tester) async {
-      final queue = OfflineQueueService(FakeOfflineQueueBox());
+      final queue = OfflineQueueService(FakeOfflineQueueBox(), currentOwnerId: () async => 'test-account');
       final repo = _RecordingEmergencyRepository()..unreachable = true;
       await tester.pumpWidget(
         _harness(offline: true, queueService: queue, emergencyRepo: repo),
@@ -682,7 +682,7 @@ void main() {
     });
 
     testWidgets('an offline SOS says pending, never delivered', (tester) async {
-      final queue = OfflineQueueService(FakeOfflineQueueBox());
+      final queue = OfflineQueueService(FakeOfflineQueueBox(), currentOwnerId: () async => 'test-account');
       await tester.pumpWidget(_harness(
         offline: true,
         queueService: queue,
@@ -705,7 +705,7 @@ void main() {
     });
 
     testWidgets('offline SOS queues the alert, then sends it once reconnected', (tester) async {
-      final queue = OfflineQueueService(FakeOfflineQueueBox());
+      final queue = OfflineQueueService(FakeOfflineQueueBox(), currentOwnerId: () async => 'test-account');
       // Unreachable on the first attempt, which is what being offline
       // actually looks like from the dispatcher's side.
       final repo = _RecordingEmergencyRepository(unreachable: true);

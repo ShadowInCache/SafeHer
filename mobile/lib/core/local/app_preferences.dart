@@ -63,6 +63,27 @@ class AppPreferences {
 
   bool get biometricEnabled => _store.getBool(_kBiometric, defaultValue: false);
 
+  /// Puts every account-scoped preference back to its default.
+  ///
+  /// These live in one device-wide Hive box with no user in the key, so they
+  /// carried across a sign-out: the next account inherited the previous
+  /// account's auto-SOS sensitivity, countdown length, evidence auto-record
+  /// setting and biometric-unlock choice. Threat threshold is the sharpest
+  /// of those -- it is synced to the server per user and decides when an
+  /// automatic alarm is raised, so inheriting a stranger's value silently
+  /// changes when this account gets help.
+  ///
+  /// Dark mode is deliberately left alone: it is a property of the phone and
+  /// the person holding it, not of the account, and resetting the theme on
+  /// every sign-out would read as a bug. The onboarding flag is left for the
+  /// same reason.
+  Future<void> clearAccountScoped() async {
+    await _store.setDouble(_kThreatThreshold, 0.75);
+    await _store.setInt(_kCountdownSeconds, kDefaultCountdownSeconds);
+    await _store.setBool(_kAutoRecord, true);
+    await _store.setBool(_kBiometric, false);
+  }
+
   Future<void> setBiometricEnabled(bool value) => _store.setBool(_kBiometric, value);
 }
 

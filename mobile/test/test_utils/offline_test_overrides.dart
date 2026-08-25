@@ -54,7 +54,7 @@ List<Override> offlineTestOverrides({
   connectivityNotifierProvider.overrideWith(
     offline ? _AlwaysOfflineConnectivityNotifier.new : _AlwaysOnlineConnectivityNotifier.new,
   ),
-  offlineQueueServiceProvider.overrideWithValue(queueService ?? OfflineQueueService(FakeOfflineQueueBox())),
+  offlineQueueServiceProvider.overrideWithValue(queueService ?? OfflineQueueService(FakeOfflineQueueBox(), currentOwnerId: () async => 'test-account')),
   // The Profile screen asks the backend whether automatic detection is
   // running. Left un-overridden that is a real HTTP call, whose timeout timer
   // outlives the widget tree and fails the test with "A Timer is still
