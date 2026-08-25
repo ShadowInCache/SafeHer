@@ -12,9 +12,15 @@ const _maxAttempts = 5;
 /// entry when the mutation can't reach the network, and otherwise doesn't
 /// need to know this exists.
 class OfflineQueueService {
-  OfflineQueueService(this._box);
+  OfflineQueueService(this._box, {Future<String?> Function()? currentOwnerId})
+      : _currentOwnerId = currentOwnerId ?? (() async => null);
 
   final OfflineQueueBox _box;
+
+  /// Resolves the account that is signed in *now*. Injected rather than read
+  /// from a global so tests can drive two accounts without a real token
+  /// store, and so this file never depends on the auth layer.
+  final Future<String?> Function() _currentOwnerId;
   final _handlers = <String, OfflineActionHandler>{};
 
   // DateTime.now() alone isn't collision-resistant enough for id/ordering:
@@ -30,7 +36,7 @@ class OfflineQueueService {
 
   List<OfflineQueueEntry> get pending => _box.getAll();
 
-  Future<void> enqueue(String actionType, Map<String, dynamic> payload) {
+  Future<void> enqueue(String actionType, Map<String, dynamic> payload) async {
     final sequence = _sequence++;
     final entry = OfflineQueueEntry(
       id: '${DateTime.now().microsecondsSinceEpoch}-$sequence',
@@ -38,6 +44,9 @@ class OfflineQueueService {
       payload: payload,
       createdAt: DateTime.now(),
       sequence: sequence,
+      // Stamped at enqueue time, while the queueing account is still the
+      // signed-in one. Resolving it at drain time would defeat the point.
+      ownerId: await _currentOwnerId(),
     );
     return _box.add(entry);
   }
@@ -46,8 +55,20 @@ class OfflineQueueService {
   /// that fails again is left in the queue (with its attempt count bumped)
   /// unless it's exhausted [_maxAttempts], in which case it's dropped
   /// rather than retried forever.
+  /// Replays only the entries belonging to the account that is signed in
+  /// now. Anything queued by a different account is left untouched, so it
+  /// replays when that account signs back in rather than being sent as
+  /// somebody else — and an undelivered emergency alert is neither
+  /// misattributed nor thrown away.
   Future<void> drain() async {
+    final owner = await _currentOwnerId();
     for (final entry in _box.getAll()) {
+      // No signed-in account: nothing can be replayed as anybody.
+      if (owner == null) return;
+      // Queued by a different account, or by one that cannot be identified.
+      // Skipped rather than removed: it is still that account's data, and it
+      // is still their alert to deliver.
+      if (entry.ownerId != owner) continue;
       final handler = _handlers[entry.actionType];
       if (handler == null) continue;
       try {

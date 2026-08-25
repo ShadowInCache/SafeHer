@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/session/session_reset.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -84,7 +85,14 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       if (wasLoading && !next.isLoading && !next.hasError) {
         setState(() => _status = SaOTPFieldStatus.success);
         Timer(const Duration(milliseconds: 400), () {
-          if (mounted) context.go('/home');
+          if (mounted) {
+            // Verifying the code is the moment this account gets a session,
+            // so it is also the moment the previous account's cached data
+            // must go. Missing it here left the last account's contacts on
+            // screen for whoever verified next.
+            resetSessionScopedState(ref);
+            context.go('/home');
+          }
         });
       }
     });

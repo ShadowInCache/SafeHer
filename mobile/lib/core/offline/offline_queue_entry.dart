@@ -10,6 +10,7 @@ class OfflineQueueEntry {
     required this.createdAt,
     required this.sequence,
     this.attempts = 0,
+    this.ownerId,
   });
 
   /// Unique per entry (not the id of whatever it's mutating) so the same
@@ -30,6 +31,21 @@ class OfflineQueueEntry {
 
   final int attempts;
 
+  /// The account that queued this entry, from the access token's `sub`.
+  ///
+  /// Entries are replayed with whatever session is current *at drain time*,
+  /// which is not necessarily the session that created them: sign out with a
+  /// queued contact or alert, sign in as somebody else, and the queue would
+  /// happily write one person's data into another person's account. Stamping
+  /// the owner lets [OfflineQueueService.drain] hold an entry until its own
+  /// account is back, instead of choosing between replaying it wrongly and
+  /// dropping an undelivered emergency alert.
+  ///
+  /// Null on entries written before this field existed, and on entries
+  /// queued with no readable token. Those are never replayed — an entry
+  /// nobody can be shown to own cannot be safely sent as anybody.
+  final String? ownerId;
+
   OfflineQueueEntry withAttempt() => OfflineQueueEntry(
     id: id,
     actionType: actionType,
@@ -37,6 +53,7 @@ class OfflineQueueEntry {
     createdAt: createdAt,
     sequence: sequence,
     attempts: attempts + 1,
+    ownerId: ownerId,
   );
 
   Map<String, dynamic> toMap() => {
@@ -46,6 +63,7 @@ class OfflineQueueEntry {
     'createdAt': createdAt.toIso8601String(),
     'sequence': sequence,
     'attempts': attempts,
+    'ownerId': ownerId,
   };
 
   factory OfflineQueueEntry.fromMap(Map<dynamic, dynamic> map) => OfflineQueueEntry(
@@ -55,5 +73,6 @@ class OfflineQueueEntry {
     createdAt: DateTime.parse(map['createdAt'] as String),
     sequence: map['sequence'] as int? ?? 0,
     attempts: map['attempts'] as int? ?? 0,
+    ownerId: map['ownerId'] as String?,
   );
 }

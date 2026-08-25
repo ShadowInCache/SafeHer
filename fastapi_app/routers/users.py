@@ -303,7 +303,7 @@ async def update_emergency_contact(
     current_user: UserPublic = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    contact = await emergency_repo.get_by_id(session, contact_id=contact_id)
+    contact = await emergency_repo.get_by_id(session, contact_id=contact_id, user_id=current_user.id)
     if not contact or contact.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
 
@@ -332,7 +332,7 @@ async def send_contact_verification(
     settings: Settings = Depends(get_settings),
 ):
     """Emails this contact a code to pass back to the user."""
-    contact = await emergency_repo.get_by_id(session, contact_id=contact_id)
+    contact = await emergency_repo.get_by_id(session, contact_id=contact_id, user_id=current_user.id)
     if not contact or contact.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
 
@@ -364,7 +364,7 @@ async def confirm_contact_verification(
     current_user: UserPublic = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    contact = await emergency_repo.get_by_id(session, contact_id=contact_id)
+    contact = await emergency_repo.get_by_id(session, contact_id=contact_id, user_id=current_user.id)
     if not contact or contact.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
 
@@ -387,9 +387,9 @@ async def delete_emergency_contact(
     current_user: UserPublic = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    contact = await emergency_repo.get_by_id(session, contact_id=contact_id)
+    contact = await emergency_repo.get_by_id(session, contact_id=contact_id, user_id=current_user.id)
     if not contact or contact.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
 
-    await emergency_repo.delete_by_id(session, contact_id=contact_id)
+    await emergency_repo.delete_by_id(session, contact_id=contact_id, user_id=current_user.id)
     return None

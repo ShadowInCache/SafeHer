@@ -15,8 +15,22 @@ async def list_by_user(session: AsyncSession, *, user_id: str) -> list[Emergency
     return rows.scalars().all()
 
 
-async def get_by_id(session: AsyncSession, *, contact_id: str) -> Optional[EmergencyContact]:
-    return await session.get(EmergencyContact, contact_id)
+async def get_by_id(
+    session: AsyncSession, *, contact_id: str, user_id: str
+) -> Optional[EmergencyContact]:
+    """Fetch a contact, scoped to its owner.
+
+    `user_id` is required rather than optional on purpose. This used to look
+    a contact up by id alone and leave the ownership check to the caller.
+    Every caller did check -- but that made isolation a convention rather
+    than a property, and one future route that forgot would be a silent IDOR
+    handing out somebody's emergency contacts. The filter belongs here, where
+    it cannot be omitted.
+    """
+    contact = await session.get(EmergencyContact, contact_id)
+    if contact is None or contact.user_id != user_id:
+        return None
+    return contact
 
 
 async def create(
@@ -71,7 +85,18 @@ async def update(
     return contact
 
 
-async def delete_by_id(session: AsyncSession, *, contact_id: str) -> bool:
-    result = await session.execute(delete(EmergencyContact).where(EmergencyContact.id == contact_id))
+async def delete_by_id(session: AsyncSession, *, contact_id: str, user_id: str) -> bool:
+    """Delete a contact, scoped to its owner.
+
+    The DELETE now carries the owner in its WHERE clause, so it cannot remove
+    another account's row even if a caller reaches it without checking first.
+    Previously the statement was `WHERE id = :contact_id` alone.
+    """
+    result = await session.execute(
+        delete(EmergencyContact).where(
+            EmergencyContact.id == contact_id,
+            EmergencyContact.user_id == user_id,
+        )
+    )
     await session.commit()
     return bool(result.rowcount)

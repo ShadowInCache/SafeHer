@@ -6,14 +6,25 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../connectivity/connectivity_notifier.dart';
 import '../di/injection.dart';
+import '../network/network_providers.dart';
 import 'offline_queue_box.dart';
 import 'offline_queue_service.dart';
+import 'queue_owner.dart';
 
 part 'offline_queue_providers.g.dart';
 
 @Riverpod(keepAlive: true)
 OfflineQueueService offlineQueueService(Ref ref) {
-  return OfflineQueueService(getIt<OfflineQueueBox>());
+  final tokenStore = ref.watch(authTokenStoreProvider);
+  return OfflineQueueService(
+    getIt<OfflineQueueBox>(),
+    // The queue outlives any one session — it is keepAlive and backed by
+    // Hive, so it survives sign-out and app restarts. Without an owner it
+    // replayed whatever it held under whichever account happened to be
+    // signed in at drain time, which wrote one person's contacts, and could
+    // send one person's emergency alert, into another person's account.
+    currentOwnerId: () async => accountIdFromAccessToken(await tokenStore.readToken()),
+  );
 }
 
 /// Drains the offline queue whenever there is any reason to think it might

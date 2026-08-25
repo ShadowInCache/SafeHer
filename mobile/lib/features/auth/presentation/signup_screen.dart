@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../data/auth_providers.dart';
+import '../../../core/session/session_reset.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -119,6 +120,12 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     final signedIn = await ref.read(authRepositoryProvider).hasActiveSession();
     if (!mounted) return;
     if (signedIn) {
+      // A session starts here as surely as it does on the sign-in screen, and
+      // this path did not clear the previous account's cached state. Sign out,
+      // sign *up* as somebody else, and the last account's emergency contacts
+      // were still in memory -- their names and phone numbers, on the new
+      // account's home screen.
+      resetSessionScopedState(ref);
       context.go('/home');
     } else {
       context.go('/auth/otp', extra: toE164(_countryCode, _phoneController.text));
