@@ -204,7 +204,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump();
       expect(tester.takeException(), isNull);
-      expect(find.text('Quick Access'), findsOneWidget);
+      expect(find.text('QUICK ACCESS'), findsOneWidget);
       expect(find.text('Reports'), findsOneWidget);
       expect(find.text('Contacts'), findsWidgets);
       expect(find.text('Devices'), findsWidgets);
@@ -236,7 +236,7 @@ void main() {
 
       await tester.enterText(find.byType(TextField), '');
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('Recent Searches'), findsOneWidget);
+      expect(find.text('RECENT SEARCHES'), findsOneWidget);
       expect(find.text('ring'), findsOneWidget);
 
       await tester.tap(find.text('ring'));

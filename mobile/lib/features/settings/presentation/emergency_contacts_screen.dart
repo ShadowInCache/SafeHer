@@ -158,6 +158,14 @@ class _ContactsList extends ConsumerWidget {
     }
 
     return ReorderableListView.builder(
+      // On web and desktop ReorderableListView draws its own handle at the
+      // trailing edge, vertically centred over the whole item. Each item here
+      // is a card plus an optional notice plus a Call/Message row, so that
+      // handle landed in the middle of the notice and sat on top of the text
+      // -- "this contact has no em[=]l address". The card already carries a
+      // handle, so Flutter's is switched off and the card's is made the real
+      // drag affordance below; long-press to reorder still works on mobile.
+      buildDefaultDragHandles: false,
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.screenMarginPhone,
         AppSpacing.space2,
@@ -193,7 +201,15 @@ class _ContactsList extends ConsumerWidget {
                   relationship: contact.relationship,
                   priority: index + 1,
                   confirmed: contact.confirmed,
-                  dragHandle: const SaIcon(SaIconGlyph.refresh, size: 18),
+                  dragHandle: ReorderableDragStartListener(
+                    index: index,
+                    child: const Padding(
+                      // A bare 18px glyph is well under the 44dp minimum for
+                      // something you are meant to press and drag.
+                      padding: EdgeInsets.all(AppSpacing.space3),
+                      child: SaIcon(SaIconGlyph.dragHandle, size: 18),
+                    ),
+                  ),
                   onTap: () => onEdit(contact),
                 ),
                 if (unreachable)

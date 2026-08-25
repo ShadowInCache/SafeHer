@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/components/layout/sa_section_header.dart';
 import '../../../shared/components/cards/sa_threat_gauge_card.dart';
 import '../../../shared/components/feedback/sa_empty_state.dart';
 import '../../../shared/components/feedback/sa_status_dot.dart';
@@ -149,7 +150,6 @@ class _MonitoringBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final onSurface = Theme.of(context).colorScheme.onSurface;
     return ListView(
       children: [
         SaThreatGaugeCard(
@@ -161,7 +161,7 @@ class _MonitoringBody extends StatelessWidget {
         const SizedBox(height: AppSpacing.space4),
         SizedBox(height: 220, child: CameraFeedPanel(glassesConnected: glassesOnline)),
         const SizedBox(height: AppSpacing.space4),
-        Text('Recent Events', style: AppTypography.headingS.copyWith(color: onSurface)),
+        const SaSectionHeader(label: 'Recent Events'),
         const SizedBox(height: AppSpacing.space3),
         if (events.isEmpty)
           SaEmptyState(

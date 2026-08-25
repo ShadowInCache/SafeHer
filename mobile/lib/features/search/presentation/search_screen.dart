@@ -8,6 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/components/layout/sa_section_header.dart';
 import '../../../core/theme/theme_extensions.dart';
 import '../../../shared/components/cards/sa_card.dart';
 import '../../../shared/components/cards/sa_contact_card.dart';
@@ -377,12 +378,11 @@ class _SearchEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final onSurface = Theme.of(context).colorScheme.onSurface;
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenMarginPhone, vertical: AppSpacing.space4),
       children: [
         if (recentSearches.isNotEmpty) ...[
-          Text('Recent Searches', style: AppTypography.headingS.copyWith(color: onSurface)),
+          const SaSectionHeader(label: 'Recent Searches'),
           const SizedBox(height: AppSpacing.space3),
           Wrap(
             spacing: AppSpacing.space2,
@@ -393,7 +393,7 @@ class _SearchEmptyState extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.space6),
         ],
-        Text('Quick Access', style: AppTypography.headingS.copyWith(color: onSurface)),
+        const SaSectionHeader(label: 'Quick Access'),
         const SizedBox(height: AppSpacing.space3),
         GridView.count(
           shrinkWrap: true,

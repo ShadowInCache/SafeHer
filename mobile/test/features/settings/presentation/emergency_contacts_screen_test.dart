@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
+import 'package:safeher_app/shared/components/icons/sa_icon.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
 import 'package:safeher_app/features/contacts/data/contacts_providers.dart';
 import 'package:safeher_app/features/contacts/domain/contacts_repository.dart';
@@ -221,6 +222,50 @@ void main() {
       await tester.tap(find.byTooltip('Back'));
       await tester.pumpAndSettle();
       expect(find.text('settings-stub'), findsOneWidget);
+    });
+
+    testWidgets('the contact list can still be reordered by its handle', (tester) async {
+      // The list used to rely on ReorderableListView's built-in handles. Those
+      // are drawn only on web/desktop and sat on top of the unreachable
+      // notice, so they were switched off and the card's own handle made the
+      // drag affordance. Nothing covered reordering at the time, so this is
+      // the test that says the swap did not quietly remove the feature.
+      await tester.binding.setSurfaceSize(const Size(390, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(_harness());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Anika Sharma'), findsOneWidget);
+      final firstBefore = tester.getRect(find.text('Anika Sharma')).top;
+      final secondBefore = tester.getRect(find.text('Rahul Verma')).top;
+      expect(secondBefore, greaterThan(firstBefore), reason: 'Anika starts above Rahul');
+
+      final handles = find.byWidgetPredicate(
+        (w) => w is SaIcon && w.glyph == SaIconGlyph.dragHandle,
+      );
+      expect(handles, findsWidgets, reason: 'each row needs a drag affordance');
+
+      // Drag the second row's handle above the first.
+      final secondHandle = handles.at(1);
+      final gesture = await tester.startGesture(tester.getCenter(secondHandle));
+      await tester.pump(const Duration(milliseconds: 200));
+      // Move in steps: the reorder only re-evaluates positions as the pointer
+      // travels, so a single jump can land without ever crossing the sibling.
+      final distance = firstBefore - secondBefore - 20;
+      for (var i = 0; i < 12; i++) {
+        await gesture.moveBy(Offset(0, distance / 12));
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getRect(find.text('Rahul Verma')).top,
+        lessThan(tester.getRect(find.text('Anika Sharma')).top),
+        reason: 'dragging Rahul above Anika should reorder the list',
+      );
     });
 
     testWidgets('swiping a contact removes it', (tester) async {
