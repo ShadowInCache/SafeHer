@@ -1,11 +1,31 @@
 enum DeviceType { ring, glasses, glove, pendant }
 
 class SensorReading {
-  const SensorReading({required this.accelG, required this.gyroDps, required this.flexPercent});
+  const SensorReading({
+    required this.accelG,
+    required this.gyroDps,
+    required this.heartRateBpm,
+  });
 
-  final double accelG;
-  final double gyroDps;
-  final double flexPercent;
+  /// Nothing has been heard from the device yet.
+  ///
+  /// Distinct from a reading of zero on purpose: the card used to show
+  /// `0.00g / 0.0 deg/s / 0%` whether the glove was silent or genuinely
+  /// still, and "0 bpm" is a claim about someone's heart that this app
+  /// should never make by accident.
+  const SensorReading.unknown()
+      : accelG = null,
+        gyroDps = null,
+        heartRateBpm = null;
+
+  final double? accelG;
+  final double? gyroDps;
+
+  /// Beats per minute from the glove's pulse sensor. Replaces the flex
+  /// reading, which no hardware on the glove ever produced.
+  final double? heartRateBpm;
+
+  bool get hasAny => accelG != null || gyroDps != null || heartRateBpm != null;
 }
 
 class DeviceDetail {

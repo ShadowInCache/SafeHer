@@ -40,7 +40,12 @@ class DeviceRepositoryRemote implements DeviceRepository {
       signalStrength: json['signal_strength'] as int? ?? 0,
       firmwareVersion: json['firmware_version'] as String? ?? 'Not reporting',
       updateAvailable: false,
-      sensors: const SensorReading(accelG: 0, gyroDps: 0, flexPercent: 0),
+      // Unknown, not zero. The API carries no live sensor values -- those
+      // arrive over BLE straight from the glove -- and hardcoding zeros here
+      // made the device card show 0.00g / 0.0 deg/s / 0% forever, which read
+      // as "the glove says nothing is happening" rather than "nobody has
+      // asked the glove".
+      sensors: const SensorReading.unknown(),
       lastSeen: lastSeen,
     );
   }
