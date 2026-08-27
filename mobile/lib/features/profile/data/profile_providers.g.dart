@@ -24,7 +24,7 @@ final profileRepositoryProvider =
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef ProfileRepositoryRef = AutoDisposeProviderRef<ProfileRepository>;
-String _$userProfileHash() => r'a14280453bab6009e77b7bc372ba3dc41e67d99f';
+String _$userProfileHash() => r'2e1a85fed371f23ee9c7b733077b21ef25f17b2a';
 
 /// See also [userProfile].
 @ProviderFor(userProfile)
@@ -42,7 +42,7 @@ final userProfileProvider = AutoDisposeFutureProvider<UserProfile>.internal(
 // ignore: unused_element
 typedef UserProfileRef = AutoDisposeFutureProviderRef<UserProfile>;
 String _$detectionRepositoryHash() =>
-    r'1982523cfc1d46d22b82d4739a4894621052f7a1';
+    r'09c481605898b3859ca5a97ea2852c378e57836e';
 
 /// The backend's own account of whether automatic detection is running.
 ///

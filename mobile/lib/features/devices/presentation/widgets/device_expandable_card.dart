@@ -4,6 +4,7 @@ import '../../../../shared/utils/user_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/models/threat_level.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -17,6 +18,8 @@ import '../../../../shared/components/icons/sa_icon.dart';
 import '../../../../shared/components/media/sa_3d_model_viewer.dart';
 import '../../../../shared/components/overlays/sa_toast.dart';
 import '../../domain/models/device_detail.dart';
+import '../../data/glove_link_providers.dart';
+import '../../domain/glove_protocol.dart';
 
 SaIconGlyph _glyphFor(DeviceType type) => switch (type) {
   DeviceType.ring => SaIconGlyph.ring,
@@ -160,6 +163,20 @@ class DeviceExpandableCardState extends ConsumerState<DeviceExpandableCard> {
 
   Widget _buildExpandedContent(BuildContext context, Color onSurface) {
     final device = widget.device;
+
+    // Live readings come from the glove over BLE, not from the API. The
+    // server never sees these -- the link is phone-to-glove -- so the record
+    // fetched from the backend carries `SensorReading.unknown()` and anything
+    // real has to arrive here.
+    final link = ref.watch(gloveLinkProvider);
+    final live = link.telemetry;
+    final sensors = live == null
+        ? device.sensors
+        : SensorReading(
+            accelG: live.accelG ?? device.sensors.accelG,
+            gyroDps: live.gyroDps ?? device.sensors.gyroDps,
+            heartRateBpm: live.heartRateBpm ?? device.sensors.heartRateBpm,
+          );
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.space4),
       child: Column(
@@ -169,6 +186,10 @@ class DeviceExpandableCardState extends ConsumerState<DeviceExpandableCard> {
           const SizedBox(height: AppSpacing.space3),
           _Device3DVisual(type: device.type),
           const SizedBox(height: AppSpacing.space4),
+          if (link.classification != null) ...[
+            _GloveClassificationRow(classification: link.classification!),
+            const SizedBox(height: AppSpacing.space4),
+          ],
           Row(
             children: [
               Expanded(
@@ -176,25 +197,25 @@ class DeviceExpandableCardState extends ConsumerState<DeviceExpandableCard> {
                   label: 'Accel',
                   // An em dash where a number would be: the readout says
                   // "nothing has been heard" instead of asserting stillness.
-                  value: device.sensors.accelG == null
+                  value: sensors.accelG == null
                       ? '—'
-                      : '${device.sensors.accelG!.toStringAsFixed(2)}g',
+                      : '${sensors.accelG!.toStringAsFixed(2)}g',
                 ),
               ),
               Expanded(
                 child: _SensorReadout(
                   label: 'Gyro',
-                  value: device.sensors.gyroDps == null
+                  value: sensors.gyroDps == null
                       ? '—'
-                      : '${device.sensors.gyroDps!.toStringAsFixed(1)}°/s',
+                      : '${sensors.gyroDps!.toStringAsFixed(1)}°/s',
                 ),
               ),
               Expanded(
                 child: _SensorReadout(
                   label: 'Heart',
-                  value: device.sensors.heartRateBpm == null
+                  value: sensors.heartRateBpm == null
                       ? '—'
-                      : '${device.sensors.heartRateBpm!.round()} bpm',
+                      : '${sensors.heartRateBpm!.round()} bpm',
                 ),
               ),
             ],
@@ -292,6 +313,47 @@ class _Device3DVisualState extends State<_Device3DVisual> {
       src: _modelFor(widget.type),
       alt: '3D model of device',
       height: 200,
+    );
+  }
+}
+
+/// What the on-device model last reported.
+///
+/// Shown as a label and a confidence, not as a verdict: the model says what
+/// the movement looked like, and whether that becomes an alert is the
+/// threshold's decision. Presenting it as "FALL DETECTED" would claim an
+/// authority this reading does not have.
+class _GloveClassificationRow extends StatelessWidget {
+  const _GloveClassificationRow({required this.classification});
+
+  final GloveClassification classification;
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final level = classification.threatLevel;
+    final tint = switch (level) {
+      ThreatLevel.danger => AppColors.danger500,
+      ThreatLevel.elevated => AppColors.threatElevated,
+      ThreatLevel.caution => AppColors.warning500,
+      ThreatLevel.safe => AppColors.success500,
+    };
+
+    return Row(
+      children: [
+        Container(width: 8, height: 8, decoration: BoxDecoration(shape: BoxShape.circle, color: tint)),
+        const SizedBox(width: AppSpacing.space3),
+        Expanded(
+          child: Text(
+            classification.displayLabel,
+            style: AppTypography.labelL.copyWith(color: onSurface),
+          ),
+        ),
+        Text(
+          '${(classification.confidence * 100).round()}%',
+          style: AppTypography.monoDataS.copyWith(color: onSurface.withValues(alpha: 0.6)),
+        ),
+      ],
     );
   }
 }
