@@ -28,7 +28,7 @@ List<DeviceDetail> _sampleDevices() => const [
     signalStrength: 3,
     firmwareVersion: 'v2.4.1',
     updateAvailable: false,
-    sensors: SensorReading(accelG: 1.02, gyroDps: 4.3, flexPercent: 0),
+    sensors: SensorReading(accelG: 1.02, gyroDps: 4.3, heartRateBpm: 0),
   ),
   DeviceDetail(
     id: 'glove',
@@ -40,7 +40,7 @@ List<DeviceDetail> _sampleDevices() => const [
     signalStrength: 3,
     firmwareVersion: 'v1.2.3',
     updateAvailable: true,
-    sensors: SensorReading(accelG: 1.05, gyroDps: 6.7, flexPercent: 42),
+    sensors: SensorReading(accelG: 1.05, gyroDps: 6.7, heartRateBpm: 42),
   ),
 ];
 
@@ -163,7 +163,10 @@ void main() {
       expect(find.text('Calibrate'), findsOneWidget);
       expect(find.text('Accel'), findsOneWidget);
       expect(find.text('Gyro'), findsOneWidget);
-      expect(find.text('Flex'), findsOneWidget);
+      // Heart rate, not flex: the glove has a pulse sensor and never had a
+      // flex sensor, so the third readout was labelling hardware that does
+      // not exist.
+      expect(find.text('Heart'), findsOneWidget);
     });
 
     testWidgets('deep link with initialExpandedId auto-expands that device', (tester) async {

@@ -75,6 +75,28 @@ abstract class BleService {
 
   Future<void> disconnect(String deviceId);
 
+  /// Subscribes to notifications from one characteristic, as UTF-8 text.
+  ///
+  /// This is the piece that was missing. The service could scan, connect and
+  /// prove a link was real, but had no way to *receive* anything -- so the
+  /// glove notified its classifications into a socket nobody was listening
+  /// on, and the app showed hardcoded zeros beside a device it had genuinely
+  /// paired with.
+  ///
+  /// Returns a stream that closes when the link drops. Text rather than
+  /// bytes because the glove speaks CSV (see `GloveBle`); a peripheral
+  /// sending binary would need its own method rather than a lossy decode
+  /// here.
+  ///
+  /// Throws if the service or characteristic is absent, so a glove running
+  /// firmware without the telemetry characteristic fails loudly at the point
+  /// of subscription rather than looking connected and silent.
+  Stream<String> subscribeToCharacteristic(
+    String deviceId, {
+    required String serviceUuid,
+    required String characteristicUuid,
+  });
+
   /// Our app's live connection state for [deviceId] — the stream that
   /// tells us the peripheral walked out of range or powered off.
   Stream<BleConnectionStatus> connectionState(String deviceId);

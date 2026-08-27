@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -135,6 +137,60 @@ class FlutterBluePlusBleService implements BleService {
       // Never leave a half-open connection behind after a failure.
       await _disconnectQuietly(device);
       throw _mapException(error, fallback: "Couldn't connect to this device.");
+    }
+  }
+
+  @override
+  Stream<String> subscribeToCharacteristic(
+    String deviceId, {
+    required String serviceUuid,
+    required String characteristicUuid,
+  }) async* {
+    final device = BluetoothDevice.fromId(deviceId);
+    final services = await device.discoverServices();
+
+    // UUID comparison is case-insensitive and format-sensitive: the platform
+    // may hand back a short 16-bit form or different casing than the constant
+    // written in the firmware, and `==` on the raw strings quietly never
+    // matches.
+    bool sameUuid(String a, String b) =>
+        a.toLowerCase().replaceAll('-', '') == b.toLowerCase().replaceAll('-', '');
+
+    final service = services.where((s) => sameUuid(s.uuid.str, serviceUuid)).firstOrNull;
+    if (service == null) {
+      throw StateError('Device $deviceId does not expose service $serviceUuid');
+    }
+
+    final characteristic = service.characteristics
+        .where((c) => sameUuid(c.uuid.str, characteristicUuid))
+        .firstOrNull;
+    if (characteristic == null) {
+      throw StateError(
+        'Service $serviceUuid has no characteristic $characteristicUuid',
+      );
+    }
+
+    await characteristic.setNotifyValue(true);
+    try {
+      await for (final bytes in characteristic.onValueReceived) {
+        if (bytes.isEmpty) continue;
+        // Malformed bytes are dropped, not thrown: a truncated notification
+        // is a lost reading, and taking the stream down over one would end
+        // the glove's connection to the app for the rest of the session.
+        try {
+          yield utf8.decode(bytes);
+        } on FormatException {
+          continue;
+        }
+      }
+    } finally {
+      // The link may already be gone, which is the usual way this stream
+      // ends; unsubscribing then is expected to fail and is not an error.
+      try {
+        await characteristic.setNotifyValue(false);
+      } on Exception {
+        // Nothing to unsubscribe from.
+      }
     }
   }
 

@@ -174,19 +174,27 @@ class DeviceExpandableCardState extends ConsumerState<DeviceExpandableCard> {
               Expanded(
                 child: _SensorReadout(
                   label: 'Accel',
-                  value: '${device.sensors.accelG.toStringAsFixed(2)}g',
+                  // An em dash where a number would be: the readout says
+                  // "nothing has been heard" instead of asserting stillness.
+                  value: device.sensors.accelG == null
+                      ? '—'
+                      : '${device.sensors.accelG!.toStringAsFixed(2)}g',
                 ),
               ),
               Expanded(
                 child: _SensorReadout(
                   label: 'Gyro',
-                  value: '${device.sensors.gyroDps.toStringAsFixed(1)}°/s',
+                  value: device.sensors.gyroDps == null
+                      ? '—'
+                      : '${device.sensors.gyroDps!.toStringAsFixed(1)}°/s',
                 ),
               ),
               Expanded(
                 child: _SensorReadout(
-                  label: 'Flex',
-                  value: '${device.sensors.flexPercent.round()}%',
+                  label: 'Heart',
+                  value: device.sensors.heartRateBpm == null
+                      ? '—'
+                      : '${device.sensors.heartRateBpm!.round()} bpm',
                 ),
               ),
             ],
