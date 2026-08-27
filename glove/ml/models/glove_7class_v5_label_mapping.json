@@ -1,0 +1,9 @@
+{
+  "NORMAL": 0,
+  "JERK": 1,
+  "PUSH": 2,
+  "PULL": 3,
+  "SHAKING": 4,
+  "TWISTING": 5,
+  "FALL": 6
+}
