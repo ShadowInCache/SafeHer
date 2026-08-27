@@ -115,11 +115,27 @@ class BiometricService {
   String get platformLabel => defaultTargetPlatform == TargetPlatform.iOS ? 'Face ID' : 'Fingerprint';
 
   /// Prompts the OS biometric UI and reports precisely what happened.
-  Future<BiometricResult> authenticate({required String reason}) async {
+  ///
+  /// [allowDeviceCredential] lets the OS offer the phone's PIN, pattern or
+  /// passcode as a fallback. Off when *enabling* the setting -- there the
+  /// point is to prove a fingerprint or face actually works, and a PIN would
+  /// let someone switch on a lock they cannot then satisfy. On when
+  /// *unlocking*, because a reader that will not read is otherwise a locked
+  /// door with no key: wet hands, a cut finger, a phone held at the wrong
+  /// angle. Being shut out of a personal safety app is a worse outcome than
+  /// the marginal weakening of accepting the device credential its owner
+  /// already trusts to unlock the phone itself.
+  Future<BiometricResult> authenticate({
+    required String reason,
+    bool allowDeviceCredential = false,
+  }) async {
     try {
       final ok = await _auth.authenticate(
         localizedReason: reason,
-        options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
+        options: AuthenticationOptions(
+          biometricOnly: !allowDeviceCredential,
+          stickyAuth: true,
+        ),
       );
       return ok
           ? const BiometricSuccess()

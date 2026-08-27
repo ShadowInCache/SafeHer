@@ -8,6 +8,7 @@ import 'core/di/injection.dart';
 import 'core/local/app_preferences.dart';
 import 'core/offline/offline_queue_providers.dart';
 import 'core/router/app_router.dart';
+import 'core/security/app_lock.dart';
 import 'core/theme/app_theme.dart';
 import 'features/safety/presentation/widgets/safety_trigger_listener.dart';
 import 'firebase_options.dart';
@@ -48,8 +49,14 @@ class SafeHerApp extends ConsumerWidget {
       // from any screen. It listens only while the user has it switched on.
       // The aurora sits below the router so every screen inherits it, and
       // inside the theme scope so it can read the active brightness.
+      // AppLock sits inside the ambient ground and outside the trigger
+      // listener: the lock covers what is on screen, while the shake gesture
+      // and the rest of the app keep running underneath it. Locking is opt-in
+      // (Profile > Security) and the lock screen keeps its own route to SOS.
       builder: (context, child) => SaAmbientBackground(
-        child: SafetyTriggerListener(child: child ?? const SizedBox.shrink()),
+        child: AppLock(
+          child: SafetyTriggerListener(child: child ?? const SizedBox.shrink()),
+        ),
       ),
     );
   }
