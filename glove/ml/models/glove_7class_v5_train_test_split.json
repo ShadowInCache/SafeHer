@@ -1,0 +1,168 @@
+{
+  "random_state": 42,
+  "test_size": 0.2,
+  "train_recordings": {
+    "NORMAL": [
+      "normal_001",
+      "normal_002",
+      "normal_003",
+      "normal_004",
+      "normal_005",
+      "normal_006",
+      "normal_007",
+      "normal_008",
+      "normal_009",
+      "normal_010",
+      "normal_011",
+      "normal_012",
+      "normal_013",
+      "normal_015",
+      "normal_017",
+      "normal_018",
+      "normal_019",
+      "normal_021",
+      "normal_023",
+      "normal_024",
+      "normal_026",
+      "normal_028",
+      "normal_029",
+      "normal_031",
+      "normal_032",
+      "normal_033",
+      "normal_034",
+      "normal_035"
+    ],
+    "JERK": [
+      "jerk_001",
+      "jerk_003",
+      "jerk_004",
+      "jerk_005",
+      "jerk_006",
+      "jerk_007",
+      "jerk_008",
+      "jerk_010"
+    ],
+    "PUSH": [
+      "push_001",
+      "push_002",
+      "push_004",
+      "push_005",
+      "push_007",
+      "push_008",
+      "push_009",
+      "push_010"
+    ],
+    "PULL": [
+      "pull_001",
+      "pull_002",
+      "pull_003",
+      "pull_004",
+      "pull_005",
+      "pull_006",
+      "pull_007",
+      "pull_009"
+    ],
+    "SHAKING": [
+      "shaking_001",
+      "shaking_002",
+      "shaking_003",
+      "shaking_004",
+      "shaking_005",
+      "shaking_006",
+      "shaking_007",
+      "shaking_008"
+    ],
+    "TWISTING": [
+      "twisting_002",
+      "twisting_004",
+      "twisting_005",
+      "twisting_006",
+      "twisting_007",
+      "twisting_008",
+      "twisting_009",
+      "twisting_010"
+    ],
+    "FALL": [
+      "fall_001",
+      "fall_002",
+      "fall_004",
+      "fall_005",
+      "fall_007",
+      "fall_008",
+      "fall_009",
+      "fall_010",
+      "fall_011",
+      "fall_012",
+      "fall_013",
+      "fall_014",
+      "fall_015",
+      "fall_016",
+      "fall_017",
+      "fall_019",
+      "fall_021",
+      "fall_022",
+      "fall_023",
+      "fall_024"
+    ]
+  },
+  "test_recordings": {
+    "NORMAL": [
+      "normal_014",
+      "normal_016",
+      "normal_020",
+      "normal_022",
+      "normal_025",
+      "normal_027",
+      "normal_030"
+    ],
+    "JERK": [
+      "jerk_002",
+      "jerk_009"
+    ],
+    "PUSH": [
+      "push_003",
+      "push_006"
+    ],
+    "PULL": [
+      "pull_008",
+      "pull_010"
+    ],
+    "SHAKING": [
+      "shaking_009",
+      "shaking_010"
+    ],
+    "TWISTING": [
+      "twisting_001",
+      "twisting_003"
+    ],
+    "FALL": [
+      "fall_003",
+      "fall_006",
+      "fall_018",
+      "fall_020",
+      "fall_025"
+    ]
+  },
+  "total_train_recordings": 88,
+  "total_test_recordings": 22,
+  "training_windows": 1606,
+  "testing_windows": 401,
+  "train_windows_per_class": {
+    "NORMAL": 595,
+    "JERK": 150,
+    "PUSH": 152,
+    "PULL": 149,
+    "SHAKING": 150,
+    "TWISTING": 151,
+    "FALL": 259
+  },
+  "test_windows_per_class": {
+    "NORMAL": 148,
+    "JERK": 38,
+    "PUSH": 38,
+    "PULL": 37,
+    "SHAKING": 38,
+    "TWISTING": 37,
+    "FALL": 65
+  }
+}
