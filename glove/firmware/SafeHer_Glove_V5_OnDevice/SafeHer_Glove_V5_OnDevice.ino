@@ -25,6 +25,9 @@
 #define BLE_DEVICE_NAME "SafeHer-Glove"
 #define BLE_SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define BLE_CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define BLE_TELEMETRY_CHAR_UUID "33b4fb00-9c17-4ad2-8fc9-89ad6dbc76bd"
+
+#define TELEMETRY_INTERVAL_MS 500UL
 
 const char* const CLASS_NAMES[NUM_CLASSES] = {
   "NORMAL", "JERK", "PUSH", "PULL", "SHAKING", "TWISTING", "FALL"
@@ -60,7 +63,9 @@ int16_t diagnosticGyRaw = 0;
 int16_t diagnosticGzRaw = 0;
 
 BLECharacteristic* bleResultCharacteristic = nullptr;
+BLECharacteristic* bleTelemetryCharacteristic = nullptr;
 volatile bool blePhoneConnected = false;
+unsigned long lastTelemetryMs = 0;
 
 class SafeHerBleServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer* server) override {
@@ -92,6 +97,12 @@ void initializeBLE() {
   bleResultCharacteristic->addDescriptor(new BLE2902());
   bleResultCharacteristic->setValue("NORMAL,0.00");
 
+  bleTelemetryCharacteristic = bleService->createCharacteristic(
+      BLE_TELEMETRY_CHAR_UUID,
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  bleTelemetryCharacteristic->addDescriptor(new BLE2902());
+  bleTelemetryCharacteristic->setValue("0.00,0.0,0,0");
+
   bleService->start();
 
   BLEAdvertising* bleAdvertising = BLEDevice::getAdvertising();
@@ -113,6 +124,26 @@ void notifyClassification(int predictedClass, float confidence) {
            CLASS_NAMES[predictedClass], confidence);
   bleResultCharacteristic->setValue(message);
   bleResultCharacteristic->notify();
+}
+
+void sendTelemetry(float accelMagnitudeG, float gyroMagnitudeDps) {
+  if (!blePhoneConnected || bleTelemetryCharacteristic == nullptr) {
+    return;
+  }
+
+  // Heartbeat and battery monitoring are not implemented in this firmware.
+  // Keep values at zero to avoid fabricating unverified sensor data.
+  const float heartRateBpm = 0.0f;
+  const float batteryPercent = 0.0f;
+
+  char telem[32];
+  snprintf(telem, sizeof(telem), "%.2f,%.1f,%.0f,%.0f",
+           accelMagnitudeG,
+           gyroMagnitudeDps,
+           heartRateBpm,
+           batteryPercent);
+  bleTelemetryCharacteristic->setValue(telem);
+  bleTelemetryCharacteristic->notify();
 }
 
 #if DATA_COLLECTION_MODE
@@ -504,6 +535,15 @@ void loop() {
     int16_t gxRaw = 0, gyRaw = 0, gzRaw = 0;
     readSensorRaw(axRaw, ayRaw, azRaw, gxRaw, gyRaw, gzRaw);
 
+    const float axG = (float)axRaw / 16384.0f;
+    const float ayG = (float)ayRaw / 16384.0f;
+    const float azG = (float)azRaw / 16384.0f;
+    const float gxDps = (float)gxRaw / 131.0f;
+    const float gyDps = (float)gyRaw / 131.0f;
+    const float gzDps = (float)gzRaw / 131.0f;
+    const float accelMagnitudeG = sqrtf(axG * axG + ayG * ayG + azG * azG);
+    const float gyroMagnitudeDps = sqrtf(gxDps * gxDps + gyDps * gyDps + gzDps * gzDps);
+
   #if DATA_COLLECTION_MODE
     printRawSensorRow(axRaw, ayRaw, azRaw, gxRaw, gyRaw, gzRaw);
   #else
@@ -516,6 +556,11 @@ void loop() {
     diagnosticGzRaw = gzRaw;
 
     enqueueSample(axRaw, ayRaw, azRaw, gxRaw, gyRaw, gzRaw);
+
+    if ((millis() - lastTelemetryMs) >= TELEMETRY_INTERVAL_MS) {
+      lastTelemetryMs = millis();
+      sendTelemetry(accelMagnitudeG, gyroMagnitudeDps);
+    }
 #endif
   }
 }
