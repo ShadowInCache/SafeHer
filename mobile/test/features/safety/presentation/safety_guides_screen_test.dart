@@ -3,20 +3,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
-import 'package:safeher_app/features/safety/presentation/helplines_screen.dart';
+import 'package:safeher_app/features/safety/presentation/safety_guides_screen.dart';
 import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
-/// First golden coverage for the safety toolkit. These eight screens had none,
-/// which meant a layout regression in the part of the app someone reaches for
-/// in a crisis would have shipped silently.
-///
-/// Helplines is static content -- the India emergency numbers -- so it needs
-/// no providers, only a router for its back button.
+/// Golden coverage for the safety guides. Static content with a client-side
+/// category filter and no providers -- so the harness is a router and a theme.
 Widget _harness({Brightness brightness = Brightness.dark}) {
   final router = GoRouter(
-    initialLocation: '/safety/helplines',
+    initialLocation: '/safety/guides',
     routes: [
-      GoRoute(path: '/safety/helplines', builder: (_, __) => const HelplinesScreen()),
+      GoRoute(path: '/safety/guides', builder: (_, __) => const SafetyGuidesScreen()),
       GoRoute(path: '/home', builder: (_, __) => const Scaffold(body: Text('home'))),
     ],
   );
@@ -30,13 +26,11 @@ Widget _harness({Brightness brightness = Brightness.dark}) {
 }
 
 void main() {
-  group('HelplinesScreen', () {
+  group('SafetyGuidesScreen', () {
     testWidgets('renders without exception', (tester) async {
       await tester.pumpWidget(_harness());
       await tester.pump(const Duration(milliseconds: 100));
       expect(tester.takeException(), isNull);
-      // The whole point of this screen: the numbers are actually present.
-      expect(find.textContaining('112'), findsWidgets);
     });
 
     testGoldens('golden - light', (tester) async {
@@ -45,13 +39,13 @@ void main() {
         surfaceSize: const Size(390, 844),
       );
       await tester.pump(const Duration(milliseconds: 100));
-      await screenMatchesGolden(tester, 'helplines_screen_light');
+      await screenMatchesGolden(tester, 'safety_guides_screen_light');
     });
 
     testGoldens('golden - dark', (tester) async {
       await tester.pumpWidgetBuilder(_harness(), surfaceSize: const Size(390, 844));
       await tester.pump(const Duration(milliseconds: 100));
-      await screenMatchesGolden(tester, 'helplines_screen_dark');
+      await screenMatchesGolden(tester, 'safety_guides_screen_dark');
     });
   });
 }
