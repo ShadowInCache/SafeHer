@@ -59,6 +59,58 @@ void main() {
     });
   });
 
+  group('the glove keeps watching in the background', () {
+    const watching = DetectionSources(
+      backend: _backendOff,
+      gloveListening: true,
+      backgroundWatchActive: true,
+    );
+
+    test('stops claiming the foreground limit once it no longer applies', () {
+      // The foreground service closes this gap. Leaving the old sentence up
+      // would under-report in the direction that makes someone keep a phone
+      // in her hand when she does not have to.
+      expect(watching.detail.toLowerCase(), isNot(contains('only does this while')));
+      expect(watching.detail.toLowerCase(), contains('pocket'));
+      expect(watching.headline, 'Your glove is watching');
+    });
+
+    test('ties the promise to the notification that proves it', () {
+      // The service is the reason this is true, and the notification is how
+      // she can see it is still running. Naming it makes the claim checkable
+      // rather than something she has to take on faith.
+      expect(watching.detail.toLowerCase(), contains('notification'));
+    });
+
+    test('still points at the manual paths', () {
+      expect(watching.detail, contains('SOS'));
+      expect(watching.detail.toLowerCase(), contains('shake'));
+    });
+
+    test('defaults to off, so the claim needs the platform to confirm it', () {
+      // Asking for the service is not the same as having it: notification
+      // permission can be denied and OEMs kill background work. The
+      // pessimistic default is the safe one.
+      const notConfirmed = DetectionSources(backend: _backendOff, gloveListening: true);
+
+      expect(notConfirmed.backgroundWatchActive, isFalse);
+      expect(notConfirmed.detail.toLowerCase(), contains('only does this while'));
+    });
+
+    test('a background watch cannot invent detection with no glove', () {
+      // If the flag ever survived a disconnect, this would claim protection
+      // from a service that has nothing to listen to.
+      const noGlove = DetectionSources(
+        backend: _backendOff,
+        gloveListening: false,
+        backgroundWatchActive: true,
+      );
+
+      expect(noGlove.anyActive, isFalse);
+      expect(noGlove.headline, 'Automatic detection is not active yet');
+    });
+  });
+
   group('backend models serving', () {
     test('is active without a glove, and claims no glove limit', () {
       const sources = DetectionSources(backend: _backendOn, gloveListening: false);
