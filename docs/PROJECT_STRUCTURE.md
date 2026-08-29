@@ -1,168 +1,249 @@
 # Project Structure
 
-SafeHer is a monorepo with three independent parts that share a git history but not a
-runtime: a **current backend** (`fastapi_app/`), a **mobile frontend** (`mobile/`), and
-a set of **supporting systems** (ML training, device firmware, cloud functions,
-deployment).
-See [ARCHITECTURE.md](ARCHITECTURE.md) for how these pieces actually talk to each
-other at runtime.
+SafeHer is a monorepo of parts that share a git history but not a runtime: a
+**backend** (`fastapi_app/`), a **mobile app** (`mobile/`), a **smart glove**
+(`glove/`), and a set of supporting systems (offline ML training, older device
+firmware, cloud functions, deployment).
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for how these pieces actually talk to
+each other at runtime.
 
 ```text
 SafeHer/
-├── fastapi_app/          Current backend — FastAPI, the only backend fastapi/mobile talk to
-├── mobile/                Flutter frontend (Riverpod + GoRouter), all UI screens
-├── ml_training/           Offline model-training scripts + trained artifacts (XGBoost, voice, weapon)
-├── hardware/               ESP32 firmware for the two physical devices (glove, glasses)
-├── cloud_functions/       Multi-cloud serverless functions (motion/voice/weapon/fusion)
-├── deployment/             Docker Compose stack, service configs, startup scripts,
-│                            and sql/supabase_setup.sql (events-archive schema)
-├── alembic/                Database migrations (SQLAlchemy schema history)
-├── tests/                  Backend test suite (pytest)
-├── scripts/                One-off operational scripts, incl. validate_dataset.py
-├── docs/                   All project documentation — SRS.md, API.md, ARCHITECTURE.md,
-│                            SETUP.md, SECURITY.md, MEMORY.md, plus archive/ (superseded)
-├── app.py                  Backend entrypoint — launches fastapi_app via uvicorn
-├── manage.py                Docker Compose process manager (start/stop/status/logs)
-├── requirements.txt         Python dependencies (see docs/DEPENDENCIES.md)
-├── alembic.ini               Alembic configuration
-├── README.md                 Orientation; everything else lives in docs/
-└── Makefile                  Convenience commands (see docs/SETUP.md)
+├── fastapi_app/       Backend — FastAPI, the only backend mobile/ talks to
+├── mobile/            Flutter app (Riverpod + GoRouter), every screen
+├── glove/             Smart glove — firmware, dataset, and the ML pipeline
+├── ml_training/       Offline training for the server-side models
+├── hardware/          Earlier ESP32 sketches (glove over MQTT, smart glasses)
+├── cloud_functions/   Serverless inference (motion/voice/weapon/fusion)
+├── deployment/        Docker Compose stack, service configs, SQL
+├── alembic/           Database migrations — 13, reversible
+├── tests/             Backend test suite (pytest)
+├── scripts/           Operational scripts
+├── docs/              Every project document, plus archive/ (superseded)
+├── app.py             Backend entrypoint — launches fastapi_app via uvicorn
+├── manage.py          Docker Compose process manager (start/stop/status/logs)
+└── Makefile           Convenience commands (see SETUP.md)
+```
 
-Only README.md and LICENSE remain as documentation at the root. Every other
+Only `README.md` and `LICENSE` remain as documentation at the root. Every other
 document moved into `docs/` on 2026-08-21 — eleven markdown files at the top
 level made the repo hard to scan, and none of them was load-bearing there.
 `fastapi_app/`, `mobile/`, `alembic/` and `tests/` deliberately did **not**
 move: `fastapi_app.main:app` is the import path the deployment, Dockerfile,
 Makefile and every test rely on, and relocating it would buy tidiness at the
 cost of the one thing that has to keep working.
-```
 
-## `fastapi_app/` — current backend
+> **On `glove/` and `hardware/esp32_glove/`.** Both are glove firmware and they
+> are not the same generation. `hardware/esp32_glove/smart_glove.ino` publishes
+> raw telemetry to the backend over MQTT and does no inference. `glove/` runs
+> the model on the ESP32 and talks to the phone over BLE with no server in the
+> path. `glove/` is the one the app pairs with; `hardware/` is kept because the
+> MQTT ingestion path still exists in the backend.
+
+---
+
+## `fastapi_app/` — the backend
+
+14 routers, 73 routes, all mounted under `/api/v1`.
 
 ```text
 fastapi_app/
-├── main.py                 App factory: CORS, middleware, router mounts, startup hooks
-├── config.py                 Settings (pydantic-settings, reads .env)
-├── db.py                     Async SQLAlchemy engine/session + SQLite auto-repair guard
-├── deps.py                   Shared FastAPI dependencies
-├── models.py                 ORM models: User, Incident, Device, Location, Media,
-│                              NotificationLog, FcmToken, EmergencyContact
-├── schemas.py                 Pydantic request/response models
-├── security.py                 JWT issuing/verification, password hashing, role guards
-├── mqtt_service.py            Ingests device telemetry over MQTT (asyncio-mqtt)
-├── realtime.py                 In-process WebSocket broadcast manager
-├── repositories/               Data-access functions, one module per table
-│   ├── users.py, devices.py, emergency_contacts.py, fcm_tokens.py, notification_logs.py
+├── main.py            App factory: CORS, middleware, router mounts, startup hooks
+├── config.py          Settings (pydantic-settings, reads .env) + validate_secrets
+├── db.py              Async SQLAlchemy engine/session + SQLite auto-repair guard
+├── deps.py            Shared FastAPI dependencies
+├── models.py          ORM models
+├── schemas.py         Pydantic request/response models
+├── security.py        JWT issuing/verification, password hashing, role guards
+├── rate_limit.py      Per-route throttling
+├── mqtt_service.py    Ingests device telemetry over MQTT (asyncio-mqtt)
+├── realtime.py        In-process WebSocket broadcast manager
+├── repositories/      Data access, one module per table
+│   └── auth_security · devices · emergency_contacts · fcm_tokens
+│       notification_logs · safety · users
 ├── services/
-│   ├── firebase_auth.py        Verifies Firebase ID tokens for the auth/firebase/exchange flow
-│   ├── notifications.py         Sends FCM push notifications
-│   └── processor_client.py      HTTP client to the external threat-processing service
-└── routers/                    One module per resource, all mounted under /api/v1
-    ├── health.py, auth.py, users.py, media.py, incidents.py
-    ├── devices.py, notifications.py, alerts.py, ws.py
+│   ├── emergency_dispatch.py   Contact fan-out: SMS → email → push, 3 attempts each
+│   ├── evidence_store.py       AES-256-GCM sealing before any backend sees a byte
+│   ├── evidence_backends.py    Where sealed evidence actually lands
+│   ├── threat_fusion.py        Combines modality scores into one threat value
+│   ├── threat_models.py        Model registry and readiness reporting
+│   ├── incident_pdf.py         Forensic export with per-recording SHA-256
+│   ├── incident_summary.py     Plain-sentence "why it fired"
+│   ├── brevo_email.py          Email over HTTPS — see SETUP.md for why not SMTP
+│   ├── smtp_email.py · email.py · onesignal.py · sms.py
+│   ├── contact_verification.py · places.py
+│   ├── firebase_auth.py        Verifies Firebase ID tokens
+│   ├── notifications.py        FCM push
+│   └── processor_client.py     HTTP client to the external threat processor
+├── workers/
+│   └── deletion_purge.py       Hourly purge of accounts past the 30-day grace
+└── routers/
+    ├── auth.py (12)      users.py (10)     journeys.py (9)   alerts.py (8)
+    ├── safety.py (7)     incidents.py (5)  shares.py (5)     devices.py (4)
+    ├── health.py (4)     media.py (4)      dashboard.py (2)  notifications.py (2)
+    └── ws.py (1)
 ```
 
-Full endpoint list: [API.md](API.md).
+Route counts in parentheses. Full endpoint list: [API.md](API.md).
 
-## `mobile/` — Flutter frontend
+---
+
+## `mobile/` — the Flutter app
+
+263 Dart files. Full detail in [mobile/README.md](../mobile/README.md).
 
 ```text
 mobile/lib/
-├── main.dart                App bootstrap: DI, Hive init, ProviderScope, MaterialApp.router
+├── main.dart          Bootstrap: Firebase, DI, Hive, ProviderScope, MaterialApp.router
 ├── core/
-│   ├── router/                GoRouter route table (all navigation goes through this)
-│   ├── theme/                  Design tokens: colors, typography, spacing, radius, shadows
-│   ├── network/                 Dio client + interceptors
-│   ├── local/                    Hive box wrappers (LocalKeyValueStore)
-│   ├── offline/                   Offline action queue + retry
-│   ├── connectivity/               ConnectivityNotifier (online/offline state)
-│   ├── animations/                  Reduced-motion-aware animation helpers
-│   └── di/                            get_it service locator setup
-├── features/                One folder per screen/domain, each with data/domain/presentation
-│   ├── auth/, home/, dashboard/, devices/, monitoring/, emergency/
-│   ├── reports/, search/, contacts/, profile/, settings/
+│   ├── background/      Foreground service — keeps glove detection alive off screen
+│   ├── detection/       What is actually detecting, and its honest limits
+│   ├── security/        App lock, certificate pinning
+│   ├── evidence/        Recording + encryption before upload
+│   ├── offline/         Action queue that replays on reconnect
+│   ├── sensors/         Shake detector
+│   ├── voice/           On-device command recognition
+│   ├── local/           Hive wrappers, user preferences
+│   ├── network/         Dio client + interceptors
+│   ├── router/          GoRouter table — all navigation goes through it
+│   ├── theme/           Design tokens: colour, typography, spacing, radius
+│   ├── location/ session/ connectivity/ biometrics/ platform/ animations/ di/
+├── features/          data/ → domain/ → presentation/ in each
+│   ├── auth/ home/ dashboard/ devices/ monitoring/ emergency/
+│   └── reports/ search/ contacts/ profile/ settings/ safety/
 └── shared/
-    ├── components/            Reusable widgets (SaCard, SaButton, SaIcon, Sa3DModelViewer, ...)
-    └── models/                 Shared data models used across features
+    ├── components/      SaCard, SaButton, SaIcon, Sa3DModelViewer, …
+    └── models/          Models shared across features
 ```
 
-Each `features/<name>/` follows Clean Architecture: `data/` (repositories, mock or real),
-`domain/` (entities, use cases), `presentation/` (screens, widgets, Riverpod
-controllers). See `mobile/test/` for the mirrored test tree.
+`mobile/test/` mirrors `lib/` — 90 test files, 747 tests. Fakes live in
+`test/test_utils/`.
 
-## `ml_training/` — offline model training (originally `src/models/`)
+---
 
-Independent of the backend — no imports from `fastapi_app/` in either direction.
+## `glove/` — the smart glove
+
+The only detector in the system that currently produces real scores. Full
+detail in [glove/README.md](../glove/README.md).
+
+```text
+glove/
+├── firmware/SafeHer_Glove_V5_OnDevice/
+│   ├── SafeHer_Glove_V5_OnDevice.ino   100 Hz sampling, 51 features, BLE notify
+│   └── safeher_v5_model.{h,cpp}        Generated from the trained model
+├── ml/
+│   ├── dataset/     Labelled recordings — 140 across 7 classes
+│   ├── features/    51 features per 1-second window
+│   ├── models/      XGBoost model + column/label/split metadata
+│   └── scripts/     collect → extract → train → evaluate → convert
+└── docs/            Conversion and deployment reports
+```
+
+The BLE contract is duplicated by necessity in two codebases:
+`SafeHer_Glove_V5_OnDevice.ino` and
+`mobile/lib/features/devices/domain/glove_protocol.dart`. The Dart side is
+pinned by tests carrying the firmware's literal payloads; nothing can check the
+firmware side automatically.
+
+---
+
+## `ml_training/` — offline training for the server-side models
+
+Independent of the backend — no imports in either direction. Distinct from
+`glove/ml/`, which trains the model that runs on the ESP32.
 
 ```text
 ml_training/
-├── motion_detection/    train_motion_model.py — produces xgboost_motion_model.json
-│                         and motion_training_results.json (both currently committed
-│                         at repo root; the raw training dataset itself is not in the repo)
-├── voice_detection/       Voice distress-detection training
-├── weapon_detection/       Weapon/threat detection training (torch/ultralytics/opencv)
-└── utils/, gpu_utils.py     Shared training utilities
+├── motion_detection/    train_motion_model.py → xgboost_motion_model.json
+├── voice_detection/     Voice distress detection
+├── weapon_detection/    YOLO-based weapon detection (torch/ultralytics)
+└── utils/               Shared training utilities
 ```
 
-## `hardware/` — device firmware
+Not reproducible from a fresh clone — the raw dataset it expects at
+`dataset/raw/*.csv` is not committed.
+
+---
+
+## `hardware/` — earlier device firmware
 
 ```text
 hardware/
-├── esp32_glove/smart_glove.ino     MPU6050 motion sensing, panic button, MQTT over TLS
-└── smart_glasses/smart_glasses.ino ESP32-CAM frame streaming for edge weapon detection
+├── esp32_glove/smart_glove.ino      MPU6050 + panic button, MQTT over TLS
+└── smart_glasses/smart_glasses.ino  ESP32-CAM frame streaming
 ```
 
-Only these two physical devices have real firmware. The mobile app's UI also shows a
-"Smart Ring" and "Pendant" as devices — those are product-vision mockups with no
-corresponding firmware in this repo (see [ARCHITECTURE.md](ARCHITECTURE.md#known-gaps)).
+The mobile UI also shows a "Smart Ring" and "Pendant". Those are product-vision
+mockups with no firmware anywhere in this repo.
+
+---
 
 ## `cloud_functions/` — serverless inference
 
-Four independently-deployable functions (AWS Lambda / GCP / Azure via `deploy.sh`),
-each with its own `requirements.txt`: `motion_detection/`, `voice_analysis/`,
-`weapon_detection/`, `threat_fusion/` (combines the other three into one threat score).
+Four independently-deployable functions (`deploy.sh`), each with its own
+`requirements.txt`: `motion_detection/`, `voice_analysis/`,
+`weapon_detection/`, and `threat_fusion/`, which combines the other three into
+one score.
+
+---
 
 ## `deployment/`
 
 ```text
 deployment/
 ├── docker/
-│   ├── docker-compose.yml         Current stack: Postgres + Redis + Mosquitto + one
-│   │                                unified "safeher_event_processor" container
+│   ├── docker-compose.yml    Postgres + Redis + Mosquitto + one event processor
 │   ├── Dockerfile.processor, safeher_event_processor.py, event_system/
 │   └── requirements.simple.txt
 ├── config/
-│   ├── mosquitto.conf, redis.conf, ssl/    Used by the current compose stack
-│   └── nginx.conf, prometheus.yml           Left over from an earlier multi-service
-│                                              design the compose file's own comments
-│                                              mark "REMOVED" — not wired into anything
-│                                              currently running (see AUDIT_REPORT.md)
-└── scripts/start_all_services.ps1  Windows helper to launch the compose stack
+│   ├── mosquitto.conf, redis.conf, ssl/   Used by the compose stack
+│   └── nginx.conf, prometheus.yml          Left from an earlier multi-service
+│                                            design; not wired into anything
+└── scripts/start_all_services.ps1
 ```
 
-## `tests/` (backend, pytest)
+---
 
-Two classes of test live here.
+## `tests/` — backend
 
-**In-process (no server needed)** — the reliable set, 67 tests total:
-`test_fastapi_contracts.py`, `test_safety_contracts.py`, `test_auth_security.py`
-(SRS section 4.1 auth behaviour), `test_auth_provisioning.py` and
-`test_firebase_token_verification.py`. These drive the ASGI app directly via
-`httpx.ASGITransport`.
+31 files, **409 passing and 7 skipped**. Most drive the ASGI app directly
+through `httpx.ASGITransport` and need no running server.
 
-**Live-server (HTTP)** — `test_api_gateway.py` and `test_integration.py` hit a running
-backend over `requests`; start it first or they fail on connection.
+Two files are the exception: `test_api_gateway.py` and `test_integration.py`
+hit a live backend over `requests`, so start one first or they fail on
+connection.
 
-`test_authentication.py` (broken `token` fixture) and `test_microservices.py` (targeted
-standalone services on ports 8001-8004 that no longer exist, so all 8 tests skipped
-unconditionally) were deleted on 2026-08-15.
+Two tests earn a special mention because they police the documentation itself:
 
-Mobile tests live under `mobile/test/`, mirroring `mobile/lib/`.
+- **`test_traceability.py`** — every requirement in `SRS.md` must have a row in
+  [TRACEABILITY.md](TRACEABILITY.md), every path a row names must exist, and a
+  row marked *not built* may not cite an implementation. Renaming a file that a
+  requirement points at fails the suite.
+- **`test_health_endpoints.py`** — `/health` must stay constant-time. It is
+  what uptime monitoring points at, and a cold call to `/status` once timed out
+  at 40 seconds.
+
+CI runs migrations against a **real Postgres 16 service**, not SQLite. That was
+added after a migration containing `is_verified = 1` passed the entire suite
+and then failed on production Postgres with *"operator does not exist: boolean
+= integer"*, aborting mid-chain with the schema half-applied.
+
+---
 
 ## `docs/`
 
 ```text
 docs/
-├── archive/    Every doc that existed before the 2026-08-08 audit, preserved verbatim
-└── (this file, ARCHITECTURE.md, API.md, SETUP.md, SECURITY.md, etc. live at repo root)
+├── SRS.md                The governing spec
+├── SRS_STATUS.md         How much of it is actually built, with a session log
+├── ARCHITECTURE.md       How the pieces fit
+├── API.md                Every endpoint, shape and auth requirement
+├── SETUP.md              Setup and troubleshooting
+├── SECURITY.md           Threat model, secrets, known limitations
+├── TRACEABILITY.md       Requirement → code, enforced by a test
+├── PROJECT_STRUCTURE.md  This file
+├── MEMORY.md             Append-only change history
+├── CHANGELOG.md · CONTRIBUTING.md · DEPENDENCIES.md
+└── archive/              Every doc predating the 2026-08-08 audit, verbatim
 ```

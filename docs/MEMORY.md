@@ -353,3 +353,37 @@ in future work — this file describes state as of 2026-08-08, not necessarily t
   depend on. A `backend/` folder or an `apps/`-style monorepo was considered and
   rejected — it would trade a tidier tree for a broken production deploy, and the tree
   was never what made this repo hard to work in.
+
+- **2026-08-29** — Glove detection made real off screen, and the docs brought back
+  in line with the code. Three things were wrong at once and only one was obvious.
+  The glove's vote ran in `SafetyTriggerListener.build()`, so it stopped the moment
+  the app left the screen — automatic detection was quietly conditional on being
+  looked at, which is the inverse of what the glove is for. It moved to
+  `GloveAutoTrigger`, a `keepAlive` provider driven by `ref.listen`, whose tests run
+  against a bare `ProviderContainer` so a regression back into a widget fails the
+  suite. Android froze the process independently of that, so
+  `core/background/safety_foreground_service.dart` runs a
+  `connectedDevice|location` foreground service while a glove is connected. And
+  because starting that service can be refused, `DetectionSources` gained
+  `backgroundWatchActive` and reports the platform's answer rather than the app's
+  intention — the fourth time a control here would have looked like protection while
+  governing nothing.
+
+  Separately, `b0e1813` (Akhilesh) added the firmware's telemetry characteristic.
+  Its UUID and field order match the app exactly, but `sendTelemetry` sends `0` for
+  heart rate and battery to *avoid* fabricating data, and a literal zero parses as a
+  measurement — the device card rendered "0 bpm". The app now reads a zero heart rate
+  and a zero battery as absent, keeping zero as a real value for accel and gyro.
+  The firmware fix is still open and needs no app change when it lands.
+
+  Two defects were found by tests already in the repo rather than by review:
+  `ref.read` throws once disposal has begun, and `dart:io` is banned in any
+  web-reachable library under `lib/`.
+
+  Documentation was rewritten against current source in the same pass.
+  `mobile/README.md` described `lib/app/core`, an `integration_test/` directory and
+  four `--dart-define` names, **none of which exist** — it had been describing a
+  different app for some time. `docs/PROJECT_STRUCTURE.md` had no `glove/` entry at
+  all and still cited a 67-test backend suite. Counts across `README.md` were three
+  sessions stale. New: `glove/README.md`, covering the firmware, the dataset, the
+  collect → train → convert pipeline and the two path traps in it.

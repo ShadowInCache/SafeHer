@@ -30,6 +30,41 @@ Flutter projects, established from its original build spec:
 - Don't introduce a new dependency for something 10 lines of code can do — see
   [DEPENDENCIES.md](DEPENDENCIES.md) before adding a package.
 
+## Guard tests you should know about before they fail on you
+
+Four tests police things a reviewer reliably misses. None of them is about the
+feature you are writing, and all of them fail the suite.
+
+- **`tests/test_traceability.py`** — every requirement in `docs/SRS.md` needs a
+  row in `docs/TRACEABILITY.md`, every backticked path in that row must exist,
+  and a row marked *not built* may not cite an implementation. Renaming a file a
+  requirement points at breaks this, which is the point.
+- **`mobile/test/features/devices/data/ble_service_platform_test.dart`** —
+  `dart:io` is banned in any web-reachable library under `mobile/lib/`. It throws
+  in a browser and shows up in no VM test. Ask platform questions of
+  `defaultTargetPlatform` / `kIsWeb`, or use a conditional import with an
+  `_io.dart` half.
+- **`mobile/test/features/devices/domain/glove_protocol_test.dart`** — the BLE
+  wire format is asserted against the firmware's literal payloads, including the
+  class list in `CLASS_NAMES` order. The firmware indexes that array to pick a
+  label, so reordering it would deliver a fall to the app under another word.
+- **`tests/test_health_endpoints.py`** — `/health` must stay constant-time. It is
+  what uptime monitoring points at, and a cold call to `/status` once timed out
+  at 40 seconds.
+
+## One rule that is not a test
+
+**Before adding any safety setting, check what reads it.** Four times now this
+codebase has shipped a control that looked like protection while governing
+nothing: the threat-threshold slider, the biometric toggle, the detection status,
+and very nearly the background-detection claim. Each was found later, by someone
+reading the code rather than using the app.
+
+A control that does nothing is worse on a safety product than no control at all,
+because it is indistinguishable from one that works. Where a capability can fail
+at runtime — a permission denied, a service the OS refuses to start — report the
+platform's answer, not your intention to have asked.
+
 ## Branch strategy
 
 The project has been developed as a single contributor committing directly to `main`

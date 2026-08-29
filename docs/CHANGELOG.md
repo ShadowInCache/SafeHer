@@ -7,6 +7,50 @@ until the first tagged release.
 
 ## [Unreleased]
 
+### 2026-08-29 — the glove detects with the phone in a pocket
+
+#### Added
+- **Background detection.** `mobile/lib/core/background/safety_foreground_service.dart`
+  runs a `connectedDevice|location` foreground service (via
+  `flutter_foreground_task`) for exactly as long as a glove is connected, so
+  Android stops freezing the process and the BLE notifications keep arriving.
+- `GloveAutoTrigger` (`mobile/lib/features/safety/data/glove_auto_trigger.dart`)
+  — the glove's vote, moved out of a widget and into a `keepAlive` provider.
+- `DetectionSources.backgroundWatchActive` — reports whether the service is
+  *genuinely* running, so the UI only claims the pocket case works when the
+  platform confirms it started.
+- A background alarm path: the countdown is routed to first and the screen
+  woken second, so it is already up when the activity comes forward.
+- 34 tests, including the glove vote driven entirely without a widget tree, and
+  the BLE wire contract asserted against the firmware's literal payloads.
+- `glove/README.md` and a rewritten `mobile/README.md`.
+
+#### Fixed
+- **Automatic detection was silently conditional on the app being looked at.**
+  The glove's vote ran inside `SafetyTriggerListener.build()`, and Flutter stops
+  pumping frames when the app leaves the screen — so a pocketed phone, the case
+  the glove exists for, raised nothing. A foreground service alone would not
+  have fixed this: the process would have been alive with nothing reading the
+  stream.
+- **The device card claimed a heart rate of zero.** The firmware sends `0` for
+  bpm and battery to avoid fabricating sensor data, but a literal `0` parses as
+  a measurement. Both now read as absent — no wearer has a heart rate of zero,
+  and no glove transmitting over BLE has a flat battery. `accelG` and `gyroDps`
+  keep zero as a real reading.
+- `ref.read` during provider disposal threw; the service handle is resolved in
+  `build` and held.
+- `dart:io` in a web-reachable library broke the web build, caught by the repo's
+  own guard test. Replaced with `defaultTargetPlatform`.
+
+#### Changed
+- Android manifest gains `FOREGROUND_SERVICE_CONNECTED_DEVICE` and the
+  `<service>` declaration. Release APK 70.7 MB → 71.5 MB.
+- Documentation rewritten against current source: `README.md`,
+  `docs/PROJECT_STRUCTURE.md`, `docs/ARCHITECTURE.md`, `docs/TRACEABILITY.md`,
+  `docs/SRS_STATUS.md`. Test counts were three sessions stale (639 → 747 mobile,
+  342 → 409 backend) and `glove/` was absent from every structural document.
+
+
 ### 2026-08-15 — Firebase auth, design system, repo cleanup
 
 #### Added

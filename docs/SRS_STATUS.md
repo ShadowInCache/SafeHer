@@ -25,21 +25,21 @@ to run.
 
 ## Blocking conditions (SRS "Stop and Fix Before Continuing")
 
-All four gates pass as of the last refresh.
+All four gates pass. Measured 2026-08-29 unless the row says otherwise.
 
 | Gate | Requirement | Last measured | Status |
 |------|-------------|---------------|--------|
 | `flutter analyze` | 0 issues | 0 issues | ✅ |
-| `flutter test --coverage` | > 70% line coverage | **75.2%** (6,024 / 8,009 lines) | ✅ |
-| `flutter build apk --release` | 0 errors | 70.7 MB APK, exit 0 | ✅ |
-| `dart run build_runner build` | 0 conflicts | 46 outputs, 0 conflicts | ✅ |
+| `flutter test --coverage` | > 70% line coverage | **75.2%** (6,024 / 8,009 lines), measured 2026-08-22 and not re-run since | ✅ |
+| `flutter build apk --release` | 0 errors | 71.5 MB APK, exit 0 | ✅ |
+| `dart run build_runner build` | 0 conflicts | 50 outputs, 0 conflicts | ✅ |
 
 Beyond the SRS's four, the repo also runs:
 
 | Check | Last measured | Status |
 |-------|---------------|--------|
-| `flutter test` (full suite) | 639 passing, 0 failing | ✅ |
-| `pytest tests/` (in-process suites) | 341 passing, 0 failing | ✅ |
+| `flutter test` (full suite) | 747 passing, 0 failing | ✅ |
+| `pytest tests/` | 409 passing, 7 skipped, 0 failing | ✅ |
 | Alembic from empty → head → downgrade → head | 13 migrations, reversible | ✅ |
 
 Coverage by area — the thin spots are where next session's tests should go:
@@ -173,7 +173,7 @@ All 17 specified component groups exist under `lib/shared/components/`, at
 
 | ID | Requirement | Status |
 |----|-------------|--------|
-| FR-DEV-01/02 | BLE pairing, glove + glasses | 🚧 fake BLE service only |
+| FR-DEV-01/02 | BLE pairing, glove + glasses | 🚧 **glove path built 2026-08-29** — pairing, characteristic subscription, classification and telemetry all implemented against the real `flutter_blue_plus` API and the real firmware's wire format. Every test runs against `FakeBleService`; no physical glove has ever been paired |
 | FR-DEV-03 | Real-time battery, low at 20% | 🟡 |
 | FR-DEV-04 | Firmware OTA, SHA-256 verified | ⛔ **Gap** — UI shows `updateAvailable`; no OTA pipeline |
 | FR-DEV-05 | Disconnection alert within 5s | 🟡 |
@@ -185,7 +185,7 @@ All 17 specified component groups exist under `lib/shared/components/`, at
 | ID | Requirement | Status |
 |----|-------------|--------|
 | FR-EMG-01 | Manual SOS, dispatched < 3s | ✅ **2026-08-21** — the fan-out moved to a background task, so the response no longer waits on it. It previously took ~2 minutes against a blocked channel while the client timed out at 15s. The incident is committed and answered before any channel is attempted |
-| FR-EMG-02 | Auto-SOS at threat ≥ 0.75 | 🟡 backend threshold implemented |
+| FR-EMG-02 | Auto-SOS at threat ≥ 0.75 | 🟡 **a real producer exists 2026-08-29** — the glove classifies on the ESP32 and the app fires on two qualifying FALLs inside 5s, off screen as well as on. The backend threshold is implemented and still has no trained model behind it. Verified against a fake glove only |
 | FR-EMG-03 | 10s countdown, cancellable | ✅ |
 | FR-EMG-04 | FCM + SMS to all contacts | 🟡 **unblocked 2026-08-21** — email was *blocked*, not broken: Render's free tier refuses outbound 25/465/587, so correct code with valid credentials simply timed out in production. `brevo_email.py` sends over HTTPS instead; set `BREVO_API_KEY` and it delivers. SMS ⛔ still unconfigured (paid). `emergency_dispatch.py` keeps priority order, per-contact isolation and 3 attempts, now off the request path |
 | FR-EMG-05 | Alert payload contents | ✅ name, time, maps link, within the 160-char budget. Evidence URL is carried when one exists (see FR-EMG-06) |
@@ -1808,3 +1808,99 @@ passes, confirming the suite cannot reach the real bucket.
 
 356 backend tests pass. Evidence storage is durable in this environment for
 the first time; production still needs the three variables set on the host.
+
+---
+
+## 2026-08-29 — the pocket case, and a glove that finally reports
+
+### The gap
+
+Auto-SOS from the glove worked only while SafeHer was on screen. That is the
+inverse of the situation the feature exists for: a phone put away, a hand
+grabbed, a fall. The Profile screen said so honestly, which was the right thing
+to do about a gap and no substitute for closing it.
+
+Two independent causes, and the obvious fix would have addressed neither.
+
+**The vote lived in a widget.** `SafetyTriggerListener.build()` held the
+decision. Flutter stops pumping frames when the app leaves the screen, so
+`build()` stopped being called and the glove's classifications went nowhere.
+A foreground service alone would have kept the process alive with nothing
+reading the stream.
+
+**Android froze the process.** Even with the vote relocated, a backgrounded app
+stops receiving BLE callbacks.
+
+### Built
+
+`GloveAutoTrigger` — a `keepAlive` provider driven by `ref.listen`, which fires
+on provider state rather than on frames. Its tests run against a bare
+`ProviderContainer`: no widget tree, no pumps. If the decision ever moves back
+into a widget, they fail.
+
+`SafetyForegroundService` — a `connectedDevice|location` foreground service via
+`flutter_foreground_task`, running only while a glove is actually connected.
+It is an interface with a no-op implementation, so everything deciding *whether*
+to watch is testable and only the plugin call is not.
+
+The background alarm path routes to the countdown first and wakes the screen
+second. The widget tree is alive though not drawing, so the countdown is
+already up when the activity arrives rather than racing it.
+
+### The honesty problem this created
+
+Shipping the capability and asserting it unconditionally would have recreated
+the original lie with better machinery behind it. Starting a foreground service
+can fail — notification permission denied, an OEM that kills background work —
+and "we asked for it" is not "it is running".
+
+So `DetectionSources.backgroundWatchActive` reports the platform's answer, and
+the sentence telling a woman she can pocket her phone appears only when the
+service genuinely started. This is the fourth time a control in this codebase
+would have looked like protection while governing nothing; the previous three
+were the threat-threshold slider, the biometric toggle, and the detection
+status itself.
+
+### Two defects found by tests already in the repo
+
+`ref.read` throws once disposal has begun, so the service handle is now
+resolved in `build` and held. And `dart:io` is banned anywhere web-reachable
+under `lib/` — it throws in a browser and appears in no VM test — so the
+platform question is asked of `defaultTargetPlatform` instead. Neither was
+caught by review.
+
+The plugin's method channel is also absent under `flutter test` and in any host
+that has not registered it, which crashed the Profile goldens. Rather than
+special-casing tests, every call through it is guarded and a failure reads as
+"not running" — which is the correct production behaviour too.
+
+### The glove firmware landed, with one bug
+
+`b0e1813` added the telemetry characteristic the app had been tolerating the
+absence of. The UUID and field order match exactly.
+
+`sendTelemetry` sends four fields with `heartRateBpm` and `batteryPercent`
+hardcoded to `0`, under a comment explaining that it is *avoiding* fabricating
+unverified sensor data. The intent is right and the encoding defeats it: on
+this wire, omitting a field means "I do not measure this", while a literal `0`
+parses as a measurement — and the device card rendered **"0 bpm"**, a claim
+about a heart the parser's own documentation forbids.
+
+Fixed app-side, because the app does not choose what firmware it meets: no
+wearer has a heart rate of zero and no glove transmitting over BLE has a
+zero-percent battery, so both read as absent. `accelG` and `gyroDps` keep zero
+as a real measurement — a glove lying still genuinely reads `0.00g`, and
+discarding that would be the same error mirrored. The firmware should still
+send only the two fields it measures; the app already parses that form, which
+is why correcting it needs no further app change.
+
+### State
+
+747 mobile tests, 409 backend tests passing (7 skipped), analyzer clean,
+release APK 71.5 MB, and the service verified present in the merged manifest
+with the right type.
+
+**Nothing in this entry has run against a physical glove.** The firmware
+inference, the notify, the vote, the service and the woken screen have only
+ever met `FakeBleService`. That is now the largest untested surface in the
+project, and the one with the least excuse, since the hardware exists.

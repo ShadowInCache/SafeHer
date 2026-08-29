@@ -80,14 +80,43 @@ that way with a service-role-only policy rather than leaving it to a dashboard
 click. Use the secret (service_role) key, never the publishable one — the
 publishable key is designed to be distributed to clients.
 
+## Android permissions and the foreground service
+
+A paired glove keeps detecting while the phone is pocketed, which requires a
+foreground service — `FOREGROUND_SERVICE_CONNECTED_DEVICE` plus a `<service>`
+declared `connectedDevice|location`. Three properties are deliberate:
+
+- **It runs only while a glove is connected**, not for the app's lifetime. There
+  is nothing to keep alive otherwise, and a persistent notification over no
+  device would claim a protection that is not running.
+- **The persistent notification is not a cost to minimise.** It is the user's
+  only way to see that background detection is still alive, and Android's way of
+  disclosing that an app is doing work she cannot see.
+- **Starting it can fail**, and the UI says so. Notification permission can be
+  denied and OEMs kill background work; the app reports the platform's answer
+  rather than assuming its request succeeded. A safety control that claims to be
+  running when it is not is worse than one that is plainly off.
+
+The service holds no data. Classifications arrive over BLE, feed the vote, and
+are discarded; only a resulting incident is ever persisted.
+
 ## Known limitations / recommendations
 
 Carried forward from the archived project reports and reconfirmed in the 2026-08-08
 audit — none of these are fixed as part of this audit, they're flagged for follow-up:
 
-- **No rate limiting** on any endpoint, including `/auth/login` and
-  `/auth/register` — brute-force and credential-stuffing risk. Add a rate limiter
-  (e.g. `slowapi`) before any public deployment.
+- **Rate limiting is in place but is per-process, not distributed.**
+  `fastapi_app/rate_limit.py` applies a sliding window keyed by client address,
+  wired as middleware in `main.py` and disabled in development. It is orthogonal
+  to the per-account lockout: the lockout stops someone guessing one password,
+  this raises the cost of spraying one password across many accounts, farming
+  sign-ups, or hammering the OTP and reset routes, each of which sends real email
+  and costs real money. Two limits it does not exceed: the window lives in
+  process memory, so behind N workers the effective quota is N times the setting;
+  and the client is identified by `X-Forwarded-For` where present, which is only
+  trustworthy behind a proxy that overwrites it. Render does; a direct-to-app
+  deployment would let an attacker rotate the header. A shared Redis counter is
+  the upgrade, and Redis is already in the stack.
 - **No refresh-token revocation** — a leaked refresh token remains valid until it
   naturally expires (`REFRESH_TOKEN_EXPIRE_DAYS`, default 7). Consider a token
   denylist (Redis is already in the stack) if this matters for your threat model.
