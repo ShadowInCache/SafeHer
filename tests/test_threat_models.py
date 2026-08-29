@@ -29,59 +29,63 @@ class TestPartialSensorCoverage(unittest.TestCase):
     """The reason `fuse_available` exists rather than a plain `fuse`."""
 
     def test_a_missing_modality_is_excluded_not_zeroed(self):
-        # Zero-filling is the dangerous reading. Without the camera, a
-        # maximal motion and audio reading would fuse to 0.75 -- exactly the
-        # default threshold, so a woman screaming and struggling would only
-        # just trip it, and any lower threshold setting would be the only
-        # thing that saved her.
-        renormalised = tf.fuse_available(motion=1.0, audio=1.0)
-        zero_filled = tf.fuse(motion=1.0, audio=1.0, vision=0.0)
+        # Zero-filling is the dangerous reading: it lets a switched-off camera
+        # quietly hold the score down. "Did not look" and "looked and saw
+        # nothing" have to produce different numbers.
+        renormalised = tf.fuse(tf.ThreatSignals(glove=1.0, audio=1.0))
+        zero_filled = tf.fuse(tf.ThreatSignals(glove=1.0, audio=1.0, weapon=0.0))
 
         self.assertAlmostEqual(renormalised, 1.0)
-        self.assertAlmostEqual(zero_filled, 0.75)
+        self.assertLess(zero_filled, renormalised)
 
     def test_the_glove_alone_can_still_raise_the_alarm(self):
-        # The glasses are the likelier of the two to be off. Zero-filled,
-        # the glove could never exceed 0.40 and auto-SOS would be dead.
-        self.assertAlmostEqual(tf.fuse_available(motion=1.0), 1.0)
-        self.assertAlmostEqual(tf.fuse(motion=1.0, audio=0.0, vision=0.0), 0.40)
+        # The glasses are the likelier of the two to be off, and the glove is
+        # the only detector that exists today. Renormalisation is what keeps a
+        # maximal glove reading at the top of the scale rather than at its
+        # 0.25 weight, which could never reach any threshold.
+        self.assertAlmostEqual(tf.fuse(tf.ThreatSignals(glove=1.0)), 1.0)
 
     def test_weights_stay_proportional_between_present_modalities(self):
-        # motion:audio is 0.40:0.35, so with vision absent a maximal motion
-        # reading must still outweigh a maximal audio one in the same ratio.
-        motion_only = tf.fuse_available(motion=1.0, audio=0.0)
-        audio_only = tf.fuse_available(motion=0.0, audio=1.0)
+        # audio outweighs glove (0.35 vs 0.25), so with the camera absent a
+        # maximal audio reading must score above a maximal glove one. Asserted
+        # as a direction rather than a ratio: the solo-signal floor deliberately
+        # lifts a lone strong signal, so exact proportions do not survive it.
+        glove_only = tf.fuse(tf.ThreatSignals(glove=1.0, audio=0.0))
+        audio_only = tf.fuse(tf.ThreatSignals(glove=0.0, audio=1.0))
 
-        self.assertAlmostEqual(motion_only, 0.40 / 0.75)
-        self.assertAlmostEqual(audio_only, 0.35 / 0.75)
-        self.assertAlmostEqual(motion_only + audio_only, 1.0)
+        self.assertGreater(audio_only, glove_only)
 
     def test_no_modality_at_all_is_none_not_zero(self):
         # "Nothing reported" and "everything reported calm" must not be the
         # same value: one is an outage, the other is safety.
-        self.assertIsNone(tf.fuse_available())
+        self.assertIsNone(tf.fuse(tf.ThreatSignals()))
 
     def test_a_real_zero_is_still_honoured(self):
         # A sensor that reports 0.0 genuinely observed calm, and that must
         # not be confused with absence.
-        self.assertEqual(tf.fuse_available(motion=0.0), 0.0)
+        self.assertEqual(tf.fuse(tf.ThreatSignals(glove=0.0)), 0.0)
 
 
-class TestHeartRate(unittest.TestCase):
-    def test_a_racing_pulse_nudges_but_cannot_alarm_alone(self):
-        # An elevated heart rate is evidence of running for a bus. It may
-        # tip a score other sensors already find alarming; it may not raise
-        # the alarm by itself.
-        self.assertEqual(tf.heart_rate_boost(150), tf.HEART_RATE_BOOST)
-        self.assertLess(tf.heart_rate_boost(150), tf.DEFAULT_THREAT_THRESHOLD)
+class TestHeartRateIsNotAThreatSignal(unittest.TestCase):
+    """A racing pulse is evidence of running for a bus.
 
-    def test_a_resting_pulse_does_nothing(self):
-        self.assertEqual(tf.heart_rate_boost(70), 0.0)
+    It used to add +0.05 to the fused score. Under the three-signal
+    architecture it is supporting context: recorded on the incident, shown on
+    the dashboard, and incapable of moving the number that summons people.
+    """
 
-    def test_an_absent_sensor_does_nothing(self):
-        # The SRS §9.1 glove BOM has no pulse sensor at all, so absent is
-        # the normal case rather than a fault.
-        self.assertEqual(tf.heart_rate_boost(None), 0.0)
+    def test_the_booster_is_gone(self):
+        self.assertFalse(hasattr(tf, "heart_rate_boost"))
+        self.assertFalse(hasattr(tf, "HEART_RATE_BOOST"))
+
+    def test_it_has_a_home_in_supporting_context(self):
+        # Removed from the score, not thrown away -- the SRS §9.1 glove BOM
+        # has no pulse sensor at all, so this is where one would report.
+        context = tf.SupportingContext(heart_rate_bpm=150)
+        self.assertEqual(context.heart_rate_bpm, 150)
+
+    def test_it_is_not_a_field_a_score_can_read(self):
+        self.assertNotIn("heart_rate_bpm", tf.PRIMARY_SIGNAL_NAMES)
 
 
 class TestRegistry(unittest.TestCase):

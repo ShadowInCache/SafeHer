@@ -223,6 +223,37 @@ All 17 specified component groups exist under `lib/shared/components/`, at
 
 These differ from the SRS on purpose. Each is a decision, not an omission.
 
+**Three signals decide the threat score, and context does not (§6.2).**
+Changed 2026-08-30 on the product owner's instruction. §6.2 fuses motion,
+audio and vision and then applies additive context boosters: +0.10 at
+night, +0.05 in a high-risk zone, +0.15 for a confident weapon. The score
+is now decided by exactly three primary signals — the glove's XGBoost
+output, YOLOv8 weapon detection, and the CNN+LSTM audio classifier — and
+the boosters are gone from it.
+
+The reasoning: night, location and heart rate are context, not evidence
+that an assault is happening, and acting on them raises alarms during
+ordinary life. The weapon booster was also double-counting, since the same
+detection already entered through the vision weight. All of it is still
+recorded on the incident through `SupportingContext`, for the summary and
+the dashboard.
+
+**The consequence is that scores at night and in high-risk zones are lower
+than before.** That is the intended effect of the decision, and it is
+stated here rather than left to be discovered.
+
+**The weights also invert §6.2**, to 0.40 weapon / 0.35 audio / 0.25 glove.
+Under the specified ordering a knife detected at 0.90 confidence fused to
+0.28 — SAFE — because the least ambiguous signal in the system carried the
+least weight and two quiet sensors averaged it away. That was found by the
+acceptance matrix in `tests/test_fusion_architecture.py`, not by reading
+the code. A solo-signal floor was added for the same reason: the score
+never falls below half the strongest single reading, because a knife in
+view is not made safe by a calm wrist.
+
+None of these weights is validated. Two of the three producers do not
+exist, so there is nothing yet to validate them against.
+
 **Monolith, not ten microservices (§7.1).** The SRS lists ten services on
 ports 8000–8009. The repo runs one FastAPI app with ten routers. Same
 endpoints, same boundaries, one deployable — splitting it would add ten

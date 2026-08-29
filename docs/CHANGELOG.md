@@ -7,6 +7,46 @@ until the first tagged release.
 
 ## [Unreleased]
 
+### 2026-08-30 — three signals decide the threat score, and nothing else
+
+#### Changed
+- **The fusion engine takes exactly three primary signals** — glove (XGBoost),
+  weapon (YOLOv8), audio (CNN+LSTM) — and SRS §6.2's additive context boosters
+  are gone from the score. Night, high-risk zone and heart rate were context,
+  not evidence that an assault is happening, and the weapon booster
+  double-counted a detection already entering through the vision weight. All of
+  it is still recorded, via a new `SupportingContext`, for the incident and the
+  summary. **Scores at night and in high-risk zones are lower than before** —
+  the intended consequence, recorded as a deviation in `SRS_STATUS.md`.
+- **The weights invert §6.2** to 0.40 weapon / 0.35 audio / 0.25 glove, ordered
+  by how ambiguous each signal is. This costs the glove nothing today: it is
+  the only reporting signal, and `fuse()` renormalises over whatever reported.
+
+#### Fixed
+- **A knife detected at 0.90 confidence scored SAFE.** Under §6.2's weights the
+  least ambiguous signal in the system carried the least weight, and two quiet
+  sensors averaged a confident weapon detection down to 0.28. Found by the new
+  acceptance matrix, not by reading the code. Fixed by the re-weighting above
+  plus a solo-signal floor: the score never falls below half the strongest
+  single reading, because a knife in view is not made safe by a calm wrist.
+
+#### Added
+- `ThreatSignals` (three fields, frozen) and `SupportingContext` (everything
+  else), so the separation is enforced by construction rather than by comment.
+  `tests/test_fusion_architecture.py` fails if the shape changes, if the
+  weights and fields drift apart, or if `evaluate()` grows a contextual
+  parameter.
+- A threat state machine — SAFE / ELEVATED / HIGH / CRITICAL — with hysteresis,
+  so a score resting on a band boundary does not flap every heartbeat.
+- Corroboration: independent signals agreeing score above their weighted mean,
+  capped so agreement alone can never raise an alarm.
+- The architecture's own acceptance matrix as tests, including the two that
+  matter most: fear on a face and rapidly changing GPS both leave the score
+  untouched.
+
+468 backend tests passing (was 436), 7 skipped, no regressions.
+
+
 ### 2026-08-30 — the two recorded findings, resolved; iOS out, web in
 
 #### Fixed

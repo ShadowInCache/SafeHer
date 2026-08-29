@@ -135,6 +135,64 @@ other, duplicated in `glove/firmware/SafeHer_Glove_V5_OnDevice/` and
 pinned by tests carrying the firmware's literal payloads; nothing can check the
 firmware half automatically. See [glove/README.md](../glove/README.md).
 
+## Threat fusion: three signals, and everything else
+
+One engine decides whether SafeHer raises an alarm by itself:
+`fastapi_app/services/threat_fusion.py`. There is no second scorer — not in
+the app, not in a cloud function. The frontend displays what the engine
+returns and never recomputes it.
+
+```mermaid
+flowchart TB
+    subgraph Primary["Primary signals -- these and only these decide the score"]
+        G["Smart Glove\nXGBoost"] --> GS["glove score"]
+        C["Glasses camera\nYOLOv8-nano"] --> WS["weapon score"]
+        M["Glasses mic\nCNN + LSTM"] --> AS["audio score"]
+    end
+
+    GS & WS & AS --> F["Threat Fusion Engine\nweighted + solo floor + corroboration"]
+    F --> SM["EMA smoothing"] --> L["Threat level\nSAFE / ELEVATED / HIGH / CRITICAL"]
+    L --> D["Emergency decision"]
+
+    subgraph Support["Supporting evidence -- recorded, never scored"]
+        GPS["GPS"]
+        FE["Facial expression"]
+        HR["Heart rate"]
+        NT["Time of day"]
+        VID["Video / audio recording"]
+    end
+
+    Support -.->|"incident record, summary, dashboard"| INC["Incident"]
+    D --> INC
+```
+
+The dotted line is the whole point: supporting evidence reaches the incident
+and never the score.
+
+**Why the separation is structural.** `ThreatSignals` has three fields and
+`fuse()` accepts nothing else, so there is nowhere to pass a latitude. Someone
+will one day notice that fear was on the user's face and reach for a `+0.05`;
+it would look like care, and it would mean alarms during ordinary life. Adding
+a fourth input requires editing the engine, which is a deliberate act with a
+reviewer attached. `tests/test_fusion_architecture.py` fails if the shape
+changes.
+
+**A lone strong signal is not averaged away.** A weighted mean asks how
+alarming the situation is on average, which is the wrong question when one
+sensor is certain and the others have nothing to say. The score never falls
+below half the strongest single reading.
+
+**Two agreeing signals score above their mean.** Sensors on different limbs
+watching different things, both alarmed, is stronger evidence than one
+shouting — capped so corroboration alone can never trigger.
+
+**What actually produces these scores today: one of the three.** The glove is
+real and trained. `ml_training/` holds training scripts and no weights for
+YOLOv8 or the CNN+LSTM, and no Smart Glasses hardware exists. `threat_models.py`
+reports which modalities are genuinely live rather than letting the UI imply
+three, and `fuse()` renormalises over whatever reported so a missing sensor
+cannot quietly hold the score down.
+
 ## Auth flow
 
 Two entry points converge on the same JWT session:
