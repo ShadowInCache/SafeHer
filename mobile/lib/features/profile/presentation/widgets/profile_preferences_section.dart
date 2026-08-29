@@ -15,6 +15,7 @@ import '../../../../shared/components/layout/sa_section_header.dart';
 import '../../../../shared/components/cards/sa_card.dart';
 import '../../../../core/detection/detection_status.dart';
 import '../../../devices/data/glove_link_providers.dart';
+import '../../../safety/data/glove_auto_trigger.dart';
 import '../../../../core/detection/detection_sources.dart';
 import '../../data/profile_providers.dart';
 
@@ -67,6 +68,10 @@ class ProfilePreferencesSection extends ConsumerWidget {
                 // ESP32 with no server involved, so the backend's opinion of
                 // its own models is only half the answer.
                 gloveListening: ref.watch(gloveLinkProvider).isListening,
+                // Whether the glove keeps detecting off screen is a separate
+                // fact from whether it is connected, and the platform is the
+                // only honest source for it: the service can be refused.
+                backgroundWatchActive: ref.watch(gloveWatchServiceProvider),
               ),
               Slider(
                 value: prefs.threatThreshold,
@@ -236,10 +241,15 @@ class _DurationChip extends StatelessWidget {
 
 /// One honest line about whether the threshold above is doing anything.
 class _DetectionStatusLine extends StatelessWidget {
-  const _DetectionStatusLine({required this.status, required this.gloveListening});
+  const _DetectionStatusLine({
+    required this.status,
+    required this.gloveListening,
+    required this.backgroundWatchActive,
+  });
 
   final AsyncValue<DetectionStatus> status;
   final bool gloveListening;
+  final bool backgroundWatchActive;
 
   @override
   Widget build(BuildContext context) {
@@ -253,20 +263,38 @@ class _DetectionStatusLine extends StatelessWidget {
       // server being slow or unreachable says nothing about a detector
       // running on the user's own wrist.
       loading: () => gloveListening
-          ? _line(context, DetectionSources(backend: DetectionStatus.unknown, gloveListening: true))
+          ? _line(
+              context,
+              DetectionSources(
+                backend: DetectionStatus.unknown,
+                gloveListening: true,
+                backgroundWatchActive: backgroundWatchActive,
+              ),
+            )
           : Text(
               'Checking detection status…',
               style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.5)),
             ),
       error: (error, stackTrace) => gloveListening
-          ? _line(context, DetectionSources(backend: DetectionStatus.unknown, gloveListening: true))
+          ? _line(
+              context,
+              DetectionSources(
+                backend: DetectionStatus.unknown,
+                gloveListening: true,
+                backgroundWatchActive: backgroundWatchActive,
+              ),
+            )
           : Text(
               "Couldn't check whether automatic detection is running.",
               style: AppTypography.bodyS.copyWith(color: AppColors.warning500),
             ),
       data: (value) => _line(
         context,
-        DetectionSources(backend: value, gloveListening: gloveListening),
+        DetectionSources(
+          backend: value,
+          gloveListening: gloveListening,
+          backgroundWatchActive: backgroundWatchActive,
+        ),
       ),
     );
   }
