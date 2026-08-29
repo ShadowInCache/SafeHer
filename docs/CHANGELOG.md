@@ -7,6 +7,49 @@ until the first tagged release.
 
 ## [Unreleased]
 
+### 2026-08-30 — security audit: one real hole, and two boundaries nobody was watching
+
+#### Fixed
+- **Unthrottled outbound email to an arbitrary address.**
+  `POST /users/me/emergency-contacts/{id}/verify/send` sends a code to an
+  address the caller chose and had no rate limit, while every other
+  mail-sending route had one — the action sits past a path parameter and no
+  prefix rule reached it. An account could add any address as a "contact" and
+  loop the endpoint to bomb that inbox from SafeHer's verified sender. Capped
+  at 12/hour. `RateLimitRule` gained an optional `suffix` so a rule can target
+  an action past a path parameter without throttling its neighbours.
+- **A provider exception was returned to the caller.** The same route answered
+  `Could not send the code: {exc}`, handing the upstream error body — and
+  whatever hostnames or configuration detail it carried — to any authenticated
+  client. Logged server-side now, with a generic message to the user. It was
+  the only instance of that pattern in the codebase.
+
+#### Added
+- `tests/test_realtime_and_device_isolation.py` — cross-account tests for the
+  two id-bearing routes that had none: the live alert WebSocket
+  (`WS /ws/alerts/{user_id}`, which had no test anywhere) and
+  `POST /devices/{id}/heartbeat`. Both were already correctly guarded; neither
+  was proven. The WebSocket tests speak the ASGI protocol directly, because
+  Starlette's `TestClient` is incompatible with the installed httpx.
+- `TestRouteRegistry` — every id-bearing route must be classified as
+  owner-checked or token-credential, and the suite fails when a new one
+  appears unclassified or an entry goes stale. The two gaps above existed
+  because nothing noticed them; this makes the absence itself fail.
+- `tests/test_outbound_email_abuse.py` — pins the new limit and, as
+  importantly, pins that it did not spread to reading or editing contacts.
+
+#### Verified, not changed
+Authorization was audited across all 22 id-bearing routes and found correct
+everywhere: ownership is re-derived from the token, and missing and not-yours
+both return 404. Tokens are held in `FlutterSecureStorage`, not Hive. Evidence
+is AES-256-GCM sealed before any backend sees a byte, retrieval is
+ownership-checked and streamed, and no public URL is ever issued. Uploads are
+MIME allow-listed and size-capped. The unhandled-exception handler returns a
+generic 500. No secrets are tracked in the repository.
+
+428 backend tests passing (was 409), 7 skipped, no regressions.
+
+
 ### 2026-08-29 — the glove detects with the phone in a pocket
 
 #### Added

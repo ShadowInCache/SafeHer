@@ -100,6 +100,51 @@ declared `connectedDevice|location`. Three properties are deliberate:
 The service holds no data. Classifications arrive over BLE, feed the vote, and
 are discarded; only a resulting incident is ever persisted.
 
+## Outbound email is an abuse surface, not just a feature
+
+`POST /users/me/emergency-contacts/{id}/verify/send` is the only
+authenticated route that sends mail to an address the *caller* chose. Until
+2026-08-30 it had no rate limit, while every other mail-sending route did --
+the action sits past a path parameter and no prefix rule reached it.
+
+Unlimited, an account could add any address as a "contact" and loop the
+endpoint to bomb that inbox from SafeHer's verified sender. The expensive
+part is not the victim's mailbox or the delivery credits: it is the sending
+domain's reputation. A domain marked as a spam source stops delivering the
+emergency alerts this system exists to send, which turns an abuse problem
+into a safety one.
+
+It is now capped at 12 per hour per client, and
+`tests/test_outbound_email_abuse.py` pins both the limit and its blast
+radius -- reading or editing the contact list stays unthrottled, because
+rate-limiting someone's access to her own contacts during an emergency
+would be a worse bug than the one being fixed.
+
+**When adding a route that sends anything to a third party, add a rule for
+it in the same commit.**
+
+## Authorization is enforced per route, and now proven per route
+
+Every route that accepts an id re-derives ownership from the token; a
+client-supplied id is an assertion, never a permission. Missing and
+not-yours return the same 404, so the API does not confirm that an object
+exists to someone not entitled to it.
+
+The gap was never the checks, it was the proof. A 2026-08-30 sweep of all
+22 id-bearing routes found every one correctly guarded but two with no test
+at all: the live alert WebSocket and the device heartbeat. Both now have
+cross-account tests, and `TestRouteRegistry` in
+`tests/test_realtime_and_device_isolation.py` fails the suite if a new
+id-bearing route appears without being classified -- so the next one cannot
+go untested the way these did.
+
+Two routes are deliberately unauthenticated: `GET /share/{token}` and
+`GET /share/{token}/evidence/{media_id}`. There the token *is* the
+credential -- 256 bits of `secrets`, stored only as a SHA-256 hash,
+expiring, revocable, and scoped so a valid token cannot reach a different
+incident's evidence. That exemption is asserted in the registry so it
+cannot quietly spread to a third route.
+
 ## Known limitations / recommendations
 
 Carried forward from the archived project reports and reconfirmed in the 2026-08-08
@@ -120,6 +165,23 @@ audit — none of these are fixed as part of this audit, they're flagged for fol
 - **No refresh-token revocation** — a leaked refresh token remains valid until it
   naturally expires (`REFRESH_TOKEN_EXPIRE_DAYS`, default 7). Consider a token
   denylist (Redis is already in the stack) if this matters for your threat model.
+- **The live-alert WebSocket takes its JWT in the query string.**
+  `WS /api/v1/ws/alerts/{user_id}?token=...` is correctly authorized -- the
+  token is verified, its type must be `access`, and the path's user id must
+  match the token's subject -- but a query string lands in proxy and access
+  logs in a way an `Authorization` header does not. The browser WebSocket
+  API cannot set headers, which is why the pattern exists; the Dart client
+  can. Moving it is a coordinated client-and-server change on a working
+  feature, so it is recorded here rather than done in passing. Until then,
+  keep access-log retention short and treat those logs as credential
+  material.
+- **A client can pick its own `role` at Firebase exchange.** The value is
+  allow-listed to `user` or `guardian` and is only applied when the account
+  is first provisioned, so today it grants nothing: `require_roles` exists
+  in `fastapi_app/security.py` and **is not used by any route**. That is
+  precisely why it is worth writing down. The first route gated on
+  `guardian` turns a self-assigned field into privilege escalation. Before
+  using `require_roles`, stop trusting the client for the role.
 - **Supabase RLS**: the archived `docs/archive/TECHNICAL_INVENTORY.md` flagged that
   Supabase row-level security was configured to allow all operations at the time it
   was written — verify current RLS policy on the `events` table
