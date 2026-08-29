@@ -101,7 +101,7 @@ void initializeBLE() {
       BLE_TELEMETRY_CHAR_UUID,
       BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
   bleTelemetryCharacteristic->addDescriptor(new BLE2902());
-  bleTelemetryCharacteristic->setValue("0.00,0.0,0,0");
+  bleTelemetryCharacteristic->setValue("0.00,0.0");
 
   bleService->start();
 
@@ -131,17 +131,10 @@ void sendTelemetry(float accelMagnitudeG, float gyroMagnitudeDps) {
     return;
   }
 
-  // Heartbeat and battery monitoring are not implemented in this firmware.
-  // Keep values at zero to avoid fabricating unverified sensor data.
-  const float heartRateBpm = 0.0f;
-  const float batteryPercent = 0.0f;
-
-  char telem[32];
-  snprintf(telem, sizeof(telem), "%.2f,%.1f,%.0f,%.0f",
+  char telem[24];
+  snprintf(telem, sizeof(telem), "%.2f,%.1f",
            accelMagnitudeG,
-           gyroMagnitudeDps,
-           heartRateBpm,
-           batteryPercent);
+           gyroMagnitudeDps);
   bleTelemetryCharacteristic->setValue(telem);
   bleTelemetryCharacteristic->notify();
 }
