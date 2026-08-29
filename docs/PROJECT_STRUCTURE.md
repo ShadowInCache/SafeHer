@@ -245,5 +245,6 @@ docs/
 ├── PROJECT_STRUCTURE.md  This file
 ├── MEMORY.md             Append-only change history
 ├── CHANGELOG.md · CONTRIBUTING.md · DEPENDENCIES.md
+├── assets/               Images the documentation references, incl. the logo
 └── archive/              Every doc predating the 2026-08-08 audit, verbatim
 ```

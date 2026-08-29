@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="SafeHer_logo.png" alt="SafeHer" width="140" />
+<img src="docs/assets/safeher-logo.png" alt="SafeHer" width="140" />
 
 # SafeHer
 
