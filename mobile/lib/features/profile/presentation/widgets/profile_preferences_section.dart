@@ -14,6 +14,8 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/components/layout/sa_section_header.dart';
 import '../../../../shared/components/cards/sa_card.dart';
 import '../../../../core/detection/detection_status.dart';
+import '../../../devices/data/glove_link_providers.dart';
+import '../../../../core/detection/detection_sources.dart';
 import '../../data/profile_providers.dart';
 
 /// Profile > Preferences — AI sensitivity, countdown length, auto-record,
@@ -59,7 +61,13 @@ class ProfilePreferencesSection extends ConsumerWidget {
               // control that silently governs nothing is indistinguishable
               // from protection.
               const SizedBox(height: AppSpacing.space2),
-              _DetectionStatusLine(status: ref.watch(detectionStatusProvider)),
+              _DetectionStatusLine(
+                status: ref.watch(detectionStatusProvider),
+                // The glove is a detector in its own right, running on the
+                // ESP32 with no server involved, so the backend's opinion of
+                // its own models is only half the answer.
+                gloveListening: ref.watch(gloveLinkProvider).isListening,
+              ),
               Slider(
                 value: prefs.threatThreshold,
                 min: 0.50,
@@ -228,9 +236,10 @@ class _DurationChip extends StatelessWidget {
 
 /// One honest line about whether the threshold above is doing anything.
 class _DetectionStatusLine extends StatelessWidget {
-  const _DetectionStatusLine({required this.status});
+  const _DetectionStatusLine({required this.status, required this.gloveListening});
 
   final AsyncValue<DetectionStatus> status;
+  final bool gloveListening;
 
   @override
   Widget build(BuildContext context) {
@@ -239,54 +248,71 @@ class _DetectionStatusLine extends StatelessWidget {
     return status.when(
       // No placeholder claim while loading. "Checking" is honest; anything
       // more would be a guess in the dangerous direction.
-      loading: () => Text(
-        'Checking detection status…',
-        style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.5)),
+      // A connected glove is a fact this screen already knows, so neither
+      // the loading nor the error branch should shrug when one is live: the
+      // server being slow or unreachable says nothing about a detector
+      // running on the user's own wrist.
+      loading: () => gloveListening
+          ? _line(context, DetectionSources(backend: DetectionStatus.unknown, gloveListening: true))
+          : Text(
+              'Checking detection status…',
+              style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.5)),
+            ),
+      error: (error, stackTrace) => gloveListening
+          ? _line(context, DetectionSources(backend: DetectionStatus.unknown, gloveListening: true))
+          : Text(
+              "Couldn't check whether automatic detection is running.",
+              style: AppTypography.bodyS.copyWith(color: AppColors.warning500),
+            ),
+      data: (value) => _line(
+        context,
+        DetectionSources(backend: value, gloveListening: gloveListening),
       ),
-      error: (error, stackTrace) => Text(
-        "Couldn't check whether automatic detection is running.",
-        style: AppTypography.bodyS.copyWith(color: AppColors.warning500),
-      ),
-      data: (value) {
-        final active = value.autoSosActive;
-        return Semantics(
-          label: '${value.headline}. ${value.detail}',
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                margin: const EdgeInsets.only(top: 6, right: AppSpacing.space2),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: active ? AppColors.success500 : AppColors.warning500,
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      value.headline,
-                      style: AppTypography.labelM.copyWith(
-                        color: active ? AppColors.success500 : AppColors.warning500,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      value.detail,
-                      style: AppTypography.bodyS.copyWith(
-                        color: onSurface.withValues(alpha: 0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+    );
+  }
+
+  /// One dot, one headline, one honest sentence. Shared by all three branches
+  /// so a connected glove reads the same whether the server answered, was
+  /// slow, or failed.
+  Widget _line(BuildContext context, DetectionSources sources) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final active = sources.anyActive;
+    return Semantics(
+      label: '${sources.headline}. ${sources.detail}',
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            margin: const EdgeInsets.only(top: 6, right: AppSpacing.space2),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: active ? AppColors.success500 : AppColors.warning500,
+            ),
           ),
-        );
-      },
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  sources.headline,
+                  style: AppTypography.labelM.copyWith(
+                    color: active ? AppColors.success500 : AppColors.warning500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  sources.detail,
+                  style: AppTypography.bodyS.copyWith(
+                    color: onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

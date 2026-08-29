@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:golden_toolkit/golden_toolkit.dart';
 import 'package:go_router/go_router.dart';
 import 'package:safeher_app/core/location/location_providers.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
@@ -80,7 +81,7 @@ class _StubContactsRepository implements ContactsRepository {
   Future<List<Contact>> reorderContacts(List<Contact> newOrder) async => newOrder;
 }
 
-Widget _harness({required FakeJourneyRepository journeys, FakeSafetyRepository? safety}) {
+Widget _harness({required FakeJourneyRepository journeys, FakeSafetyRepository? safety, Brightness brightness = Brightness.dark}) {
   return ProviderScope(
     overrides: [
       journeyRepositoryProvider.overrideWithValue(journeys),
@@ -102,7 +103,7 @@ Widget _harness({required FakeJourneyRepository journeys, FakeSafetyRepository? 
     // field users see; the scaffold background is transparent by design.
     builder: (context, child) =>
         SaAmbientBackground(child: child ?? const SizedBox.shrink()),
-      theme: AppTheme.dark,
+      theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
       routerConfig: GoRouter(
         initialLocation: '/safety/journey',
         routes: [
@@ -211,6 +212,24 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(journeys.calls, contains('escalate:journey-1'));
+    });
+
+    testGoldens('golden - start state, light', (tester) async {
+      await tester.pumpWidgetBuilder(
+        _harness(journeys: FakeJourneyRepository(), brightness: Brightness.light),
+        surfaceSize: const Size(390, 844),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await screenMatchesGolden(tester, 'safe_journey_screen_light');
+    });
+
+    testGoldens('golden - start state, dark', (tester) async {
+      await tester.pumpWidgetBuilder(
+        _harness(journeys: FakeJourneyRepository()),
+        surfaceSize: const Size(390, 844),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await screenMatchesGolden(tester, 'safe_journey_screen_dark');
     });
   });
 }
