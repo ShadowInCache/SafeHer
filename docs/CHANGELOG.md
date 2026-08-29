@@ -7,6 +7,47 @@ until the first tagged release.
 
 ## [Unreleased]
 
+### 2026-08-30 — the two recorded findings, resolved; iOS out, web in
+
+#### Fixed
+- **The access token no longer travels in a URL.** `WS /ws/alerts/{user_id}`
+  took `?token=<access jwt>`, putting a 15-minute credential into every proxy
+  and access log between the client and the app. A browser handshake cannot
+  carry an `Authorization` header, so moving it to one was never an option —
+  especially now that web is a target. Instead `POST /ws/ticket` is
+  authenticated normally, where the token stays in a header, and returns a
+  ~30-second ticket that opens the alert feed and nothing else. A ticket
+  recovered from a log is long dead. `WS_ALLOW_LEGACY_TOKEN_QUERY` re-enables
+  the old handshake for already-installed builds and **defaults to false**;
+  the compatibility path still enforces ownership.
+- **Roles are server-assigned.** `POST /auth/firebase/exchange` accepted a
+  `role` in the body and applied it at provisioning. It was allow-listed and
+  granted nothing today, because `require_roles` is used by no route — which
+  was exactly the danger: the first route gated on `guardian` would have
+  turned a sign-up field into privilege escalation, and whoever wrote it
+  would have had no reason to suspect. The field is gone; accounts provision
+  as `user`.
+
+#### Changed
+- **Web is a supported target; iOS is out of scope.** `flutter build web
+  --release` compiles clean and is now part of the release checks. A web build
+  has no glove — `flutter_blue_plus` has no web implementation, so BLE and
+  everything downstream of it are absent there — and `FlutterSecureStorage`
+  falls back to browser storage rather than a Keychain, which is a weaker
+  guarantee than the Android Keystore. Both are documented rather than papered
+  over. The `dart:io` guard test, written before web was a target, is why
+  enabling one needed no porting.
+
+#### Added
+- `TestTicketsReplaceTokensInTheUrl` and `TestLegacyTokenHandshakeIsOptIn` —
+  the access token no longer opens the feed, a ticket is refused as a bearer
+  token, minting requires a caller, an expired ticket fails, and the
+  compatibility path works when enabled while still checking ownership.
+
+436 backend tests passing (was 428), 747 mobile, analyzer clean, Android APK
+71.5 MB and web both building.
+
+
 ### 2026-08-30 — security audit: one real hole, and two boundaries nobody was watching
 
 #### Fixed

@@ -281,6 +281,11 @@ been paired.** BLE scan and connect were verified against other hardware on
 compiled — the `GoogleService-Info.plist` registration is the one change nobody
 has built.
 
+**Platforms** — Android is the primary target and web compiles clean as of
+2026-08-30. iOS is out of scope. A web build has no glove: `flutter_blue_plus`
+has no web implementation, so BLE and everything downstream of it are absent
+there, and the app reports that rather than implying otherwise.
+
 **Blocked by environment, not by code** — SMS costs money with every provider
 and is unconfigured.
 
@@ -314,7 +319,7 @@ Requirement-by-requirement detail: [docs/SRS_STATUS.md](docs/SRS_STATUS.md).
       resembling `normal_020`, more marginal falls resembling `fall_018`
 - [ ] Send only the telemetry fields the firmware measures, instead of zeros
 - [ ] Train the motion/voice/weapon models so server-side fusion has a producer
-- [ ] Build and test on iOS
+- [ ] Verify a deployed web build end to end (it compiles; nobody has used it)
 - [ ] Move `/alerts/live` scoring into Redis so it survives restarts
 - [ ] Sweep for stale `in_progress` dispatches (a killed worker currently strands one)
 - [ ] Attach evidence to contact email when under the size cap

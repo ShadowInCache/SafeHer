@@ -133,19 +133,28 @@ class _TwoAccounts(unittest.IsolatedAsyncioTestCase):
 class TestAlertStreamIsolation(_TwoAccounts):
     """A user id in a path is an assertion, never a permission."""
 
+    async def _ticket(self, headers) -> tuple[str, str]:
+        """`(ticket, user_id)` for whoever `headers` belongs to."""
+        response = await self.client.post("/api/v1/ws/ticket", headers=headers)
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        return body["ticket"], body["user_id"]
+
     async def test_the_owner_can_open_her_own_stream(self):
         # The control. A test that only proved connections fail would pass just
         # as happily against a feed that is broken for everyone.
+        ticket, user_id = await self._ticket(self.a)
         sent = await _ws_exchange(
-            f"/api/v1/ws/alerts/{self.a_id}", f"token={self.a_token}", ["ping"]
+            f"/api/v1/ws/alerts/{user_id}", f"ticket={ticket}", ["ping"]
         )
 
         self.assertTrue(_accepted(sent), f"the owner was refused her own feed: {sent}")
         self.assertIn("pong", _texts(sent))
 
     async def test_b_cannot_open_a_stream(self):
+        b_ticket, _ = await self._ticket(self.b)
         sent = await _ws_exchange(
-            f"/api/v1/ws/alerts/{self.a_id}", f"token={self.b_token}", ["ping"]
+            f"/api/v1/ws/alerts/{self.a_id}", f"ticket={b_ticket}", ["ping"]
         )
 
         self.assertFalse(
@@ -154,46 +163,139 @@ class TestAlertStreamIsolation(_TwoAccounts):
         )
         self.assertNotIn("pong", _texts(sent))
 
-    async def test_a_garbage_token_is_refused(self):
+    async def test_a_garbage_ticket_is_refused(self):
         sent = await _ws_exchange(
-            f"/api/v1/ws/alerts/{self.a_id}", "token=not-a-token", ["ping"]
+            f"/api/v1/ws/alerts/{self.a_id}", "ticket=not-a-ticket", ["ping"]
         )
 
         self.assertFalse(_accepted(sent))
 
-    async def test_a_refresh_token_cannot_open_the_feed(self):
-        # The handler decodes with `expected_type="access"`. Without that, the
-        # 30-day refresh token would be a month-long key to the live feed.
-        email = f"rt-{uuid4().hex}@safeherapp.com"
-        await self.client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": email,
-                "password": "TestPass123!",
-                "full_name": "Refresh Test",
-                "phone": "+15550100000",
-            },
+    async def test_no_credential_at_all_is_refused(self):
+        sent = await _ws_exchange(f"/api/v1/ws/alerts/{self.a_id}", "", ["ping"])
+
+        self.assertFalse(_accepted(sent))
+
+
+class TestTicketsReplaceTokensInTheUrl(_TwoAccounts):
+    """The point of the ticket is that the access token stops reaching a URL.
+
+    A query string is written into proxy and access logs. A fifteen-minute
+    access token sitting there is a working credential for anyone who reads
+    them; a thirty-second ticket that opens one feed is not.
+    """
+
+    async def test_an_access_token_no_longer_opens_the_feed(self):
+        # The regression that matters. If this starts passing an accepted
+        # handshake again, the old credential is back in the URL.
+        sent = await _ws_exchange(
+            f"/api/v1/ws/alerts/{self.a_id}", f"token={self.a_token}", ["ping"]
         )
-        login = await self.client.post(
-            "/api/v1/auth/login", json={"email": email, "password": "TestPass123!"}
+
+        self.assertFalse(
+            _accepted(sent),
+            "an access token in the query string still opens the alert feed",
         )
-        body = login.json()
-        refresh = body.get("refresh_token")
-        if not refresh:
-            self.skipTest("this build does not issue a refresh token on login")
+
+    async def test_a_ticket_is_not_accepted_as_a_bearer_token(self):
+        # The other direction. A ticket travels somewhere it can be logged, so
+        # it must not be usable against anything but the handshake.
+        response = await self.client.post("/api/v1/ws/ticket", headers=self.a)
+        ticket = response.json()["ticket"]
 
         me = await self.client.get(
-            "/api/v1/users/me",
-            headers={"Authorization": f"Bearer {body['access_token']}"},
+            "/api/v1/users/me", headers={"Authorization": f"Bearer {ticket}"}
         )
+
+        self.assertIn(me.status_code, (401, 403), me.text)
+
+    async def test_minting_a_ticket_requires_a_signed_in_caller(self):
+        response = await self.client.post("/api/v1/ws/ticket")
+
+        self.assertIn(response.status_code, (401, 403), response.text)
+
+    async def test_a_ticket_is_minted_only_for_its_caller(self):
+        a_body = (await self.client.post("/api/v1/ws/ticket", headers=self.a)).json()
+        b_body = (await self.client.post("/api/v1/ws/ticket", headers=self.b)).json()
+
+        self.assertEqual(a_body["user_id"], self.a_id)
+        self.assertEqual(b_body["user_id"], self.b_id)
+        self.assertNotEqual(a_body["ticket"], b_body["ticket"])
+
+    async def test_the_ticket_is_short_lived(self):
+        body = (await self.client.post("/api/v1/ws/ticket", headers=self.a)).json()
+
+        self.assertLessEqual(
+            body["expires_in"],
+            120,
+            "a long-lived ticket in a URL is the problem this replaced",
+        )
+
+    async def test_an_expired_ticket_is_refused(self):
+        from fastapi_app.config import get_settings
+        from fastapi_app.security import create_ws_ticket
+
+        settings = get_settings()
+        original = settings.ws_ticket_expire_seconds
+        try:
+            # Minted already dead, so no test has to sleep for it.
+            settings.ws_ticket_expire_seconds = -5
+            stale = create_ws_ticket(
+                subject="expired@safeherapp.com", role="user", settings=settings
+            )
+        finally:
+            settings.ws_ticket_expire_seconds = original
+
         sent = await _ws_exchange(
-            f"/api/v1/ws/alerts/{me.json()['id']}", f"token={refresh}", ["ping"]
+            f"/api/v1/ws/alerts/{self.a_id}", f"ticket={stale}", ["ping"]
         )
 
-        self.assertFalse(_accepted(sent), "a refresh token opened the live alert feed")
+        self.assertFalse(_accepted(sent))
 
-    async def test_no_token_at_all_is_refused(self):
-        sent = await _ws_exchange(f"/api/v1/ws/alerts/{self.a_id}", "", ["ping"])
+
+class TestLegacyTokenHandshakeIsOptIn(_TwoAccounts):
+    """The old handshake still exists, switched off, for one migration.
+
+    Removing it outright would cut the live feed on any already-installed
+    build. Leaving it on by default would mean the access token is still in
+    the URL for everyone. So it is off unless an operator turns it on, and
+    this pins both halves of that.
+    """
+
+    async def test_it_is_off_by_default(self):
+        from fastapi_app.config import get_settings
+
+        self.assertFalse(get_settings().ws_allow_legacy_token_query)
+
+    async def test_turning_it_on_accepts_an_access_token_again(self):
+        from fastapi_app.config import get_settings
+
+        settings = get_settings()
+        original = settings.ws_allow_legacy_token_query
+        try:
+            settings.ws_allow_legacy_token_query = True
+            sent = await _ws_exchange(
+                f"/api/v1/ws/alerts/{self.a_id}", f"token={self.a_token}", ["ping"]
+            )
+        finally:
+            settings.ws_allow_legacy_token_query = original
+
+        self.assertTrue(_accepted(sent), "the compatibility path does not work")
+        self.assertIn("pong", _texts(sent))
+
+    async def test_the_compatibility_path_still_checks_ownership(self):
+        # An escape hatch that skipped the ownership check would be far worse
+        # than the logging problem it exists to postpone.
+        from fastapi_app.config import get_settings
+
+        settings = get_settings()
+        original = settings.ws_allow_legacy_token_query
+        try:
+            settings.ws_allow_legacy_token_query = True
+            sent = await _ws_exchange(
+                f"/api/v1/ws/alerts/{self.a_id}", f"token={self.b_token}", ["ping"]
+            )
+        finally:
+            settings.ws_allow_legacy_token_query = original
 
         self.assertFalse(_accepted(sent))
 
@@ -288,6 +390,8 @@ class TestRouteRegistry(unittest.TestCase):
         "/api/v1/users/me/emergency-contacts/{}/verify": OWNER,
         "/api/v1/users/me/emergency-contacts/{}/verify/send": OWNER,
         "/api/v1/ws/alerts/{}": OWNER,
+        # `POST /ws/ticket` carries no id and so is not swept here; it is
+        # authenticated like any other route and mints only for its caller.
     }
 
     @staticmethod

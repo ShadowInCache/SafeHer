@@ -140,7 +140,8 @@ fine for a single dev/staging instance, not safe to scale horizontally as-is.
 
 | Path | Description |
 |---|---|
-| `WS /api/v1/ws/alerts/{user_id}` | Live feed of `threat_alert` / `emergency_alert` events for that user, broadcast by `fastapi_app/realtime.py` whenever `/alerts/process-threat` or `/alerts/emergency` create an incident. Also carries `dispatch_complete` (`{incident_id, contacts_total, contacts_notified, contacts_reached[], contacts_failed[]}`) when the background fan-out finishes — the push counterpart to polling `GET /alerts/emergency/{id}/dispatch`. |
+| `POST /api/v1/ws/ticket` | Bearer. Mints a short-lived credential for the handshake below. → `{ticket, expires_in, user_id}`. A WebSocket opened from a browser carries no `Authorization` header, so something has to travel in the URL; this is a ~30s credential that opens the feed and nothing else, rather than the access token, which would sit in every proxy log as a working 15-minute key. |
+| `WS /api/v1/ws/alerts/{user_id}?ticket=...` | Live feed of `threat_alert` / `emergency_alert` events for that user, broadcast by `fastapi_app/realtime.py` whenever `/alerts/process-threat` or `/alerts/emergency` create an incident. Also carries `dispatch_complete` (`{incident_id, contacts_total, contacts_notified, contacts_reached[], contacts_failed[]}`) when the background fan-out finishes — the push counterpart to polling `GET /alerts/emergency/{id}/dispatch`. |
 
 ## Error responses
 

@@ -154,16 +154,29 @@ Local scripts: `scripts/run_dev.ps1`, `scripts/analyze_and_test.ps1`,
 
 ## Platform status
 
-**Android** — builds and runs. `flutter build apk --release` produces a
-71.5 MB APK with no errors. Verified on real hardware: the app lock, and the
+**Android** — the primary target. `flutter build apk --release` produces a
+release APK with no errors. Verified on real hardware: the app lock, and the
 BLE scan/connect path.
 
-**iOS** — **never compiled.** `GoogleService-Info.plist` is registered in the
-Xcode Resources build phase and the `REVERSED_CLIENT_ID` URL scheme is set,
-but no iOS build has ever run. It needs a macOS host.
+**Web** — a supported target as of 2026-08-30. `flutter build web --release`
+compiles clean. Two things behave differently there and are worth knowing
+before shipping a web build:
 
-**Web** — not a target. The guard test above exists so a web build stays
-*possible*, not because one is shipped.
+- **No glove.** `flutter_blue_plus` has no web implementation, so BLE pairing
+  and everything downstream of it — the classification feed, the vote, the
+  foreground service — do not exist on web. `DetectionSources` already reports
+  what is actually detecting, so the UI says so rather than implying a glove
+  could connect.
+- **`FlutterSecureStorage` on web is not a Keychain.** It falls back to
+  browser storage, which is a weaker guarantee than the Android Keystore. Treat
+  a web session as lower-trust than a phone.
+
+The `dart:io` guard test is what keeps the web build working; it was written
+before web was a target and is the reason enabling one took no porting.
+
+**iOS** — out of scope. `GoogleService-Info.plist` and the `REVERSED_CLIENT_ID`
+URL scheme are registered and no iOS build has ever run; the project is not
+targeting it.
 
 ---
 

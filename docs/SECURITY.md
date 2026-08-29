@@ -145,6 +145,49 @@ expiring, revocable, and scoped so a valid token cannot reach a different
 incident's evidence. That exemption is asserted in the registry so it
 cannot quietly spread to a third route.
 
+## The WebSocket credential is a ticket, not the access token
+
+A WebSocket handshake opened from a browser carries no `Authorization`
+header -- the JavaScript API has nowhere to put one -- so whatever
+authenticates it must travel in the URL. Query strings are written into
+proxy and access logs, kept in history, and forwarded in referrers, which
+makes a URL the worst place for a credential.
+
+The fix is not to move the access token but to send something else.
+`POST /api/v1/ws/ticket` is authenticated normally, so the access token
+stays in a header, and returns a ticket that lives ~30 seconds and opens
+nothing but the alert feed -- `decode_token` refuses it wherever an access
+token is expected, which is asserted by a test. A ticket recovered from a
+log has been useless for a long while by the time anyone reads it.
+
+It is a signed JWT rather than a random string in a table, deliberately. A
+stored ticket would be single-use, which is stricter, but it would live in
+one worker's memory: minted on one process and redeemed on another it would
+simply fail, and the reconnect loop would look like a flaky network to the
+one person who needs the live feed.
+
+`WS_ALLOW_LEGACY_TOKEN_QUERY` re-enables the old `?token=` handshake and
+**defaults to false**. It exists so an already-installed build does not lose
+its live feed the moment the backend updates; turn it off once those builds
+are gone. The compatibility path still enforces ownership -- an escape hatch
+that skipped that would be far worse than the logging problem it postpones.
+
+## Roles are assigned by the server
+
+`POST /auth/firebase/exchange` used to accept a `role` in the request body,
+allow-listed to `user` or `guardian` and applied when the account was
+provisioned. It granted nothing, because `require_roles` in
+`fastapi_app/security.py` is used by no route -- and that was exactly the
+danger. The first route gated on `guardian` would have turned a field the
+caller chose at sign-up into privilege escalation, and whoever wrote that
+route would have had no reason to suspect it.
+
+The field is gone from the schema and accounts provision as `user`. Pydantic
+ignores unknown fields, so a client still sending one is simply not listened
+to. **Elevating an account is an operator action.** If `require_roles` is
+ever wired to a route, check first that nothing else lets a caller choose
+its own role.
+
 ## Known limitations / recommendations
 
 Carried forward from the archived project reports and reconfirmed in the 2026-08-08
@@ -165,23 +208,6 @@ audit — none of these are fixed as part of this audit, they're flagged for fol
 - **No refresh-token revocation** — a leaked refresh token remains valid until it
   naturally expires (`REFRESH_TOKEN_EXPIRE_DAYS`, default 7). Consider a token
   denylist (Redis is already in the stack) if this matters for your threat model.
-- **The live-alert WebSocket takes its JWT in the query string.**
-  `WS /api/v1/ws/alerts/{user_id}?token=...` is correctly authorized -- the
-  token is verified, its type must be `access`, and the path's user id must
-  match the token's subject -- but a query string lands in proxy and access
-  logs in a way an `Authorization` header does not. The browser WebSocket
-  API cannot set headers, which is why the pattern exists; the Dart client
-  can. Moving it is a coordinated client-and-server change on a working
-  feature, so it is recorded here rather than done in passing. Until then,
-  keep access-log retention short and treat those logs as credential
-  material.
-- **A client can pick its own `role` at Firebase exchange.** The value is
-  allow-listed to `user` or `guardian` and is only applied when the account
-  is first provisioned, so today it grants nothing: `require_roles` exists
-  in `fastapi_app/security.py` and **is not used by any route**. That is
-  precisely why it is worth writing down. The first route gated on
-  `guardian` turns a self-assigned field into privilege escalation. Before
-  using `require_roles`, stop trusting the client for the role.
 - **Supabase RLS**: the archived `docs/archive/TECHNICAL_INVENTORY.md` flagged that
   Supabase row-level security was configured to allow all operations at the time it
   was written — verify current RLS policy on the `events` table
