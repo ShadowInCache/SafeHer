@@ -7,7 +7,8 @@ import '../../../shared/models/threat_level.dart';
 /// drifts fails silently — the glove notifies into the void and the app shows
 /// zeros, which is precisely the state this was written to get out of.
 ///
-/// **Firmware:** `glove/firmware/SafeHer_Glove_V5_OnDevice.ino`.
+/// **Firmware:**
+/// `glove/firmware/SafeHer_Glove_V5_OnDevice/SafeHer_Glove_V5_OnDevice.ino`.
 ///
 /// ## The wire format
 ///
@@ -146,6 +147,26 @@ class GloveClassification {
 /// reading and a reading of zero mean very different things: `0 bpm` is a
 /// claim about a heart, and this app should never make that claim by
 /// accident.
+///
+/// ## Why zero is also treated as absent, for two fields only
+///
+/// Omitting a field is the right way for firmware to say "I do not measure
+/// this", and the parser has always handled a short payload. The firmware
+/// shipped in `SafeHer_Glove_V5_OnDevice.ino` says it a different way: it
+/// sends four fields with `heartRateBpm = 0` and `batteryPercent = 0`, under
+/// a comment explaining that it is *avoiding* fabricating unverified sensor
+/// data. The intent is exactly right and the encoding defeats it -- a literal
+/// `0` parses as a measurement, and the device card renders "0 bpm".
+///
+/// The app cannot choose what firmware it meets, so it applies the reading
+/// that is true of any firmware: **no wearer has a heart rate of zero, and no
+/// glove transmitting over BLE has a zero-percent battery.** Those two values
+/// are only ever "no sensor", so they are read as absent and the card shows
+/// an em dash.
+///
+/// [accelG] and [gyroDps] are deliberately excluded from this rule. A glove
+/// lying still genuinely reads 0.00g and 0.0 dps; there, zero is the
+/// measurement, and discarding it would be the mirror-image error.
 class GloveTelemetry {
   const GloveTelemetry({
     this.accelG,
@@ -159,9 +180,13 @@ class GloveTelemetry {
 
   /// Beats per minute from the pulse sensor. Replaces the flex reading the
   /// UI used to show, which no hardware ever produced.
+  ///
+  /// Null when the glove reports zero: see the class doc.
   final double? heartRateBpm;
 
   /// 0-100, as the firmware reports it.
+  ///
+  /// Null when the glove reports zero: see the class doc.
   final double? batteryPercent;
 
   bool get hasAny =>
@@ -182,11 +207,17 @@ class GloveTelemetry {
       return (value == null || value.isNaN) ? null : value;
     }
 
+    /// Zero from a sensor that cannot report zero. See the class doc.
+    double? measured(double? value) => (value == null || value == 0) ? null : value;
+
     final telemetry = GloveTelemetry(
       accelG: at(0),
       gyroDps: at(1),
-      heartRateBpm: at(2),
-      batteryPercent: at(3)?.clamp(0.0, 100.0),
+      heartRateBpm: measured(at(2)),
+      // Clamped first, so a broken negative reading becomes zero and is then
+      // read as "no sensor" rather than as a flat battery on a glove that is
+      // plainly still transmitting.
+      batteryPercent: measured(at(3)?.clamp(0.0, 100.0)),
     );
     return telemetry.hasAny ? telemetry : null;
   }

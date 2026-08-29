@@ -135,7 +135,21 @@ void main() {
 
     test('battery is clamped to a percentage', () {
       expect(GloveTelemetry.tryParse('0,0,0,140')!.batteryPercent, 100);
-      expect(GloveTelemetry.tryParse('0,0,0,-5')!.batteryPercent, 0);
+    });
+
+    test('a battery reading of zero is no sensor, not a flat battery', () {
+      // The glove is transmitting, so it plainly has power. Zero here only
+      // ever means the firmware does not measure it -- and a negative reading
+      // is a broken ADC, which clamps to zero and means the same thing.
+      expect(GloveTelemetry.tryParse('1.02,4.3,78,0')!.batteryPercent, isNull);
+      expect(GloveTelemetry.tryParse('0,0,0,-5')!.batteryPercent, isNull);
+    });
+
+    test('a heart rate of zero is no sensor, not a stopped heart', () {
+      // The firmware sends 0 for bpm precisely to avoid fabricating data.
+      // Reading it as a measurement would put "0 bpm" on the device card,
+      // which is the claim it was trying not to make.
+      expect(GloveTelemetry.tryParse('1.02,4.3,0,86')!.heartRateBpm, isNull);
     });
 
     test('a payload with nothing usable is dropped', () {
@@ -144,12 +158,42 @@ void main() {
       }
     });
 
-    test('zeros are a real reading, not an absence', () {
-      // A glove lying still genuinely reports 0.00g, and that must survive
-      // as a value rather than being mistaken for "no data".
+    test('zero motion is a real reading, not an absence', () {
+      // A glove lying still genuinely reports 0.00g and 0.0 dps, and those
+      // must survive as values rather than being mistaken for "no data".
+      // Only bpm and battery get the implausible-zero rule.
       final t = GloveTelemetry.tryParse('0,0,0,0')!;
       expect(t.hasAny, isTrue);
       expect(t.accelG, 0);
+      expect(t.gyroDps, 0);
+      expect(t.heartRateBpm, isNull);
+      expect(t.batteryPercent, isNull);
+    });
+
+    test('the exact payloads the current firmware emits', () {
+      // Copied from SafeHer_Glove_V5_OnDevice.ino: the initial characteristic
+      // value set in initializeBLE, and a live tick from sendTelemetry, which
+      // formats "%.2f,%.1f,%.0f,%.0f" with bpm and battery hardcoded to zero.
+      // If the firmware's wire format drifts, this is the test that says so.
+      final initial = GloveTelemetry.tryParse('0.00,0.0,0,0')!;
+      expect(initial.accelG, 0);
+      expect(initial.heartRateBpm, isNull);
+
+      final live = GloveTelemetry.tryParse('1.02,4.3,0,0')!;
+      expect(live.accelG, closeTo(1.02, 1e-9));
+      expect(live.gyroDps, closeTo(4.3, 1e-9));
+      expect(live.heartRateBpm, isNull, reason: 'never "0 bpm" on the card');
+      expect(live.batteryPercent, isNull);
+    });
+
+    test('a two-field payload is what the firmware should send instead', () {
+      // The recommended firmware fix: send only the fields it measures. The
+      // app already reads that correctly, which is why no app change is
+      // needed when the firmware is corrected.
+      final t = GloveTelemetry.tryParse('1.02,4.3')!;
+      expect(t.accelG, closeTo(1.02, 1e-9));
+      expect(t.heartRateBpm, isNull);
+      expect(t.batteryPercent, isNull);
     });
   });
 
@@ -167,6 +211,31 @@ void main() {
         GloveBle.telemetryCharacteristicUuid,
         '33b4fb00-9c17-4ad2-8fc9-89ad6dbc76bd',
       );
+    });
+
+    test('the class list matches CLASS_NAMES, in the firmware order', () {
+      // The firmware notifies a label by indexing CLASS_NAMES with the model's
+      // predicted class. Order is therefore part of the wire contract, not a
+      // presentation detail: a list that drifts here would map a fall onto
+      // some other word without anything failing.
+      expect(GloveClassification.knownLabels, [
+        'NORMAL',
+        'JERK',
+        'PUSH',
+        'PULL',
+        'SHAKING',
+        'TWISTING',
+        'FALL',
+      ]);
+    });
+
+    test("the firmware's initial classification value is safe and parseable", () {
+      // initializeBLE seeds the characteristic with "NORMAL,0.00". Some stacks
+      // deliver that as the first read on subscribe, so it must parse, and it
+      // must not look like a threat.
+      final initial = GloveClassification.tryParse('NORMAL,0.00')!;
+      expect(initial.label, 'NORMAL');
+      expect(initial.threatLevel, ThreatLevel.safe);
     });
   });
 }
