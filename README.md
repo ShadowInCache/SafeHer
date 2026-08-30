@@ -252,6 +252,7 @@ and then failed on production Postgres with *"operator does not exist: boolean
 | [SECURITY.md](docs/SECURITY.md) | Threat model, secrets handling, known limitations |
 | [PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) | Folder-by-folder tour |
 | [TRACEABILITY.md](docs/TRACEABILITY.md) | Requirement → code map, enforced by a test |
+| [WEAPON_INFERENCE_PLACEMENT.md](docs/WEAPON_INFERENCE_PLACEMENT.md) | Where the weapon model runs, and why an ESP32 cannot hold it |
 | [MEMORY.md](docs/MEMORY.md) | Append-only change history |
 | [DEPENDENCIES.md](docs/DEPENDENCIES.md) · [CONTRIBUTING.md](docs/CONTRIBUTING.md) · [CHANGELOG.md](docs/CHANGELOG.md) | |
 
