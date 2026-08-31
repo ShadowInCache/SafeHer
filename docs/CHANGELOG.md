@@ -7,6 +7,48 @@ until the first tagged release.
 
 ## [Unreleased]
 
+### 2026-09-01 — the weapon detector, and the knife gap it opened
+
+#### Added
+- **A trained weapon detector.** YOLOv8n, pistol and knife, trained on an
+  RTX 3050 from 7,539 images assembled out of Open Images V7,
+  OD-WeaponDetection and Sohas. Held-out test split: **mAP@0.5 0.907,
+  mAP@0.5:0.95 0.652, recall 0.835**; pistol AP 0.930, knife AP 0.884.
+  Quantised to INT8 at **3.36 MB** and bundled at `mobile/assets/models/`.
+- `docs/WEAPON_INFERENCE_PLACEMENT.md` — why the model runs on the phone and
+  not the glasses, with the arithmetic. An ESP32-CAM has 520 KB of SRAM and
+  4 MB of PSRAM against 3.36 MB of weights, a 1.23 MB input tensor and tens of
+  megabytes of activation memory, on a chip with no neural accelerator facing
+  8.1 GFLOPs a frame. Two orders of magnitude, not a tuning problem.
+
+#### Fixed
+- **Knife detection was materially worse than pistol** — AP@0.5 0.859 against
+  0.929, recall 0.763 against 0.830. The diagnosis ruled out the obvious cause:
+  knife recall was *flat across box sizes* and worse than pistol even on large
+  boxes, which is the signature of intra-class variance rather than
+  resolution. Root cause: Open Images treats `Knife`, `Kitchen knife` and
+  `Dagger` as three separate boxable classes and the first download asked only
+  for `Knife`. Adding the other two lifted knife training boxes 26% and took
+  **knife recall from 0.763 to 0.827**, closing the pistol/knife recall gap
+  from 6.7 points to 1.6.
+
+#### Changed
+- Docs corrected throughout: the project no longer has "no trained detection
+  model". It has two — the glove, which is connected, and the weapon detector,
+  which is not. `README.md`, `SRS_STATUS.md`, `TRACEABILITY.md` and
+  `ARCHITECTURE.md` now distinguish those two states rather than collapsing
+  them.
+- Counts: 468 backend tests (was 409), APK 71.5 -> 73.7 MB, web build added to
+  the verified gates.
+
+#### Still true
+Nothing loads the model. No ONNX runtime dependency, no inference code,
+`weapon_score` has no producer, and `DetectionSources` does not claim one. A
+model in the assets folder and a working detector are different things.
+
+468 backend + 747 mobile tests passing, analyzer clean, APK and web both build.
+
+
 ### 2026-08-30 — three signals decide the threat score, and nothing else
 
 #### Changed

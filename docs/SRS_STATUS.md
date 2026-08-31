@@ -25,13 +25,13 @@ to run.
 
 ## Blocking conditions (SRS "Stop and Fix Before Continuing")
 
-All four gates pass. Measured 2026-08-29 unless the row says otherwise.
+All four gates pass. Measured 2026-09-01 unless the row says otherwise.
 
 | Gate | Requirement | Last measured | Status |
 |------|-------------|---------------|--------|
 | `flutter analyze` | 0 issues | 0 issues | ✅ |
 | `flutter test --coverage` | > 70% line coverage | **75.2%** (6,024 / 8,009 lines), measured 2026-08-22 and not re-run since | ✅ |
-| `flutter build apk --release` | 0 errors | 71.5 MB APK, exit 0 | ✅ |
+| `flutter build apk --release` | 0 errors | 73.7 MB APK, exit 0 | ✅ |
 | `dart run build_runner build` | 0 conflicts | 50 outputs, 0 conflicts | ✅ |
 
 Beyond the SRS's four, the repo also runs:
@@ -39,7 +39,8 @@ Beyond the SRS's four, the repo also runs:
 | Check | Last measured | Status |
 |-------|---------------|--------|
 | `flutter test` (full suite) | 747 passing, 0 failing | ✅ |
-| `pytest tests/` | 409 passing, 7 skipped, 0 failing | ✅ |
+| `pytest tests/` | 468 passing, 7 skipped, 0 failing | ✅ |
+| `flutter build web --release` | compiles, 0 errors | ✅ |
 | Alembic from empty → head → downgrade → head | 13 migrations, reversible | ✅ |
 
 Coverage by area — the thin spots are where next session's tests should go:
@@ -1330,8 +1331,11 @@ about.
 ### FR-EMG-02 downgraded to partial, deliberately
 
 The decision path is complete and tested end to end. What it lacks is a
-producer: no detection model is trained, so no score is ever evaluated and the
-automatic alarm never fires.
+producer. That was written when nothing was trained. As of 2026-08-31 the
+glove is trained and connected, and the weapon detector is trained but not
+connected — bundled at `mobile/assets/models/` with no code that loads it. The
+audio model does not exist. So the server-side fused score still has no
+producer, and the glove is the only path that actually raises an alarm.
 
 The tempting shortcut — post the phone's accelerometer magnitude as a
 "motion score" — was not taken. It would be an invented number wearing a
@@ -1935,3 +1939,88 @@ with the right type.
 inference, the notify, the vote, the service and the woken screen have only
 ever met `FakeBleService`. That is now the largest untested surface in the
 project, and the one with the least excuse, since the hardware exists.
+
+---
+
+## 2026-09-01 — the first trained detector, and the gap it exposed
+
+### Built
+
+A YOLOv8n weapon detector, trained on an RTX 3050 laptop from 7,539 images
+assembled out of Open Images V7, OD-WeaponDetection and Sohas. On a held-out
+test split of 658 images it reaches **mAP@0.5 0.907, mAP@0.5:0.95 0.652,
+precision 0.900, recall 0.835** — pistol AP 0.930, knife AP 0.884. Quantised
+to INT8 at 3.36 MB and bundled at `mobile/assets/models/`.
+
+That makes it the second detector in the project that actually exists, after
+the glove, and the first one trained inside this repo's own pipeline.
+
+### The failure worth recording
+
+The first run detected knives much worse than pistols: AP@0.5 0.859 against
+0.929, recall 0.763 against 0.830. The obvious explanation is resolution —
+knives are thin, and thin objects are where detectors lose boxes.
+
+The measurement said otherwise. Knife recall was **flat across box sizes**
+(85.2% medium, 84.2% large) and worse than pistol even on large boxes, where
+pistol reached 90.3%. A knife filling the frame was still missed one time in
+six. Scale cannot explain that; intra-class variance can.
+
+The cause was a data-collection mistake rather than a modelling one. Open
+Images treats `Knife`, `Kitchen knife` and `Dagger` as three separate boxable
+classes, and the first download asked only for `Knife`. The model had been
+trained on a fraction of the knives sitting in the dataset the whole time.
+Adding the other two, plus Granada's Sohas subset filtered to pistol and knife,
+raised knife training boxes 26%:
+
+| | v1 | v2 |
+|---|---|---|
+| knife AP@0.5 | 0.859 | **0.884** |
+| knife recall | 0.763 | **0.827** |
+| pistol recall | 0.830 | 0.843 |
+| pistol − knife recall gap | 6.7 pts | **1.6 pts** |
+
+Pistol barely moved, which is the right shape for a knife-specific fix. Had
+both risen equally it would have meant the extra data was simply more data.
+
+### Two things that made the comparison mean something
+
+**The test split was byte-identical between runs.** New images went to train
+and val only. Spread across all three, "knife AP went up" would have been
+unfalsifiable — the number could move because the model improved or because
+the test got easier.
+
+**Every candidate was content-hashed against all three existing splits.** That
+caught 3,541 duplicates out of 4,511, because Sohas overlaps Granada's other
+folders heavily. Without it, images already in `test` would have landed in
+`train` and inflated precisely the metric under investigation.
+
+### Settled: the model cannot run on the glasses
+
+An ESP32-CAM has 520 KB of SRAM and 4 MB of PSRAM. The INT8 weights are
+3.36 MB, a 640×640 input tensor is 1.23 MB, and the activation memory a
+convolutional forward pass holds runs to tens of megabytes — which is the part
+compression does not touch. The chip has no neural accelerator against 8.1
+GFLOPs per frame.
+
+The glove is not a counterexample: a decision-tree ensemble over 51 scalar
+features is kilobytes of C arrays, a different kind of workload entirely.
+
+So inference runs on the phone and the glasses only capture and transmit,
+which also keeps the alarm independent of connectivity. Full arithmetic in
+`docs/WEAPON_INFERENCE_PLACEMENT.md`.
+
+### State
+
+468 backend tests and 747 mobile tests passing, analyzer clean, APK 73.7 MB and
+`flutter build web` both green.
+
+**Nothing loads the model.** There is no ONNX runtime dependency, no inference
+code, and `weapon_score` still has no producer — `DetectionSources` does not
+claim one. A trained model in the assets folder and a working detector are
+different things, and only the first exists.
+
+Recall 0.827 also means roughly one weapon in six is missed, with precision
+(0.901) above it — the confidence threshold is tuned conservative, which for a
+safety product is probably the wrong direction. Changing it is a product
+decision that has not been made.

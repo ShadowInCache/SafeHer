@@ -186,12 +186,23 @@ below half the strongest single reading.
 watching different things, both alarmed, is stronger evidence than one
 shouting — capped so corroboration alone can never trigger.
 
-**What actually produces these scores today: one of the three.** The glove is
-real and trained. `ml_training/` holds training scripts and no weights for
-YOLOv8 or the CNN+LSTM, and no Smart Glasses hardware exists. `threat_models.py`
-reports which modalities are genuinely live rather than letting the UI imply
-three, and `fuse()` renormalises over whatever reported so a missing sensor
-cannot quietly hold the score down.
+**What actually produces these scores today: one of the three.**
+
+- **Glove** — trained and live. Classifies on the ESP32, reaches the app over
+  BLE, and raises the alarm.
+- **Weapon** — *trained but not connected*, as of 2026-08-31. YOLOv8n at
+  mAP@0.5 0.907 (knife AP 0.884) on a held-out split, quantised to 3.36 MB and
+  bundled at `mobile/assets/models/`. There is no ONNX runtime dependency and
+  no inference code, so `weapon_score` has no producer. It runs on the phone
+  rather than the glasses — an ESP32 is two orders of magnitude short, and
+  `docs/WEAPON_INFERENCE_PLACEMENT.md` has the arithmetic.
+- **Audio** — does not exist. `ml_training/voice_detection/` holds a script
+  that extracts scalar summary features and is not the CNN+LSTM the
+  architecture calls for.
+
+`threat_models.py` reports which modalities are genuinely live rather than
+letting the UI imply three, and `fuse()` renormalises over whatever reported so
+a missing sensor cannot quietly hold the score down.
 
 ## Auth flow
 

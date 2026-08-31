@@ -115,6 +115,9 @@ mobile/lib/
 └── shared/
     ├── components/      SaCard, SaButton, SaIcon, Sa3DModelViewer, …
     └── models/          Models shared across features
+
+mobile/assets/models/     Trained weights bundled into the app
+└── weapon_yolov8n_int8.onnx   3.36 MB — trained, validated, not yet loaded
 ```
 
 `mobile/test/` mirrors `lib/` — 90 test files, 747 tests. Fakes live in
@@ -207,7 +210,7 @@ deployment/
 
 ## `tests/` — backend
 
-31 files, **409 passing and 7 skipped**. Most drive the ASGI app directly
+31 files, **468 passing and 7 skipped**. Most drive the ASGI app directly
 through `httpx.ASGITransport` and need no running server.
 
 Two files are the exception: `test_api_gateway.py` and `test_integration.py`

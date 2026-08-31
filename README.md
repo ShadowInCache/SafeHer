@@ -16,7 +16,7 @@ Detect a threat — by motion, voice, or sight — and get help moving
 ![Backend](https://img.shields.io/badge/backend-FastAPI%20%7C%20Python%203.12-009688)
 ![Mobile](https://img.shields.io/badge/mobile-Flutter%20%7C%20Dart%203.8+-02569B)
 ![Firmware](https://img.shields.io/badge/firmware-ESP32-E7352C)
-![Tests](https://img.shields.io/badge/tests-1156%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-1215%20passing-brightgreen)
 
 </div>
 
@@ -225,10 +225,11 @@ Every one of these is enforced in CI and measured, not asserted.
 
 | Gate | Status |
 |---|---|
-| `pytest tests/` | **409 passing**, 7 skipped |
+| `pytest tests/` | **468 passing**, 7 skipped |
 | `flutter test` | **747 passing** |
 | `flutter analyze` | **0 issues** |
-| `flutter build apk --release` | **0 errors** (71.5 MB) |
+| `flutter build apk --release` | **0 errors** (73.7 MB) |
+| `flutter build web --release` | **0 errors** |
 | Mobile line coverage | **75.2%** (SRS gate: >70%) |
 | Alembic empty → head → base → head | **reversible**, verified on SQLite *and* Postgres |
 | Secret/artifact scan | no `.env`, keys, DBs or evidence tracked |
@@ -294,18 +295,25 @@ and is unconfigured.
 video from the glasses (FR-MON-02), AI-generated incident summaries (FR-RPT-01,
 needs a paid model API).
 
-**The honest gap that matters most:** the phone alone still cannot detect a
-threat. None of the three server-side models is trained, so no fused score is
-ever produced. The tempting shortcut — publishing the phone's accelerometer
-magnitude as a "motion score" — was deliberately **not** taken. It would be an
-invented number wearing a model's name, and it would alert every emergency
-contact on a dropped phone or a run for a bus. Each false alarm spends the
-credibility the real alert depends on.
+**Two of the three detectors now exist, and one of those is not connected.**
 
-What closes that gap is hardware, not a threshold. A paired glove genuinely
-detects, and the app says so — but only while one is connected. Without a
-glove, the phone's honest trigger is the deliberate shake gesture, which opens
-the countdown rather than dispatching, and that works today.
+The **glove** is trained and wired end to end — it classifies on the ESP32 and
+the app acts on it. The **weapon detector** is trained as of 2026-08-31
+(mAP@0.5 0.907, knife AP 0.884 on a held-out split) and bundled at
+`mobile/assets/models/`, but **nothing loads it**: there is no ONNX runtime
+dependency and no inference code, so `weapon_score` still has no producer. A
+trained model in the assets folder and a working detector are different things,
+and the app does not claim the second. The **audio** model does not exist.
+
+The tempting shortcut — publishing the phone's accelerometer magnitude as a
+"motion score" — was deliberately **not** taken. It would be an invented number
+wearing a model's name, and it would alert every emergency contact on a dropped
+phone or a run for a bus. Each false alarm spends the credibility the real
+alert depends on.
+
+So without a glove, the phone's honest trigger remains the deliberate shake
+gesture, which opens the countdown rather than dispatching, and that works
+today.
 
 Requirement-by-requirement detail: [docs/SRS_STATUS.md](docs/SRS_STATUS.md).
 
@@ -319,7 +327,11 @@ Requirement-by-requirement detail: [docs/SRS_STATUS.md](docs/SRS_STATUS.md).
 - [ ] Collect the recordings the evaluation harness asked for — more `NORMAL`
       resembling `normal_020`, more marginal falls resembling `fall_018`
 - [ ] Send only the telemetry fields the firmware measures, instead of zeros
-- [ ] Train the motion/voice/weapon models so server-side fusion has a producer
+- [x] Train the weapon detector — done 2026-08-31, and see the next line
+- [ ] **Wire the weapon model into the app** — it is bundled and validated and
+      nothing reads it; this is the gap between having a model and having a
+      detector
+- [ ] Train the audio (CNN+LSTM) model
 - [ ] Verify a deployed web build end to end (it compiles; nobody has used it)
 - [ ] Move `/alerts/live` scoring into Redis so it survives restarts
 - [ ] Sweep for stale `in_progress` dispatches (a killed worker currently strands one)
