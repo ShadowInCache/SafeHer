@@ -1,0 +1,409 @@
+{
+  "classes": [
+    "distress",
+    "normal",
+    "threat"
+  ],
+  "cases": [
+    {
+      "text": "its getting dark",
+      "probabilities": [
+        0.071858,
+        0.870728,
+        0.057414
+      ]
+    },
+    {
+      "text": "get inside",
+      "probabilities": [
+        0.069374,
+        0.044001,
+        0.886624
+      ]
+    },
+    {
+      "text": "please call the police",
+      "probabilities": [
+        0.988978,
+        0.009784,
+        0.001238
+      ]
+    },
+    {
+      "text": "get off me",
+      "probabilities": [
+        0.850463,
+        0.031112,
+        0.118425
+      ]
+    },
+    {
+      "text": "this way",
+      "probabilities": [
+        0.098723,
+        0.80825,
+        0.093027
+      ]
+    },
+    {
+      "text": "get someone",
+      "probabilities": [
+        0.929915,
+        0.012069,
+        0.058016
+      ]
+    },
+    {
+      "text": "dont call anyone",
+      "probabilities": [
+        0.209173,
+        0.011209,
+        0.779618
+      ]
+    },
+    {
+      "text": "we should leave now",
+      "probabilities": [
+        0.349409,
+        0.46214,
+        0.188451
+      ]
+    },
+    {
+      "text": "im watching you",
+      "probabilities": [
+        0.030059,
+        0.084766,
+        0.885175
+      ]
+    },
+    {
+      "text": "dont move",
+      "probabilities": [
+        0.097818,
+        0.01156,
+        0.890621
+      ]
+    },
+    {
+      "text": "im still at work",
+      "probabilities": [
+        0.16259,
+        0.400551,
+        0.436859
+      ]
+    },
+    {
+      "text": "not a sound",
+      "probabilities": [
+        0.035354,
+        0.058129,
+        0.906517
+      ]
+    },
+    {
+      "text": "stay where you are",
+      "probabilities": [
+        0.177573,
+        0.451149,
+        0.371277
+      ]
+    },
+    {
+      "text": "let me go",
+      "probabilities": [
+        0.93014,
+        0.04504,
+        0.02482
+      ]
+    },
+    {
+      "text": "call 112",
+      "probabilities": [
+        0.875803,
+        0.078066,
+        0.04613
+      ]
+    },
+    {
+      "text": "ill send it tonight",
+      "probabilities": [
+        0.025417,
+        0.93065,
+        0.043933
+      ]
+    },
+    {
+      "text": "dont turn around",
+      "probabilities": [
+        0.043298,
+        0.021956,
+        0.934747
+      ]
+    },
+    {
+      "text": "i missed the train",
+      "probabilities": [
+        0.015075,
+        0.963627,
+        0.021299
+      ]
+    },
+    {
+      "text": "hold still",
+      "probabilities": [
+        0.048862,
+        0.095327,
+        0.855811
+      ]
+    },
+    {
+      "text": "im endangered",
+      "probabilities": [
+        0.830337,
+        0.143581,
+        0.026082
+      ]
+    },
+    {
+      "text": "im going to hurt you",
+      "probabilities": [
+        0.063064,
+        0.100223,
+        0.836713
+      ]
+    },
+    {
+      "text": "dont make a noise",
+      "probabilities": [
+        0.063774,
+        0.03816,
+        0.898066
+      ]
+    },
+    {
+      "text": "give me your money",
+      "probabilities": [
+        0.008316,
+        0.031899,
+        0.959785
+      ]
+    },
+    {
+      "text": "let me know when you reach",
+      "probabilities": [
+        0.063736,
+        0.854171,
+        0.082093
+      ]
+    },
+    {
+      "text": "im frightened",
+      "probabilities": [
+        0.854247,
+        0.100392,
+        0.045361
+      ]
+    },
+    {
+      "text": "where did you park",
+      "probabilities": [
+        0.01695,
+        0.922966,
+        0.060083
+      ]
+    },
+    {
+      "text": "dont make a noise",
+      "probabilities": [
+        0.063774,
+        0.03816,
+        0.898066
+      ]
+    },
+    {
+      "text": "stop struggling",
+      "probabilities": [
+        0.091657,
+        0.071648,
+        0.836695
+      ]
+    },
+    {
+      "text": "get away from me",
+      "probabilities": [
+        0.937223,
+        0.026714,
+        0.036062
+      ]
+    },
+    {
+      "text": "did you hate something",
+      "probabilities": [
+        0.010936,
+        0.952381,
+        0.036683
+      ]
+    },
+    {
+      "text": "dont say a word",
+      "probabilities": [
+        0.03599,
+        0.006921,
+        0.957088
+      ]
+    },
+    {
+      "text": "do what i say",
+      "probabilities": [
+        0.023149,
+        0.047266,
+        0.929586
+      ]
+    },
+    {
+      "text": "dont touch me",
+      "probabilities": [
+        0.809951,
+        0.019479,
+        0.170571
+      ]
+    },
+    {
+      "text": "let me check",
+      "probabilities": [
+        0.721853,
+        0.231553,
+        0.046595
+      ]
+    },
+    {
+      "text": "i missed the train",
+      "probabilities": [
+        0.015075,
+        0.963627,
+        0.021299
+      ]
+    },
+    {
+      "text": "can you help me with this",
+      "probabilities": [
+        0.274962,
+        0.654779,
+        0.070259
+      ]
+    },
+    {
+      "text": "can you pause me that",
+      "probabilities": [
+        0.043762,
+        0.749162,
+        0.207076
+      ]
+    },
+    {
+      "text": "dont make me hurt you",
+      "probabilities": [
+        0.089968,
+        0.010399,
+        0.899633
+      ]
+    },
+    {
+      "text": "get off me",
+      "probabilities": [
+        0.850463,
+        0.031112,
+        0.118425
+      ]
+    },
+    {
+      "text": "nana san",
+      "probabilities": [
+        0.261514,
+        0.404701,
+        0.333785
+      ]
+    },
+    {
+      "text": "youll regret this",
+      "probabilities": [
+        0.09844,
+        0.143468,
+        0.758092
+      ]
+    },
+    {
+      "text": "dont fight me",
+      "probabilities": [
+        0.108078,
+        0.05652,
+        0.835402
+      ]
+    },
+    {
+      "text": "ill break your arm",
+      "probabilities": [
+        0.023489,
+        0.079642,
+        0.896869
+      ]
+    },
+    {
+      "text": "i dont know you",
+      "probabilities": [
+        0.224871,
+        0.105941,
+        0.669188
+      ]
+    },
+    {
+      "text": "ill call you back",
+      "probabilities": [
+        0.055103,
+        0.820579,
+        0.124318
+      ]
+    },
+    {
+      "text": "you cant escape",
+      "probabilities": [
+        0.162963,
+        0.060174,
+        0.776863
+      ]
+    },
+    {
+      "text": "please stop",
+      "probabilities": [
+        0.97511,
+        0.019591,
+        0.005299
+      ]
+    },
+    {
+      "text": "i forgot my keys",
+      "probabilities": [
+        0.038556,
+        0.941128,
+        0.020316
+      ]
+    },
+    {
+      "text": "lets meet tomorrow",
+      "probabilities": [
+        0.030398,
+        0.937708,
+        0.031895
+      ]
+    },
+    {
+      "text": "im scared",
+      "probabilities": [
+        0.892744,
+        0.083312,
+        0.023944
+      ]
+    }
+  ]
+}
