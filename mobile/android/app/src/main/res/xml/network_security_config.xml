@@ -14,6 +14,26 @@
 
     Cleartext now lives only in the debug and profile variants, which never
     reach a user.
+
+    THE ONE EXCEPTION, added 2026-09-02: the SafeHer glasses.
+
+    They serve MJPEG video over plain HTTP on the local network, because an
+    ESP32-S3 cannot terminate TLS at 15 fps and there is no certificate
+    authority that would issue for a device on someone's home wifi. Blocking it
+    outright does not make the app safer -- it makes weapon detection fail
+    silently in release builds while appearing wired, which is worse than the
+    risk being managed.
+
+    So cleartext is permitted for exactly one name, `safeher-glasses.local`,
+    resolved over mDNS. That is narrow in a way a private-IP range would not be:
+    the config cannot express CIDR, so permitting "the local network" would mean
+    permitting cleartext to any host the user might type, which is how the
+    blanket flag got here in the first place.
+
+    What this does not weaken: the API base URL is https and pinned, and nothing
+    about this entry applies to it. What crosses this link is video, and it
+    never leaves the phone afterwards -- it is scored on the device and only a
+    number is sent onward.
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false">
@@ -21,4 +41,8 @@
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">safeher-glasses.local</domain>
+    </domain-config>
 </network-security-config>
