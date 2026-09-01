@@ -161,3 +161,78 @@ does not run.
 FER2013 was released for the ICML 2013 Challenges in Representation Learning.
 Verify the terms attach to your use before any commercial release. Weights are
 initialised from torchvision's ImageNet MobileNetV3-Small.
+
+---
+
+## `audio_cnnlstm_int8.onnx`
+
+CNN + LSTM keyword spotter, INT8. **1.12 MB.**
+
+| | |
+|---|---|
+| Classes | see `audio_labels.txt` — stop, no, off, down, _unknown_, _silence_ |
+| Input | `1×1×40×101` — log-mel spectrogram of 1 second |
+| Output | `1×6` logits |
+| Trained | 2026-09-01, 25 epochs, RTX 3050 |
+| Data | Google Speech Commands v0.02, canonical split |
+
+### Preprocessing is a contract, not a suggestion
+
+**16 kHz mono · 1.0 s · 40 mel bins · n_fft 400 (25 ms) · hop 160 (10 ms) ·
+per-clip mean/std normalisation of the dB mel-spectrogram.**
+
+These must match at inference exactly. A model fed features computed with a
+different hop length returns confident nonsense and nothing looks broken.
+
+### Measured on the held-out test split
+
+**Overall accuracy 98.9%.** INT8 is lossless here (98.92% against fp32's
+98.90%).
+
+| class | recall | precision | support |
+|---|---|---|---|
+| **stop** | **99.3%** | 99.0% | 411 |
+| no | 95.1% | 96.7% | 405 |
+| off | 93.3% | 95.9% | 402 |
+| down | 93.3% | 95.5% | 406 |
+| _unknown_ | 99.5% | 99.2% | 9,381 |
+| _silence_ | 100.0% | 100.0% | 400 |
+
+Read the per-class column, not the headline. `_unknown_` is 9,381 of 11,405
+test clips, so answering "unknown" every time scores about 82% — the aggregate
+flatters any keyword spotter. What makes this one good is that every target
+word clears 93% on both recall and precision.
+
+Validation was still improving at epoch 25, the last one, so this is not a
+converged model. More epochs would likely gain a little.
+
+### It does not detect "help"
+
+Speech Commands contains 35 words and `help` is not among them. **No public
+dataset holds genuine distress speech from real assaults, and none ever will —
+it cannot be collected with consent.**
+
+The target words here are the ones that exist and are plausibly shouted in an
+emergency. What this model proves is the *pipeline*: the feature extraction,
+the CNN+LSTM architecture and the training recipe all work, and reach 99% on
+the word that matters most of those available. Swapping in a SafeHer-recorded
+`help` corpus needs no architectural change — only the recordings, and those
+have to be made rather than downloaded.
+
+### Why INT8 is safe here and was not for the emotion model
+
+This is a plain convolutional stack plus an LSTM. It quantises cleanly.
+MobileNetV3's hard-swish activations and squeeze-excite blocks do not, and
+INT8 dropped that model from 65.5% to 16.9%. Both were validated on the real
+test split rather than assumed — which is the only reason the difference was
+noticed.
+
+### Not yet wired up
+
+Nothing in `lib/` loads this. No ONNX runtime dependency, no inference code,
+and `ThreatSignals.audio` still has no producer.
+
+### Licence
+
+Google Speech Commands v0.02 is CC BY 4.0 — attribution required, commercial
+use permitted.

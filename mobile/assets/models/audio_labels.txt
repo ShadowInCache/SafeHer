@@ -1,0 +1,6 @@
+stop
+no
+off
+down
+_unknown_
+_silence_
