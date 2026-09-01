@@ -228,7 +228,7 @@ Every one of these is enforced in CI and measured, not asserted.
 | `pytest tests/` | **468 passing**, 7 skipped |
 | `flutter test` | **747 passing** |
 | `flutter analyze` | **0 issues** |
-| `flutter build apk --release` | **0 errors** (73.7 MB) |
+| `flutter build apk --release` | **0 errors** (76.3 MB) |
 | `flutter build web --release` | **0 errors** |
 | Mobile line coverage | **75.2%** (SRS gate: >70%) |
 | Alembic empty → head → base → head | **reversible**, verified on SQLite *and* Postgres |
@@ -331,6 +331,8 @@ Requirement-by-requirement detail: [docs/SRS_STATUS.md](docs/SRS_STATUS.md).
 - [ ] **Wire the weapon model into the app** — it is bundled and validated and
       nothing reads it; this is the gap between having a model and having a
       detector
+- [x] Train the facial-expression classifier — done 2026-09-01, 65.5%, and
+      `fear` is its weakest class at 47% recall; supporting evidence only
 - [ ] Train the audio (CNN+LSTM) model
 - [ ] Verify a deployed web build end to end (it compiles; nobody has used it)
 - [ ] Move `/alerts/live` scoring into Redis so it survives restarts
