@@ -83,10 +83,24 @@ dependencies:
   # Accelerometer feed behind the opt-in shake trigger (Settings > Safety).
   sensors_plus: ^6.0.0
 
-  # On-device speech recognition for the voice-command layer. Nothing is
-  # recorded or uploaded — recognised text is matched locally against a fixed
-  # command list and discarded.
+  # On-device speech recognition, used twice over. It backs the voice-command
+  # layer, and while a journey is armed it also feeds the threat classifier in
+  # core/audio. Nothing is recorded or uploaded either way: recognised text is
+  # matched or scored on the device and then discarded, and only the resulting
+  # number ever leaves the phone.
+  #
+  # Chosen over a bundled Whisper on measurement. `tiny.en` was benchmarked on
+  # BERSt at 60% word error rate on *non-shouted* speech, which is unusable;
+  # the platform's own recogniser is both better and already installed.
   speech_to_text: ^7.0.0
+
+  # Real-time weapon detection on the glasses' video stream. Ultralytics'
+  # first-party plugin, running the LiteRT export of the model trained in
+  # `D:/SafeHer-ML/weapon_detection` (mAP@0.5 0.906 on 658 held-out images).
+  #
+  # Android only — there is no web implementation, so the web build must never
+  # start `WeaponDetectionService`; see assets/models/README.md for the split.
+  ultralytics_yolo: ^0.6.14
 
   # Dialling helplines / nearby places and handing a destination to the
   # device's own maps app. No embedded third-party SDK.
@@ -139,10 +153,17 @@ flutter:
     - assets/animations/
     - assets/sounds/
     - assets/rive/
-    # The weapon detector, INT8-quantised to 3.36 MB. Bundled rather than
-    # downloaded: it is a safety input, and a model fetched on first launch is
-    # one a woman does not have when she is offline. Nothing loads it yet --
-    # see assets/models/README.md and docs/WEAPON_INFERENCE_PLACEMENT.md.
+    # The trained models. Bundled rather than downloaded: they are safety
+    # inputs, and a model fetched on first launch is one a woman does not have
+    # when she is offline.
+    #
+    #   weapon_yolov8n_fp16.tflite  6.13 MB  read by ultralytics_yolo
+    #   phrase_classifier.json      0.20 MB  read by core/audio, pure Dart
+    #   emotion_mobilenetv3_fp16    3.09 MB  NOT wired — supporting evidence
+    #                                        only, and barred from the score
+    #
+    # See assets/models/README.md for what each one measured and why the
+    # emotion model cannot touch the threat score.
     - assets/models/
     # Archivo / Archivo Narrow / JetBrains Mono, bundled rather than fetched.
     #

@@ -14,6 +14,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/components/layout/sa_section_header.dart';
 import '../../../../shared/components/cards/sa_card.dart';
 import '../../../../core/detection/detection_status.dart';
+import '../../../safety/data/threat_pipeline.dart';
 import '../../../devices/data/glove_link_providers.dart';
 import '../../../safety/data/glove_auto_trigger.dart';
 import '../../../../core/detection/detection_sources.dart';
@@ -72,6 +73,10 @@ class ProfilePreferencesSection extends ConsumerWidget {
                 // fact from whether it is connected, and the platform is the
                 // only honest source for it: the service can be refused.
                 backgroundWatchActive: ref.watch(gloveWatchServiceProvider),
+                // The journey pipeline is the third detector, and the only one
+                // that can be running while no hardware is paired at all.
+                journeyDetectionActive:
+                    ref.watch(journeyDetectionStatusProvider).audioListening,
               ),
               Slider(
                 value: prefs.threatThreshold,
@@ -245,11 +250,13 @@ class _DetectionStatusLine extends StatelessWidget {
     required this.status,
     required this.gloveListening,
     required this.backgroundWatchActive,
+    required this.journeyDetectionActive,
   });
 
   final AsyncValue<DetectionStatus> status;
   final bool gloveListening;
   final bool backgroundWatchActive;
+  final bool journeyDetectionActive;
 
   @override
   Widget build(BuildContext context) {
@@ -269,6 +276,7 @@ class _DetectionStatusLine extends StatelessWidget {
                 backend: DetectionStatus.unknown,
                 gloveListening: true,
                 backgroundWatchActive: backgroundWatchActive,
+                journeyDetectionActive: journeyDetectionActive,
               ),
             )
           : Text(
@@ -282,6 +290,7 @@ class _DetectionStatusLine extends StatelessWidget {
                 backend: DetectionStatus.unknown,
                 gloveListening: true,
                 backgroundWatchActive: backgroundWatchActive,
+                journeyDetectionActive: journeyDetectionActive,
               ),
             )
           : Text(
@@ -294,6 +303,7 @@ class _DetectionStatusLine extends StatelessWidget {
           backend: value,
           gloveListening: gloveListening,
           backgroundWatchActive: backgroundWatchActive,
+          journeyDetectionActive: journeyDetectionActive,
         ),
       ),
     );

@@ -30,6 +30,7 @@ class DetectionSources {
     required this.backend,
     required this.gloveListening,
     this.backgroundWatchActive = false,
+    this.journeyDetectionActive = false,
   });
 
   /// The server's account of its own models.
@@ -48,8 +49,22 @@ class DetectionSources {
   /// tells a woman she can put her phone in her pocket.
   final bool backgroundWatchActive;
 
+  /// Whether the three-signal pipeline is currently running.
+  ///
+  /// It arms with a Safe Journey and stops when the journey ends, because the
+  /// microphone and the camera are the two most intrusive things this app can
+  /// touch and "while she told us she is travelling" is a boundary she set
+  /// herself.
+  ///
+  /// This screen has to know, because without it the standing text says
+  /// "SafeHer cannot detect a threat by itself" while the phrase classifier is
+  /// actively scoring what it hears. Under-reporting protection is the
+  /// friendlier of the two errors and still an error.
+  final bool journeyDetectionActive;
+
   /// True if anything at all can raise an alarm unaided right now.
-  bool get anyActive => gloveListening || backend.autoSosActive;
+  bool get anyActive =>
+      gloveListening || backend.autoSosActive || journeyDetectionActive;
 
   /// True when the only thing that can is the glove.
   ///
@@ -60,6 +75,7 @@ class DetectionSources {
 
   String get headline {
     if (gloveListening) return 'Your glove is watching';
+    if (journeyDetectionActive) return 'Detection is on for this journey';
     if (backend.autoSosActive) return 'Automatic detection is on';
     return 'Automatic detection is not active yet';
   }
@@ -84,6 +100,16 @@ class DetectionSources {
           'the alarm when it passes your threshold. It only does this while '
           'SafeHer is open — a phone in your pocket will not trigger it. SOS, '
           'the shake gesture and your contacts always work.';
+    }
+    if (journeyDetectionActive) {
+      // Named precisely, because "listening" is a word that deserves care.
+      // What runs is speech recognition on the device: the words are scored
+      // and dropped, and only a number is sent. Saying so is the difference
+      // between a feature she can consent to and one she discovers.
+      return 'While this journey is running, SafeHer listens for words that '
+          'sound like trouble. Speech is recognised on your phone and '
+          'discarded — only a score leaves the device. It stops when the '
+          'journey ends.';
     }
     if (backend.autoSosActive) {
       return 'SafeHer raises the alarm on its own when the threat score passes '

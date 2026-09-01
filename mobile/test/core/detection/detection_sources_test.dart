@@ -160,4 +160,58 @@ void main() {
           reason: 'claiming detection we cannot confirm is the dangerous error');
     });
   });
+
+  group('journey detection', () {
+    test('a running journey is reported even with no hardware paired', () {
+      // The pipeline listens through the phone's own microphone, so it can be
+      // the only active detector while nothing at all is connected. Before
+      // this was wired in, this screen said "SafeHer cannot detect a threat by
+      // itself" while the phrase classifier was actively scoring speech.
+      const sources = DetectionSources(
+        backend: DetectionStatus.unknown,
+        gloveListening: false,
+        journeyDetectionActive: true,
+      );
+
+      expect(sources.anyActive, isTrue);
+      expect(sources.headline, 'Detection is on for this journey');
+    });
+
+    test('says what is listened to and what happens to it', () {
+      const sources = DetectionSources(
+        backend: DetectionStatus.unknown,
+        gloveListening: false,
+        journeyDetectionActive: true,
+      );
+
+      // Consent depends on the detail, not the headline: that speech is
+      // recognised on the device, that it is discarded, and that it stops.
+      expect(sources.detail, contains('discarded'));
+      expect(sources.detail, contains('only a score leaves the device'));
+      expect(sources.detail, contains('stops when the journey ends'));
+    });
+
+    test('a connected glove still takes precedence in the headline', () {
+      // Both can be true at once. The glove is named because it is the one
+      // with the caveat about running off screen.
+      const sources = DetectionSources(
+        backend: DetectionStatus.unknown,
+        gloveListening: true,
+        journeyDetectionActive: true,
+      );
+
+      expect(sources.headline, 'Your glove is watching');
+    });
+
+    test('no journey and no glove stays pessimistic', () {
+      const sources = DetectionSources(
+        backend: DetectionStatus.unknown,
+        gloveListening: false,
+        journeyDetectionActive: false,
+      );
+
+      expect(sources.anyActive, isFalse);
+      expect(sources.headline, 'Automatic detection is not active yet');
+    });
+  });
 }

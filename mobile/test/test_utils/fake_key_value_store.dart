@@ -6,6 +6,7 @@ class FakeKeyValueStore implements LocalKeyValueStore {
   final _bools = <String, bool>{};
   final _doubles = <String, double>{};
   final _ints = <String, int>{};
+  final _strings = <String, String>{};
 
   @override
   bool getBool(String key, {bool defaultValue = false}) => _bools[key] ?? defaultValue;
@@ -24,4 +25,11 @@ class FakeKeyValueStore implements LocalKeyValueStore {
 
   @override
   Future<void> setInt(String key, int value) async => _ints[key] = value;
+
+  @override
+  String getString(String key, {String defaultValue = ''}) =>
+      _strings[key] ?? defaultValue;
+
+  @override
+  Future<void> setString(String key, String value) async => _strings[key] = value;
 }
