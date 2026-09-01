@@ -7,6 +7,46 @@ until the first tagged release.
 
 ## [Unreleased]
 
+### 2026-09-01 — a facial-expression classifier, and why it stays out of the score
+
+#### Added
+- **Facial expression classifier.** MobileNetV3-Small over FER2013's canonical
+  split, **65.5% test accuracy**, exported to fp16 at 3.09 MB and bundled at
+  `mobile/assets/models/emotion_mobilenetv3_fp16.onnx`. Two-stage by design: a
+  face detector crops, this classifies the crop. Training "fear face" as a YOLO
+  class would have asked one nano backbone to do localisation and fine-grained
+  classification at once, and spent weapon-detection capacity doing it.
+
+#### The finding worth reading
+`fear` — the only class with any safety relevance — is the model's **weakest**:
+47.0% recall, 56.1% precision. It misses more than half of fearful faces and is
+right barely more often than a coin toss when it fires. That is not a defect
+more epochs would fix; it is what facial expression recognition is like, and it
+is the strongest practical argument for the architecture already in place:
+expression goes to `SupportingContext` and cannot reach `ThreatSignals`.
+
+65.5% overall is also not underperformance. Human agreement on FER2013 is about
+65%. Anything much above 75% on this dataset should be read as a leak.
+
+#### Fixed before it shipped
+- **INT8 quantisation destroys this model** — 65.5% to **16.9%**, barely above
+  the 14.3% random baseline; per-channel is no better at 18.7%. MobileNetV3's
+  hard-swish and squeeze-excite blocks over depthwise separable convolutions
+  have per-channel weight ranges that per-tensor scaling collapses.
+  Caught only by validating on the real test set: a random-input check reported
+  **100% agreement** between INT8 and fp32, because noise produces garbage
+  logits that agree by luck. The broken INT8 files were deleted rather than
+  left in `exported/`. fp16 is lossless here and half the size.
+- A first FER2013 mirror (`3una/Fer2013`) turned out to hold **700 images, 100
+  per class** — a toy subset. Training on it would have produced a confident,
+  meaningless number. Switched to `AutumnQiu/fer2013`, which has the real
+  28,709 / 3,589 / 3,589 split.
+
+#### Still true
+Nothing loads either model. No ONNX runtime dependency, no inference code.
+APK 73.7 → 76.3 MB.
+
+
 ### 2026-09-01 — the weapon detector, and the knife gap it opened
 
 #### Added

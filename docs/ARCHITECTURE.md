@@ -200,6 +200,13 @@ shouting — capped so corroboration alone can never trigger.
   that extracts scalar summary features and is not the CNN+LSTM the
   architecture calls for.
 
+**Facial expression** is trained too (MobileNetV3-Small, 65.5% on FER2013,
+`mobile/assets/models/emotion_mobilenetv3_fp16.onnx`) and is **not** in the
+list above, deliberately: it is supporting evidence and cannot reach the score.
+Its `fear` class — the only one with any safety relevance — runs at 47% recall
+and 56% precision, which is close to a coin toss and is the strongest practical
+argument for keeping expression out of the threat decision entirely.
+
 `threat_models.py` reports which modalities are genuinely live rather than
 letting the UI imply three, and `fuse()` renormalises over whatever reported so
 a missing sensor cannot quietly hold the score down.

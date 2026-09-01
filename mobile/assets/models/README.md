@@ -84,3 +84,80 @@ otherwise.
 
 Training pipeline and full runs live outside this repo at
 `D:\SafeHer-ML\weapon_detection\`.
+
+---
+
+## `emotion_mobilenetv3_fp16.onnx`
+
+MobileNetV3-Small, 7 expression classes, fp16. **3.09 MB.**
+
+| | |
+|---|---|
+| Classes | see `emotion_labels.txt` — angry, disgust, fear, happy, neutral, sad, surprise |
+| Input | `1×3×96×96`, RGB (grayscale replicated), ImageNet normalisation |
+| Output | `1×7` logits |
+| Trained | 2026-09-01, 40 epochs, RTX 3050 |
+| Data | FER2013 — 28,709 train / 3,589 val / 3,589 test, the canonical split |
+
+### Measured on the held-out test split
+
+**Overall accuracy 65.5%.** fp16 is lossless against fp32 (0.6551 vs 0.6545).
+
+| class | recall | precision | support |
+|---|---|---|---|
+| happy | 81.8% | 88.0% | 879 |
+| sad | 83.7% | 74.2% | 416 |
+| disgust | 76.4% | 36.8% | 55 |
+| surprise | 68.7% | 58.4% | 626 |
+| angry | 59.1% | 53.9% | 491 |
+| **fear** | **47.0%** | **56.1%** | 528 |
+| neutral | 46.1% | 57.9% | 594 |
+
+65.5% is not underperformance. Human agreement on FER2013 sits around 65% and
+published models land in the low-to-mid 70s; this is 7-way classification over
+48×48 grayscale thumbnails. Treat anything much above 75% on this dataset as a
+sign of a leak rather than a better model.
+
+### The finding that matters
+
+**`fear` is the worst-performing class that anyone would care about.** Recall
+47.0%, precision 56.1% — it misses more than half of fearful faces, and when it
+does fire it is right barely more often than a coin toss. The confusion matrix
+scatters fear across angry, sad, surprise and neutral more or less evenly.
+
+The single expression with any conceivable relevance to a safety product is the
+least reliable thing this model produces. That is not a defect to be fixed with
+more epochs; it is what facial expression recognition is like.
+
+**So this model must never be shown as a finding.** Its output belongs in
+`SupportingContext.facial_expression` and cannot reach `ThreatSignals` — three
+fields, no room for a fourth, enforced by `tests/test_fusion_architecture.py`.
+If it is ever surfaced in the UI, phrase it as a possibility and show the
+confidence, never as "Fear detected".
+
+### INT8 destroys this model — do not quantise it further
+
+Dynamic INT8 quantisation drops accuracy from **65.5% to 16.9%**, barely above
+the 14.3% random baseline. Per-channel quantisation is no better at 18.7%.
+MobileNetV3's hard-swish activations and squeeze-excite blocks over depthwise
+separable convolutions have per-channel weight ranges that per-tensor scaling
+collapses.
+
+This was caught only by validating on the real test set. A check against random
+input reported **100% agreement** between the INT8 and fp32 models, because
+noise produces garbage logits that agree by luck. The broken INT8 files have
+been deleted so they cannot be picked up by mistake.
+
+fp16 is the right target here: half the size, no measurable loss.
+
+### Not yet wired up
+
+As with the weapon detector, nothing in `lib/` loads this. There is no ONNX
+runtime dependency and no inference code. It is bundled and measured, and it
+does not run.
+
+### Licence
+
+FER2013 was released for the ICML 2013 Challenges in Representation Learning.
+Verify the terms attach to your use before any commercial release. Weights are
+initialised from torchvision's ImageNet MobileNetV3-Small.
