@@ -7,6 +7,216 @@ until the first tagged release.
 
 ## [Unreleased]
 
+### 2026-09-01 — the weapon detector, and the knife gap it opened
+
+#### Added
+- **A trained weapon detector.** YOLOv8n, pistol and knife, trained on an
+  RTX 3050 from 7,539 images assembled out of Open Images V7,
+  OD-WeaponDetection and Sohas. Held-out test split: **mAP@0.5 0.907,
+  mAP@0.5:0.95 0.652, recall 0.835**; pistol AP 0.930, knife AP 0.884.
+  Quantised to INT8 at **3.36 MB** and bundled at `mobile/assets/models/`.
+- `docs/WEAPON_INFERENCE_PLACEMENT.md` — why the model runs on the phone and
+  not the glasses, with the arithmetic. An ESP32-CAM has 520 KB of SRAM and
+  4 MB of PSRAM against 3.36 MB of weights, a 1.23 MB input tensor and tens of
+  megabytes of activation memory, on a chip with no neural accelerator facing
+  8.1 GFLOPs a frame. Two orders of magnitude, not a tuning problem.
+
+#### Fixed
+- **Knife detection was materially worse than pistol** — AP@0.5 0.859 against
+  0.929, recall 0.763 against 0.830. The diagnosis ruled out the obvious cause:
+  knife recall was *flat across box sizes* and worse than pistol even on large
+  boxes, which is the signature of intra-class variance rather than
+  resolution. Root cause: Open Images treats `Knife`, `Kitchen knife` and
+  `Dagger` as three separate boxable classes and the first download asked only
+  for `Knife`. Adding the other two lifted knife training boxes 26% and took
+  **knife recall from 0.763 to 0.827**, closing the pistol/knife recall gap
+  from 6.7 points to 1.6.
+
+#### Changed
+- Docs corrected throughout: the project no longer has "no trained detection
+  model". It has two — the glove, which is connected, and the weapon detector,
+  which is not. `README.md`, `SRS_STATUS.md`, `TRACEABILITY.md` and
+  `ARCHITECTURE.md` now distinguish those two states rather than collapsing
+  them.
+- Counts: 468 backend tests (was 409), APK 71.5 -> 73.7 MB, web build added to
+  the verified gates.
+
+#### Still true
+Nothing loads the model. No ONNX runtime dependency, no inference code,
+`weapon_score` has no producer, and `DetectionSources` does not claim one. A
+model in the assets folder and a working detector are different things.
+
+468 backend + 747 mobile tests passing, analyzer clean, APK and web both build.
+
+
+### 2026-08-30 — three signals decide the threat score, and nothing else
+
+#### Changed
+- **The fusion engine takes exactly three primary signals** — glove (XGBoost),
+  weapon (YOLOv8), audio (CNN+LSTM) — and SRS §6.2's additive context boosters
+  are gone from the score. Night, high-risk zone and heart rate were context,
+  not evidence that an assault is happening, and the weapon booster
+  double-counted a detection already entering through the vision weight. All of
+  it is still recorded, via a new `SupportingContext`, for the incident and the
+  summary. **Scores at night and in high-risk zones are lower than before** —
+  the intended consequence, recorded as a deviation in `SRS_STATUS.md`.
+- **The weights invert §6.2** to 0.40 weapon / 0.35 audio / 0.25 glove, ordered
+  by how ambiguous each signal is. This costs the glove nothing today: it is
+  the only reporting signal, and `fuse()` renormalises over whatever reported.
+
+#### Fixed
+- **A knife detected at 0.90 confidence scored SAFE.** Under §6.2's weights the
+  least ambiguous signal in the system carried the least weight, and two quiet
+  sensors averaged a confident weapon detection down to 0.28. Found by the new
+  acceptance matrix, not by reading the code. Fixed by the re-weighting above
+  plus a solo-signal floor: the score never falls below half the strongest
+  single reading, because a knife in view is not made safe by a calm wrist.
+
+#### Added
+- `ThreatSignals` (three fields, frozen) and `SupportingContext` (everything
+  else), so the separation is enforced by construction rather than by comment.
+  `tests/test_fusion_architecture.py` fails if the shape changes, if the
+  weights and fields drift apart, or if `evaluate()` grows a contextual
+  parameter.
+- A threat state machine — SAFE / ELEVATED / HIGH / CRITICAL — with hysteresis,
+  so a score resting on a band boundary does not flap every heartbeat.
+- Corroboration: independent signals agreeing score above their weighted mean,
+  capped so agreement alone can never raise an alarm.
+- The architecture's own acceptance matrix as tests, including the two that
+  matter most: fear on a face and rapidly changing GPS both leave the score
+  untouched.
+
+468 backend tests passing (was 436), 7 skipped, no regressions.
+
+
+### 2026-08-30 — the two recorded findings, resolved; iOS out, web in
+
+#### Fixed
+- **The access token no longer travels in a URL.** `WS /ws/alerts/{user_id}`
+  took `?token=<access jwt>`, putting a 15-minute credential into every proxy
+  and access log between the client and the app. A browser handshake cannot
+  carry an `Authorization` header, so moving it to one was never an option —
+  especially now that web is a target. Instead `POST /ws/ticket` is
+  authenticated normally, where the token stays in a header, and returns a
+  ~30-second ticket that opens the alert feed and nothing else. A ticket
+  recovered from a log is long dead. `WS_ALLOW_LEGACY_TOKEN_QUERY` re-enables
+  the old handshake for already-installed builds and **defaults to false**;
+  the compatibility path still enforces ownership.
+- **Roles are server-assigned.** `POST /auth/firebase/exchange` accepted a
+  `role` in the body and applied it at provisioning. It was allow-listed and
+  granted nothing today, because `require_roles` is used by no route — which
+  was exactly the danger: the first route gated on `guardian` would have
+  turned a sign-up field into privilege escalation, and whoever wrote it
+  would have had no reason to suspect. The field is gone; accounts provision
+  as `user`.
+
+#### Changed
+- **Web is a supported target; iOS is out of scope.** `flutter build web
+  --release` compiles clean and is now part of the release checks. A web build
+  has no glove — `flutter_blue_plus` has no web implementation, so BLE and
+  everything downstream of it are absent there — and `FlutterSecureStorage`
+  falls back to browser storage rather than a Keychain, which is a weaker
+  guarantee than the Android Keystore. Both are documented rather than papered
+  over. The `dart:io` guard test, written before web was a target, is why
+  enabling one needed no porting.
+
+#### Added
+- `TestTicketsReplaceTokensInTheUrl` and `TestLegacyTokenHandshakeIsOptIn` —
+  the access token no longer opens the feed, a ticket is refused as a bearer
+  token, minting requires a caller, an expired ticket fails, and the
+  compatibility path works when enabled while still checking ownership.
+
+436 backend tests passing (was 428), 747 mobile, analyzer clean, Android APK
+71.5 MB and web both building.
+
+
+### 2026-08-30 — security audit: one real hole, and two boundaries nobody was watching
+
+#### Fixed
+- **Unthrottled outbound email to an arbitrary address.**
+  `POST /users/me/emergency-contacts/{id}/verify/send` sends a code to an
+  address the caller chose and had no rate limit, while every other
+  mail-sending route had one — the action sits past a path parameter and no
+  prefix rule reached it. An account could add any address as a "contact" and
+  loop the endpoint to bomb that inbox from SafeHer's verified sender. Capped
+  at 12/hour. `RateLimitRule` gained an optional `suffix` so a rule can target
+  an action past a path parameter without throttling its neighbours.
+- **A provider exception was returned to the caller.** The same route answered
+  `Could not send the code: {exc}`, handing the upstream error body — and
+  whatever hostnames or configuration detail it carried — to any authenticated
+  client. Logged server-side now, with a generic message to the user. It was
+  the only instance of that pattern in the codebase.
+
+#### Added
+- `tests/test_realtime_and_device_isolation.py` — cross-account tests for the
+  two id-bearing routes that had none: the live alert WebSocket
+  (`WS /ws/alerts/{user_id}`, which had no test anywhere) and
+  `POST /devices/{id}/heartbeat`. Both were already correctly guarded; neither
+  was proven. The WebSocket tests speak the ASGI protocol directly, because
+  Starlette's `TestClient` is incompatible with the installed httpx.
+- `TestRouteRegistry` — every id-bearing route must be classified as
+  owner-checked or token-credential, and the suite fails when a new one
+  appears unclassified or an entry goes stale. The two gaps above existed
+  because nothing noticed them; this makes the absence itself fail.
+- `tests/test_outbound_email_abuse.py` — pins the new limit and, as
+  importantly, pins that it did not spread to reading or editing contacts.
+
+#### Verified, not changed
+Authorization was audited across all 22 id-bearing routes and found correct
+everywhere: ownership is re-derived from the token, and missing and not-yours
+both return 404. Tokens are held in `FlutterSecureStorage`, not Hive. Evidence
+is AES-256-GCM sealed before any backend sees a byte, retrieval is
+ownership-checked and streamed, and no public URL is ever issued. Uploads are
+MIME allow-listed and size-capped. The unhandled-exception handler returns a
+generic 500. No secrets are tracked in the repository.
+
+428 backend tests passing (was 409), 7 skipped, no regressions.
+
+
+### 2026-08-29 — the glove detects with the phone in a pocket
+
+#### Added
+- **Background detection.** `mobile/lib/core/background/safety_foreground_service.dart`
+  runs a `connectedDevice|location` foreground service (via
+  `flutter_foreground_task`) for exactly as long as a glove is connected, so
+  Android stops freezing the process and the BLE notifications keep arriving.
+- `GloveAutoTrigger` (`mobile/lib/features/safety/data/glove_auto_trigger.dart`)
+  — the glove's vote, moved out of a widget and into a `keepAlive` provider.
+- `DetectionSources.backgroundWatchActive` — reports whether the service is
+  *genuinely* running, so the UI only claims the pocket case works when the
+  platform confirms it started.
+- A background alarm path: the countdown is routed to first and the screen
+  woken second, so it is already up when the activity comes forward.
+- 34 tests, including the glove vote driven entirely without a widget tree, and
+  the BLE wire contract asserted against the firmware's literal payloads.
+- `glove/README.md` and a rewritten `mobile/README.md`.
+
+#### Fixed
+- **Automatic detection was silently conditional on the app being looked at.**
+  The glove's vote ran inside `SafetyTriggerListener.build()`, and Flutter stops
+  pumping frames when the app leaves the screen — so a pocketed phone, the case
+  the glove exists for, raised nothing. A foreground service alone would not
+  have fixed this: the process would have been alive with nothing reading the
+  stream.
+- **The device card claimed a heart rate of zero.** The firmware sends `0` for
+  bpm and battery to avoid fabricating sensor data, but a literal `0` parses as
+  a measurement. Both now read as absent — no wearer has a heart rate of zero,
+  and no glove transmitting over BLE has a flat battery. `accelG` and `gyroDps`
+  keep zero as a real reading.
+- `ref.read` during provider disposal threw; the service handle is resolved in
+  `build` and held.
+- `dart:io` in a web-reachable library broke the web build, caught by the repo's
+  own guard test. Replaced with `defaultTargetPlatform`.
+
+#### Changed
+- Android manifest gains `FOREGROUND_SERVICE_CONNECTED_DEVICE` and the
+  `<service>` declaration. Release APK 70.7 MB → 71.5 MB.
+- Documentation rewritten against current source: `README.md`,
+  `docs/PROJECT_STRUCTURE.md`, `docs/ARCHITECTURE.md`, `docs/TRACEABILITY.md`,
+  `docs/SRS_STATUS.md`. Test counts were three sessions stale (639 → 747 mobile,
+  342 → 409 backend) and `glove/` was absent from every structural document.
+
+
 ### 2026-08-15 — Firebase auth, design system, repo cleanup
 
 #### Added

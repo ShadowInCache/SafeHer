@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="SafeHer_logo.png" alt="SafeHer" width="140" />
+<img src="docs/assets/safeher-logo.png" alt="SafeHer" width="140" />
 
 # SafeHer
 
@@ -16,7 +16,7 @@ Detect a threat — by motion, voice, or sight — and get help moving
 ![Backend](https://img.shields.io/badge/backend-FastAPI%20%7C%20Python%203.12-009688)
 ![Mobile](https://img.shields.io/badge/mobile-Flutter%20%7C%20Dart%203.8+-02569B)
 ![Firmware](https://img.shields.io/badge/firmware-ESP32-E7352C)
-![Tests](https://img.shields.io/badge/tests-981%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-1215%20passing-brightgreen)
 
 </div>
 
@@ -46,7 +46,7 @@ That requirement shapes the engineering in ways worth stating up front:
 | | |
 |---|---|
 | **One-tap SOS** | 10-second cancellable countdown (5/10/15s configurable), then dispatch. A centre FAB on the main navigation, plus shake-to-trigger and voice from anywhere. |
-| **Auto-SOS** | Fires without interaction when the fused threat score crosses your threshold. *Decision path complete; no trained model is producing scores yet — the app says so rather than implying it's watching.* |
+| **Auto-SOS** | Fires without interaction when a threat crosses your threshold. A paired **Smart Glove** drives this today — it runs its model on the ESP32 and reaches the phone over BLE, and a foreground service keeps it detecting with the screen off. The server-side models are still untrained, and the app distinguishes the two rather than implying one covers the other. |
 | **Contact fan-out** | Up to 10 contacts in your own priority order, each attempted independently on SMS → email → push, 3 attempts per channel. |
 | **Evidence capture** | Audio (and video when the camera can open) starts **with the countdown**, not after dispatch — so it covers the seconds spent deciding. AES-256-GCM at rest in a private Supabase bucket, owner-only retrieval — the provider holds ciphertext it cannot read. |
 | **Offline queue** | No signal? The alert is stored and replays on reconnect — driven by a periodic sweep and app-resume, not just a connectivity event. |
@@ -55,9 +55,19 @@ That requirement shapes the engineering in ways worth stating up front:
 
 ### Detection & monitoring
 
-Multi-modal fusion per SRS §6.2 — motion (XGBoost over accelerometer/gyro),
-voice distress (CNN+LSTM), and weapon detection (YOLOv8) — combined into one
-smoothed threat score with context boosters and a 120s dedup window.
+**On the glove, today.** A paired Smart Glove classifies hand motion on the
+ESP32 at 100 Hz and notifies the phone over BLE with no server in the path.
+The app raises the alarm on two `FALL` readings inside five seconds, each above
+your confidence threshold — one alone is a glove dropped on a table. It opens
+the ordinary cancellable countdown; an automatic trigger must never be faster,
+quieter or harder to stop than one you asked for. A foreground service keeps
+this running with the phone in a pocket, and the app only claims that when the
+platform confirms the service actually started.
+
+**On the server, designed but unfed.** Multi-modal fusion per SRS §6.2 — motion
+(XGBoost), voice distress (CNN+LSTM), weapon detection (YOLOv8) — combined into
+one smoothed threat score with context boosters and a 120s dedup window. The
+decision path is complete and tested; none of those three models is trained.
 
 Every automatic incident records **why it fired**: per-modality scores, weapon
 confidence, the fused value, and the threshold it was compared against, turned
@@ -87,7 +97,7 @@ share links (revocable, evidence streamed per request) · **full data export**
 ```mermaid
 flowchart LR
     subgraph Wearables
-        G["ESP32 Smart Glove<br/>MPU6050"]
+        G["ESP32 Smart Glove<br/>on-device XGBoost"]
         S["ESP32 Smart Glasses<br/>Camera + Mic"]
     end
 
@@ -98,9 +108,9 @@ flowchart LR
     end
 
     P["Emergency contacts<br/>SMS · email · push"]
-    M["Flutter app<br/>229 Dart files"]
+    M["Flutter app<br/>263 Dart files"]
 
-    G -- MQTT --> API
+    G -- "BLE, no server" --> M
     S -- MQTT --> API
     API <--> DB
     CF --> API
@@ -137,8 +147,9 @@ deliberate deviations: [docs/SRS_STATUS.md](docs/SRS_STATUS.md#deliberate-deviat
 
 ```
 SafeHer/
-├── fastapi_app/       Backend — 14 routers, services, repositories, workers
+├── fastapi_app/       Backend — 14 routers, 73 routes, services, workers
 ├── mobile/            Flutter app — clean architecture per feature
+├── glove/             Smart glove — firmware, dataset, on-device ML pipeline
 ├── alembic/           Database migrations (13, reversible)
 ├── tests/             Backend test suite (pytest)
 ├── ml_training/       Offline training pipelines + trained artifacts
@@ -214,10 +225,11 @@ Every one of these is enforced in CI and measured, not asserted.
 
 | Gate | Status |
 |---|---|
-| `pytest tests/` | **342 passing** |
-| `flutter test` | **639 passing** |
+| `pytest tests/` | **468 passing**, 7 skipped |
+| `flutter test` | **747 passing** |
 | `flutter analyze` | **0 issues** |
-| `flutter build apk --release` | **0 errors** (70.7 MB) |
+| `flutter build apk --release` | **0 errors** (73.7 MB) |
+| `flutter build web --release` | **0 errors** |
 | Mobile line coverage | **75.2%** (SRS gate: >70%) |
 | Alembic empty → head → base → head | **reversible**, verified on SQLite *and* Postgres |
 | Secret/artifact scan | no `.env`, keys, DBs or evidence tracked |
@@ -241,8 +253,14 @@ and then failed on production Postgres with *"operator does not exist: boolean
 | [SECURITY.md](docs/SECURITY.md) | Threat model, secrets handling, known limitations |
 | [PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) | Folder-by-folder tour |
 | [TRACEABILITY.md](docs/TRACEABILITY.md) | Requirement → code map, enforced by a test |
+| [WEAPON_INFERENCE_PLACEMENT.md](docs/WEAPON_INFERENCE_PLACEMENT.md) | Where the weapon model runs, and why an ESP32 cannot hold it |
 | [MEMORY.md](docs/MEMORY.md) | Append-only change history |
 | [DEPENDENCIES.md](docs/DEPENDENCIES.md) · [CONTRIBUTING.md](docs/CONTRIBUTING.md) · [CHANGELOG.md](docs/CHANGELOG.md) | |
+
+Component-level docs live with the code they describe:
+[mobile/README.md](mobile/README.md) (the Flutter app, its build-time switches
+and house rules) and [glove/README.md](glove/README.md) (the firmware, the
+dataset, and the collect → train → convert → flash pipeline).
 
 ---
 
@@ -256,10 +274,19 @@ per-contact outcome reporting, evidence capture/encryption/upload, PDF export,
 share links, contact verification, Safe Journey, Nearby Safety, auth
 (email + Google), offline queue, account deletion, data export.
 
-**Built but unverified on real hardware** — BLE pairing is written against the
-real `flutter_blue_plus` API but has only ever run against a fake service; no
-glove or glasses has been paired. iOS has never been compiled — the
-`GoogleService-Info.plist` registration is the one change nobody has built.
+**Built but unverified on real hardware** — the glove path, end to end. The
+firmware runs its model and notifies over BLE, the app subscribes, votes and
+raises the alarm, and a foreground service keeps that alive off screen. Every
+app-side test runs against a fake BLE service, and **no physical glove has ever
+been paired.** BLE scan and connect were verified against other hardware on
+2026-08-17; nothing beyond that has met a real device. iOS has never been
+compiled — the `GoogleService-Info.plist` registration is the one change nobody
+has built.
+
+**Platforms** — Android is the primary target and web compiles clean as of
+2026-08-30. iOS is out of scope. A web build has no glove: `flutter_blue_plus`
+has no web implementation, so BLE and everything downstream of it are absent
+there, and the app reports that rather than implying otherwise.
 
 **Blocked by environment, not by code** — SMS costs money with every provider
 and is unconfigured.
@@ -268,14 +295,25 @@ and is unconfigured.
 video from the glasses (FR-MON-02), AI-generated incident summaries (FR-RPT-01,
 needs a paid model API).
 
-**The honest gap that matters most:** no detection model is trained, so no
-score is ever produced and auto-SOS never fires by itself. The tempting
-shortcut — publishing the phone's accelerometer magnitude as a "motion score" —
-was deliberately **not** taken. It would be an invented number wearing a
-model's name, and it would alert every emergency contact on a dropped phone or
-a run for a bus. Each false alarm spends the credibility the real alert depends
-on. The phone's honest trigger is the deliberate shake gesture, which opens the
-countdown rather than dispatching, and that works today.
+**Two of the three detectors now exist, and one of those is not connected.**
+
+The **glove** is trained and wired end to end — it classifies on the ESP32 and
+the app acts on it. The **weapon detector** is trained as of 2026-08-31
+(mAP@0.5 0.907, knife AP 0.884 on a held-out split) and bundled at
+`mobile/assets/models/`, but **nothing loads it**: there is no ONNX runtime
+dependency and no inference code, so `weapon_score` still has no producer. A
+trained model in the assets folder and a working detector are different things,
+and the app does not claim the second. The **audio** model does not exist.
+
+The tempting shortcut — publishing the phone's accelerometer magnitude as a
+"motion score" — was deliberately **not** taken. It would be an invented number
+wearing a model's name, and it would alert every emergency contact on a dropped
+phone or a run for a bus. Each false alarm spends the credibility the real
+alert depends on.
+
+So without a glove, the phone's honest trigger remains the deliberate shake
+gesture, which opens the countdown rather than dispatching, and that works
+today.
 
 Requirement-by-requirement detail: [docs/SRS_STATUS.md](docs/SRS_STATUS.md).
 
@@ -283,9 +321,18 @@ Requirement-by-requirement detail: [docs/SRS_STATUS.md](docs/SRS_STATUS.md).
 
 ## Roadmap
 
-- [ ] Train the motion/voice/weapon models so auto-SOS has a real producer
-- [ ] Verify BLE against physical Smart Glove / Smart Glasses hardware
-- [ ] Build and test on iOS
+- [ ] **Pair a physical glove and verify the whole path** — the single item that
+      turns a large amount of merged, tested, unproven work into something to
+      trust. Procedure: [glove/README.md](glove/README.md)
+- [ ] Collect the recordings the evaluation harness asked for — more `NORMAL`
+      resembling `normal_020`, more marginal falls resembling `fall_018`
+- [ ] Send only the telemetry fields the firmware measures, instead of zeros
+- [x] Train the weapon detector — done 2026-08-31, and see the next line
+- [ ] **Wire the weapon model into the app** — it is bundled and validated and
+      nothing reads it; this is the gap between having a model and having a
+      detector
+- [ ] Train the audio (CNN+LSTM) model
+- [ ] Verify a deployed web build end to end (it compiles; nobody has used it)
 - [ ] Move `/alerts/live` scoring into Redis so it survives restarts
 - [ ] Sweep for stale `in_progress` dispatches (a killed worker currently strands one)
 - [ ] Attach evidence to contact email when under the size cap

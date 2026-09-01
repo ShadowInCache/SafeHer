@@ -46,6 +46,10 @@ _latest_scores: dict[str, dict[str, Any]] = {}
 # window is deliberately *not* kept here -- that one is read from the
 # database, because forgetting it would mean alerting every contact twice.
 _smoothed_scores: dict[str, float] = {}
+# The banded level each user was last in. Held only so `level_for` can apply
+# hysteresis on the way down; losing it on restart costs one un-damped band
+# transition, never a missed alarm.
+_threat_levels: dict[str, 'threat_fusion.ThreatLevel'] = {}
 
 
 async def _auto_dispatch_if_threatened(
@@ -84,15 +88,23 @@ async def _auto_dispatch_if_threatened(
         .limit(1)
     )
 
+    # `raw_score` arrives already fused by the caller, so it is handed back
+    # in as the glove signal alone: fusing an already-fused number against
+    # itself would double-count it. `weapon_confidence` and
+    # `in_high_risk_zone` are no longer inputs to the score -- see the module
+    # doc in `threat_fusion` for why context was removed -- and are recorded
+    # on the incident as supporting evidence instead.
     decision = threat_fusion.evaluate(
-        raw_score=raw_score,
+        signals=threat_fusion.ThreatSignals(glove=raw_score),
         previous_smoothed=_smoothed_scores.get(user_id),
+        previous_level=_threat_levels.get(user_id),
         threshold=threshold,
-        weapon_confidence=weapon_confidence,
-        in_high_risk_zone=in_high_risk_zone,
         last_alert_at=last_auto,
     )
+    if decision is None:
+        return {"triggered": False, "reason": "no signal reported"}
     _smoothed_scores[user_id] = decision.smoothed_score
+    _threat_levels[user_id] = decision.level
 
     if not decision.should_trigger:
         if decision.suppressed_by_dedup:
@@ -100,7 +112,7 @@ async def _auto_dispatch_if_threatened(
         return {
             "triggered": False,
             "reason": decision.reason,
-            "score": round(decision.boosted_score, 3),
+            "score": round(decision.smoothed_score, 3),
             "threshold": threshold,
         }
 
@@ -131,7 +143,7 @@ async def _auto_dispatch_if_threatened(
         incident.vision_score = scores.vision
         incident.weapon_confidence = scores.weapon_confidence or None
         incident.detections = threat_models.describe(scores, weapon_label=weapon_label)
-    incident.fused_score = round(decision.boosted_score, 4)
+    incident.fused_score = round(decision.smoothed_score, 4)
     incident.threshold_used = threshold
     session.add(incident)
     await session.commit()
@@ -182,7 +194,7 @@ async def _auto_dispatch_if_threatened(
     return {
         "triggered": True,
         "reason": decision.reason,
-        "score": round(decision.boosted_score, 3),
+        "score": round(decision.smoothed_score, 3),
         "threshold": threshold,
         "incident_id": incident.id,
         "contacts_total": len(contacts),
@@ -698,11 +710,16 @@ async def analyze_model_scores(
             ),
         )
 
-    fused = threat_fusion.fuse_available(
-        motion=scores.motion, audio=scores.audio, vision=scores.vision
+    # The wire names predate the three-signal architecture and are kept so
+    # the API does not break: motion is the glove's XGBoost output, vision is
+    # YOLOv8 weapon detection, audio is the CNN+LSTM threat/help classifier.
+    fused = threat_fusion.fuse(
+        threat_fusion.ThreatSignals(
+            glove=scores.motion, weapon=scores.vision, audio=scores.audio
+        )
     )
-    # The pulse is a nudge, not a verdict -- see `heart_rate_boost`.
-    fused = min(1.0, fused + threat_fusion.heart_rate_boost(scores.heart_rate_bpm))
+    # Heart rate is deliberately no longer added. A racing pulse is evidence of
+    # running for a bus; it is carried as supporting context on the incident.
 
     if payload.location:
         session.add(

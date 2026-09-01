@@ -37,11 +37,32 @@ from typing import Deque, Dict, Iterable, Optional, Tuple
 
 @dataclass(frozen=True)
 class RateLimitRule:
-    """`limit` requests allowed per `window_seconds`, for paths under `prefix`."""
+    """`limit` requests allowed per `window_seconds`, for paths under `prefix`.
+
+    An optional `suffix` narrows the rule to paths that also *end* a given
+    way. Prefix alone cannot express the routes that matter most here: the
+    expensive action often sits past a path parameter, as in
+    `/users/me/emergency-contacts/{contact_id}/verify/send`, and a prefix wide
+    enough to catch it would also throttle reading the contact list.
+    """
 
     prefix: str
     limit: int
     window_seconds: int
+    suffix: str = ""
+
+    @property
+    def key(self) -> str:
+        """Identity of this rule's counter. Two rules sharing a prefix but
+        differing in suffix must not share a bucket."""
+        return self.prefix + "|" + self.suffix
+
+    def matches(self, path: str) -> bool:
+        return path.startswith(self.prefix) and path.endswith(self.suffix)
+
+    @property
+    def specificity(self) -> int:
+        return len(self.prefix) + len(self.suffix)
 
 
 class SlidingWindowLimiter:
@@ -53,13 +74,13 @@ class SlidingWindowLimiter:
     """
 
     def __init__(self, rules: Iterable[RateLimitRule]) -> None:
-        # Longest prefix first, so a specific rule beats a general one.
-        self._rules = sorted(rules, key=lambda r: len(r.prefix), reverse=True)
+        # Most specific first, so a narrow rule beats a general one.
+        self._rules = sorted(rules, key=lambda r: r.specificity, reverse=True)
         self._hits: Dict[Tuple[str, str], Deque[float]] = defaultdict(deque)
 
     def rule_for(self, path: str) -> Optional[RateLimitRule]:
         for rule in self._rules:
-            if path.startswith(rule.prefix):
+            if rule.matches(path):
                 return rule
         return None
 
@@ -70,7 +91,7 @@ class SlidingWindowLimiter:
             return None
 
         now = time.monotonic() if now is None else now
-        bucket = self._hits[(client, rule.prefix)]
+        bucket = self._hits[(client, rule.key)]
 
         cutoff = now - rule.window_seconds
         while bucket and bucket[0] <= cutoff:
@@ -117,4 +138,20 @@ DEFAULT_RULES = (
     # it several times -- and low enough that a script cannot spam a contact
     # list indefinitely.
     RateLimitRule("/api/v1/alerts/emergency", limit=30, window_seconds=600),
+    # Emails a code to an address the *caller* chose, which makes it the one
+    # authenticated route that can send mail to a stranger. Without a limit,
+    # an account can add any address as a "contact" and loop this endpoint to
+    # bomb that inbox from SafeHer's verified sender -- burning delivery
+    # credits and the sending domain's reputation along with it. Every other
+    # mail-sending route above was limited; this one was missed because the
+    # action sits past a path parameter and no prefix reached it.
+    #
+    # Twelve in an hour is far above real use: a contact is verified once,
+    # and a resend or two covers a code that went to spam.
+    RateLimitRule(
+        "/api/v1/users/me/emergency-contacts",
+        limit=12,
+        window_seconds=3600,
+        suffix="/verify/send",
+    ),
 )
