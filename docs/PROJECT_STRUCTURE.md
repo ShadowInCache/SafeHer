@@ -169,13 +169,23 @@ Not reproducible from a fresh clone — the raw dataset it expects at
 
 ---
 
-## `hardware/` — earlier device firmware
+## `hardware/` — device firmware
 
 ```text
 hardware/
-├── esp32_glove/smart_glove.ino      MPU6050 + panic button, MQTT over TLS
-└── smart_glasses/smart_glasses.ino  ESP32-CAM frame streaming
+├── esp32_glove/smart_glove.ino          Earlier: MPU6050 + panic button, MQTT over TLS
+└── smart_glasses/
+    ├── README.md                        What it serves and why — start here
+    ├── SETUP.md                         Board settings, flashing, verification
+    ├── SafeHer_Glasses_Stream/          CURRENT — MJPEG + audio + mDNS
+    ├── smart_glasses.ino                Legacy, targets ESP32-CAM, does not compile
+    └── Working_XIAO_ESP32_noise2/       Legacy noise alarm, superseded
 ```
+
+The glasses run no model. They stream VGA MJPEG and 16 kHz audio to the phone,
+which scores the frames — an ESP32-S3 is two orders of magnitude short of
+YOLOv8n (`WEAPON_INFERENCE_PLACEMENT.md`). The glove is the opposite: it runs
+its model on-device and reports a conclusion over BLE.
 
 The mobile UI also shows a "Smart Ring" and "Pendant". Those are product-vision
 mockups with no firmware anywhere in this repo.
