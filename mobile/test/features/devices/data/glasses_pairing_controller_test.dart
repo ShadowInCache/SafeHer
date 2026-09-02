@@ -4,7 +4,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:safeher_app/core/local/app_preferences.dart';
-import 'package:safeher_app/core/local/local_key_value_store.dart';
 import 'package:safeher_app/core/local/onboarding_prefs.dart';
 import 'package:safeher_app/features/devices/data/glasses_pairing_controller.dart';
 
