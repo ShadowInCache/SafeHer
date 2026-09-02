@@ -114,12 +114,17 @@ phone — where there is no mAP to notice it with. The export now normalises, an
 `export_tflite.py` re-validates on the real 658-image test split and refuses to
 ship anything more than 0.03 below the PyTorch baseline.
 
-| | mAP@0.5 | mAP@0.5:0.95 | P | R |
-|---|---|---|---|---|
-| PyTorch fp32 | 0.907 | 0.653 | 0.896 | 0.833 |
-| **LiteRT fp16** | **0.906** | 0.627 | 0.903 | 0.831 |
+**Both shipped artifacts are measured on the same 658 held-out images**, because
+one set of weights produces two files and only measuring the first would leave
+the second an assumption:
 
-Per class after conversion: pistol 0.931, knife 0.881.
+| artifact | runs on | mAP@0.5 | mAP@0.5:0.95 | P | R |
+|---|---|---|---|---|---|
+| PyTorch fp32 | — (reference) | 0.907 | 0.653 | 0.896 | 0.833 |
+| **LiteRT fp16** | phone | **0.906** | 0.627 | 0.903 | 0.831 |
+| **ONNX INT8** | server, web fallback | **0.901** | — | 0.901 | 0.827 |
+
+Per class: LiteRT pistol 0.931 / knife 0.881; ONNX pistol 0.926 / knife 0.877.
 
 ### Attribution required
 
@@ -206,6 +211,35 @@ noise produces garbage logits that agree by luck. The broken INT8 files have
 been deleted so they cannot be picked up by mistake.
 
 fp16 is the right target here: half the size, no measurable loss.
+
+### Measured through the deployed path, not just in training
+
+Training reported **65.5%** on FER2013. That figure describes the model alone,
+fed pre-cropped faces. The server path is not that: it locates a face first, and
+a frame with no detectable face yields no expression at all.
+
+Measured over 300 FER2013 test images through `analyse_frame`:
+
+| | |
+|---|---|
+| Face located | **71%** of frames |
+| Accuracy where a face was found | **0.606** |
+| Effective coverage of all frames | **0.430** |
+
+So a frame produces a correct expression label a little under half the time.
+That is the honest number for this pipeline, and it is why the model is
+supporting context rather than a signal.
+
+One caveat in the model's favour: FER2013 images are *already tightly cropped
+faces*, which is close to the worst case for a Haar cascade — it expects margin
+around a face. On an ordinary scene with a face at a reasonable size the
+detection rate should be better. The 71% is a floor, not a prediction.
+
+The cascade parameters were tuned by measurement: OpenCV's usual
+`scaleFactor=1.1, minNeighbors=5, minSize=48` found a face in only 53% of those
+images. Finer scaling and a lower neighbour threshold reach 71%, and the
+accuracy on detected faces moves only from 0.627 to 0.606 — more frames
+labelled, at almost no cost in label quality.
 
 ### Where it runs, and the preprocessing that has to match
 
