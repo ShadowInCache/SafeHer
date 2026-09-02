@@ -13,7 +13,10 @@ import 'package:safeher_app/features/devices/domain/models/device_detail.dart';
 import 'package:safeher_app/features/devices/domain/models/registered_device.dart';
 import 'package:safeher_app/features/devices/presentation/device_management_screen.dart';
 
+import 'package:safeher_app/core/local/onboarding_prefs.dart';
+
 import '../../../test_utils/fake_ble_service.dart';
+import '../../../test_utils/fake_key_value_store.dart';
 import '../../../test_utils/fake_webview_platform.dart';
 import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
@@ -96,6 +99,9 @@ Widget _harness({
       // `flutter test` environment — inject the fake instead.
       bleServiceProvider.overrideWithValue(ble ?? FakeBleService()),
       deviceRegistrationRepositoryProvider.overrideWithValue(_FakeRegistrationRepository()),
+      // The camera card reads the saved glasses address out of preferences,
+      // which are Hive-backed through GetIt and unavailable in a widget test.
+      localKeyValueStoreProvider.overrideWithValue(FakeKeyValueStore()),
     ],
     child: MaterialApp.router(
     // Mirrors main.dart's shell so screens render over the same ambient

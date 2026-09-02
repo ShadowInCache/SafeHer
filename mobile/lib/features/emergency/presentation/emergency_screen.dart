@@ -27,6 +27,7 @@ import 'widgets/emergency_cancelled_stage.dart';
 import 'widgets/emergency_countdown_stage.dart';
 import 'widgets/emergency_dispatched_stage.dart';
 import 'widgets/emergency_pre_activation_stage.dart';
+import '../../../core/audio/microphone_arbiter.dart';
 
 enum EmergencyStage { preActivation, countdown, dispatched, cancelled }
 
@@ -86,6 +87,12 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
   late final EvidenceRecorder _recorder;
   late final VideoEvidenceRecorder _videoRecorder;
 
+  /// Resolved eagerly for the same reason, and it matters more here: dispose()
+  /// has to hand the microphone back, and reading `ref` by then throws. If that
+  /// throw escaped, threat listening would never resume for the rest of the
+  /// journey — leaving the screen would silently cost a signal.
+  late final MicrophoneArbiter _microphone;
+
   /// Whether the camera actually opened. Reported after dispatch so the
   /// user knows what was captured, never prompted for mid-emergency.
   bool _hasVideo = false;
@@ -96,6 +103,7 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
     super.initState();
     _recorder = ref.read(evidenceRecorderProvider);
     _videoRecorder = ref.read(videoRecorderProvider);
+    _microphone = ref.read(microphoneArbiterProvider.notifier);
     if (widget.autoStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _handleSosConfirmed();
@@ -111,6 +119,15 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
     // Not awaited: dispose cannot be async, and an abandoned recording must
     // still be torn down rather than left holding the microphone.
     unawaited(_recorder.cancel());
+    // And the arbiter must be told, or threat listening never resumes for the
+    // rest of the journey — leaving the screen would silently cost a signal.
+    //
+    // Deferred by a microtask because Riverpod forbids modifying a provider
+    // inside a lifecycle method: doing it directly here throws "Tried to
+    // modify a provider while the widget tree was building". The notifier is
+    // held rather than read, so this still works after `ref` is unusable.
+    final microphone = _microphone;
+    Future.microtask(microphone.releaseEvidence);
     super.dispose();
   }
 
@@ -213,7 +230,20 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
   /// quiet: a missing microphone permission must never interrupt someone
   /// mid-emergency with a dialog. The dispatched view reports the outcome
   /// afterwards instead.
+  /// Hands the microphone back so threat listening can resume.
+  ///
+  /// Safe to call more than once — the arbiter ignores a release from a use
+  /// that no longer holds it.
+  void _releaseMicrophone() => _microphone.releaseEvidence();
+
   void _startRecording() {
+    // Claimed before the recorder asks the platform for the device, so the
+    // threat monitor has already let go by the time this runs. Both used to
+    // hold it at once: on Android `SpeechRecognizer` and `record` contend for
+    // the same hardware, and whichever lost, lost silently -- possibly the
+    // recording, during an actual emergency.
+    _microphone.claimForEvidence();
+
     unawaited(
       _recorder.start().then((_) {
         if (mounted) setState(() => _evidence = EvidenceState.recording);
@@ -270,11 +300,16 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
 
     if (incidentId == null) {
       await _recorder.cancel();
+      _releaseMicrophone();
       if (mounted) setState(() => _evidence = EvidenceState.discarded);
       return;
     }
 
     final recording = await _recorder.stop();
+    // Released as soon as the device is genuinely free, not when the upload
+    // finishes: threat listening should resume while the file is still going
+    // up, because the journey may well continue afterwards.
+    _releaseMicrophone();
     if (recording == null) {
       if (mounted) setState(() => _evidence = EvidenceState.unavailable);
       return;

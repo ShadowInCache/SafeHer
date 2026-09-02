@@ -20,7 +20,7 @@
     They serve MJPEG video over plain HTTP on the local network, because an
     ESP32-S3 cannot terminate TLS at 15 fps and there is no certificate
     authority that would issue for a device on someone's home wifi. Blocking it
-    outright does not make the app safer -- it makes weapon detection fail
+    outright does not make the app safer. It makes weapon detection fail
     silently in release builds while appearing wired, which is worse than the
     risk being managed.
 
@@ -32,7 +32,7 @@
 
     What this does not weaken: the API base URL is https and pinned, and nothing
     about this entry applies to it. What crosses this link is video, and it
-    never leaves the phone afterwards -- it is scored on the device and only a
+    never leaves the phone afterwards. It is scored on the device and only a
     number is sent onward.
 -->
 <network-security-config>
