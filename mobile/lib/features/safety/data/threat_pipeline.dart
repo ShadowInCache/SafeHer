@@ -257,7 +257,16 @@ class ThreatPipeline extends _$ThreatPipeline {
     final service = WeaponDetectionService(
       detector: onDevice
           ? UltralyticsWeaponDetector()
-          : RemoteWeaponDetector(apiClient: ref.read(apiClientProvider)),
+          : RemoteWeaponDetector(
+              apiClient: ref.read(apiClientProvider),
+              // Deliberately shorter than the service's own 2 s interval below.
+              // With both set to the same value, ordinary timing jitter makes
+              // the detector reject a frame the service just released, and the
+              // effective rate halves for no reason. The service is the
+              // authority on pacing; this is only a backstop against a caller
+              // that ignores it.
+              minimumInterval: const Duration(milliseconds: 1500),
+            ),
       // Uploading at the on-device rate would be a frame every 200 ms over the
       // network. The remote detector throttles itself as well; this keeps the
       // service from even trying.
