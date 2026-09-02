@@ -235,15 +235,15 @@ initialised from torchvision's ImageNet MobileNetV3-Small.
 
 ## `phrase_classifier.json`
 
-TF-IDF into logistic regression, executed in pure Dart. **196 kB.**
+TF-IDF into logistic regression, executed in pure Dart. **370 kB.**
 
 | | |
 |---|---|
 | Classes | `distress`, `normal`, `threat` |
 | Input | a transcript string from the platform's speech recogniser |
 | Output | three probabilities; the fusion signal is `P(threat) + P(distress)` |
-| Features | 1,005 word 1–2 grams + 2,882 `char_wb` 3–5 grams = 3,887 |
-| Trained | 2026-09-02, on 348 phrases of text |
+| Features | 2,402 word 1–2 grams + 5,209 `char_wb` 3–5 grams = 7,611 |
+| Trained | 2026-09-02, on 348 written phrases + 1,576 degraded transcripts |
 
 ### What replaced the CNN+LSTM, and why
 
@@ -267,22 +267,51 @@ sees that where a model over waveforms does not.
 The test set is 714 clips of phrases **never seen in training** — the split is
 by phrase, not by clip, so no wording appears on both sides.
 
-| boundary | accuracy | recall | specificity |
+| corpus | accuracy | recall | specificity |
 |---|---|---|---|
-| **elevated vs normal** | **0.905** | **0.968** | 0.790 |
-| three-way label | 0.877 | — | — |
+| clean TTS | 0.920 | 0.968 | 0.833 |
+| **realistically degraded** | **0.831** | **0.883** | **0.734** |
 
-The binary row is the headline because it is the decision the model actually
-makes. `ThreatSignals.audio` is a single number; threat and distress both mean
-"raise the score", so a distress clip labelled `threat` costs nothing, while a
-distress clip labelled `normal` is a woman asking for help and being scored as
-small talk. Only 15 of 462 elevated clips were missed, and twelve of those are
-the ASR truncating a phrase to the words "this way".
+**The second row is the one to quote.** The first is a text-to-speech voice
+reading calmly into a clean channel, which is not the moment this feature exists
+for. The second is the same phrases through babble, traffic noise, distance
+reverb, phone-band limiting and clipping — and the ten-point gap between them is
+what a street costs.
 
-Specificity 0.790 is the real cost: about a fifth of ordinary speech scores
-above 0.5. That is survivable only because no signal triggers an alarm alone —
-`threat_fusion` weights audio at 0.35 and applies a solo-signal floor, a
-threshold, hysteresis and dedup on top.
+Both rows are the elevated-versus-normal boundary, because that is the decision
+the model actually makes. `ThreatSignals.audio` is a single number and threat and
+distress both mean "raise the score", so a distress clip labelled `threat` costs
+nothing while a distress clip labelled `normal` is a woman asking for help and
+being scored as small talk. The three-way label is carried for the incident
+record only.
+
+Specificity 0.734 on degraded audio is the real cost: about a quarter of ordinary
+speech scores above 0.5. That is survivable only because no signal triggers an
+alarm alone — `threat_fusion` weights audio at 0.35 behind a solo-signal floor, a
+threshold, hysteresis and dedup.
+
+### Training on damage, and the version of it that made things worse
+
+The model is trained on written phrases **plus** the ASR transcripts of those
+same phrases after degradation. That teaches it the shape of recogniser error —
+dropped words, fused sentences, near-misses — without showing it a test answer.
+
+The first attempt at this made the model worse, and the reason is worth keeping.
+Adding *every* degraded transcript raised recall by 0.041 and dropped specificity
+from 0.730 to **0.567**: two ordinary sentences in five reading as a threat.
+Whisper does not merely garble a phrase it cannot hear, it invents a fluent
+replacement — `"help"` came back as `"Do I? How do you start?"` and
+`"emergency"` as a string of counted numbers, both still carrying the label
+`distress`. Training on those teaches the model that small talk is a cry for
+help.
+
+So a degraded transcript joins the training set only if it still resembles the
+phrase it came from (`SequenceMatcher` ≥ 0.4), and it is weighted at 0.25 against
+the written phrases. **The test set is never filtered** — doing that would delete
+the hardest clips and inflate every number after it.
+
+The gate ships only if degraded accuracy *and* recall both improve. A gate that
+watched recall alone is precisely what approved the worse model the first time.
 
 ### What the training data is, and what it is not
 
@@ -298,11 +327,14 @@ phrase collides verbatim with one in `phrases.py`; it caught eight collisions on
 the day it was written, and one (`"I'm being followed"`) that had been inflating
 every number measured before it.
 
-**These are TTS voices reading calmly, not people in danger.** ASR quality on
-real shouted speech was measured separately on BERSt: `tiny.en` reached 60% word
-error rate on *non-shouted* speech and 78% on shouted. That is why the front
-half is the platform recogniser rather than a bundled Whisper — and why the
-honest next step is recording real speech, not adding more synthetic phrases.
+**These are still TTS voices, degraded — not people in danger.** Synthetic
+distortion reproduces the channel, not the voice: nobody in this corpus is
+frightened, out of breath, or shouting. ASR quality on genuinely shouted speech
+was measured separately on BERSt, where `tiny.en` reached 60% word error rate on
+*non-shouted* speech and 78% on shouted. That is why the front half is the
+platform recogniser rather than a bundled Whisper — and why **recording real
+speech remains the honest next step**. No amount of further synthetic
+degradation substitutes for it.
 
 ### Preprocessing is a contract
 

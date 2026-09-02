@@ -27,8 +27,11 @@ class PhraseVerdict {
   ///
   /// This is the model's real output. The three-way label above is a
   /// description; this is the decision, and it is the boundary the model was
-  /// tuned on: 0.905 accuracy at 0.968 recall on held-out phrasings, against
-  /// 0.877 on the three-way split it is never asked to make.
+  /// tuned on. On held-out phrasings it reaches 0.920 accuracy at 0.968 recall
+  /// against clean audio, and **0.831 at 0.883 against realistically degraded
+  /// audio** — babble, traffic, distance, phone-band limiting and clipping.
+  /// The second pair is the one worth quoting; the first is a text-to-speech
+  /// voice reading calmly, which is not the moment this exists for.
   final double elevated;
 }
 
@@ -40,7 +43,7 @@ class PhraseVerdict {
 /// embeddings, at 0.852 three-way. It cannot ship: it needs an 88 MB
 /// `all-MiniLM-L6-v2` encoder resident on the phone and a runtime to drive it,
 /// for every utterance. This model is a vocabulary, an IDF vector and a
-/// coefficient matrix — 196 kB of JSON and two loops — so it runs on Android
+/// coefficient matrix — 370 kB of JSON and two loops — so it runs on Android
 /// and on web with no native dependency, no platform channel, no download.
 ///
 /// ## Preprocessing is a contract
