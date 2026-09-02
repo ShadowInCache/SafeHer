@@ -4,9 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/local/app_preferences.dart';
-import '../../../../shared/components/icons/sa_icon.dart';
-import '../../../../core/local/onboarding_prefs.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -166,38 +163,6 @@ class ProfilePreferencesSection extends ConsumerWidget {
                   ref.invalidate(appPreferencesProvider);
                 },
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.space3),
-        // hasSeenOnboarding is set the first time you tap Skip or Get Started
-        // and never cleared, so Splash routes past the introduction forever.
-        // Until now the only way back to it was clearing the app's data, which
-        // also signs you out.
-        SaCard(
-          semanticsLabel: 'Replay introduction',
-          onTap: () async {
-            await ref.read(onboardingPrefsProvider).resetSeenOnboarding();
-            if (!context.mounted) return;
-            context.go('/onboarding');
-          },
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Replay Introduction', style: AppTypography.bodyL.copyWith(color: onSurface)),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Show the three welcome screens again.',
-                      style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.6)),
-                    ),
-                  ],
-                ),
-              ),
-              SaIcon(SaIconGlyph.chevronRight, size: 16, color: onSurface.withValues(alpha: 0.35)),
             ],
           ),
         ),

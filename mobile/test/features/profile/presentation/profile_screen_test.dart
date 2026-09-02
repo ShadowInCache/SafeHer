@@ -245,32 +245,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     });
 
-    testWidgets('Replay Introduction clears the flag and returns to onboarding', (tester) async {
-      // hasSeenOnboarding is set the first time Skip or Get Started is tapped
-      // and was never cleared, so the introduction became unreachable without
-      // wiping the app's data -- which also signs the user out.
-      final store = FakeKeyValueStore();
-      await store.setBool('hasSeenOnboarding', true);
-
-      await tester.binding.setSurfaceSize(const Size(390, 1600));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-
-      await tester.pumpWidget(_harness(store: store));
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump(const Duration(milliseconds: 100));
-
-      final replay = find.text('Replay Introduction');
-      await tester.scrollUntilVisible(replay, 300, scrollable: find.byType(Scrollable).first);
-      await tester.ensureVisible(replay);
-      await tester.pump();
-      await tester.tap(replay);
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump(const Duration(milliseconds: 100));
-
-      expect(store.getBool('hasSeenOnboarding'), isFalse);
-      expect(find.text('onboarding-stub'), findsOneWidget);
-    });
-
     testWidgets('renders in light mode', (tester) async {
       await tester.pumpWidget(_harness(brightness: Brightness.light));
       await tester.pump(const Duration(milliseconds: 100));
