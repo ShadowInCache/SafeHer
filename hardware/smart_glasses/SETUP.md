@@ -112,7 +112,7 @@ app touches, and they stay tied to a boundary the user set herself.
 |---|---|---|
 | `/stream` | **Yes** | Scored on the phone at ~5 fps. Video never leaves the phone; only a score is sent onward. |
 | `/status` | **Yes** | Pairing and battery. |
-| `/audio` | No | Served and working. The audio threat signal uses the *phone's* microphone — see below. |
+| `/audio` | **Yes — evidence only** | Recorded during an emergency and uploaded with the incident. Not a threat signal. |
 | `/level` | No | Served and working. |
 
 **Why glasses audio is not the audio signal.** The phone's microphone is better
@@ -121,11 +121,14 @@ reachable over an I2S link. Android's `SpeechRecognizer` also cannot be fed a
 remote stream, so glasses audio cannot simply be substituted — it would need
 its own transcription path, which today means uploading it to the server.
 
-The two things glasses audio *is* well suited to, neither of which is built:
-**evidence capture** (audio from the wearer's head beats a phone in a bag) and
-a **loudness cue** (a shout is loud long before it is intelligible, and loudness
-survives wind and distance where a transcript does not). Say the word and I'll
-wire either.
+**Evidence capture is now wired.** During an emergency the app pulls `/audio`
+for up to two minutes and uploads it with the incident, alongside the phone's
+own recording. It needs no microphone permission and contends with nothing,
+because it is a network socket rather than the device microphone.
+
+The remaining unbuilt use is a **loudness cue** from `/level` — a shout is loud
+long before it is intelligible, and loudness survives wind and distance where a
+transcript does not. It would be supporting context, never a fusion input.
 
 ## Tuning
 
@@ -149,7 +152,7 @@ Everything worth changing is a named constant at the top of the sketch.
 | Stream stutters, ~3 fps | PSRAM off, or 5 GHz/weak WiFi, or `WiFi.setSleep` re-enabled |
 | App says "not a SafeHer camera" | Something else answered on that address — check the IP |
 | Works in debug, fails in release | Using a raw IP. Release builds permit cleartext only for `safeher-glasses.local` |
-| `microphone: UNAVAILABLE` | Expansion board not attached. Video still works; the app does not use glasses audio anyway |
+| `microphone: UNAVAILABLE` | Expansion board not attached. Video and weapon detection still work; only the second evidence recording is lost |
 
 ## The contract
 

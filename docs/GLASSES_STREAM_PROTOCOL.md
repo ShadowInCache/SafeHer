@@ -159,16 +159,22 @@ A dead stream reads as "not watching". It must never read as "watching and
 seeing nothing" — those are opposite claims, and the second one tells a woman
 she is covered when she is not.
 
-## Audio endpoints — served, not yet consumed
+## Audio endpoints
 
 The firmware also serves `GET /audio` (16 kHz mono WAV, streaming PCM) and
 `GET /level` (a single RMS figure in dBFS). **Neither is read by the app
 today**, and `/status` advertises `"audio": true|false` so a future client can
 tell whether the microphone came up.
 
-They are here so the hardware stops being the thing blocking that decision. See
-`hardware/smart_glasses/SETUP.md` for what glasses audio is and is not suited
-to.
+`/audio` **is** now consumed, for one purpose: evidence. During an emergency the
+app records it alongside the phone's own microphone, capped at two minutes or
+4 MB, and uploads it as a second `audio/wav` file on the incident. A microphone
+on the wearer's head is better placed than one in a bag, and because this is a
+network socket rather than the device microphone, it contends with nothing —
+the phone recording and threat listening both continue.
+
+It is still **not** a threat signal and feeds nothing into the fusion. `/level`
+remains unconsumed.
 
 ## Not part of this contract
 
