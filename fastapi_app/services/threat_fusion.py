@@ -41,11 +41,12 @@ and zone are still captured on the incident — see [SupportingContext].
 
 ## What is still honest about this module
 
-No trained model produces a weapon or audio score today: `ml_training/` holds
-training scripts and no weights, and no Smart Glasses hardware exists. The
-glove is the one real producer. So this engine is exercised end to end only by
-the glove and by scores a caller supplies, and `threat_models.py` reports which
-modalities are genuinely live rather than letting the UI imply three.
+All three signals now have producers. The glove runs XGBoost on the ESP32; the
+phone runs YOLOv8n over the glasses' video and a phrase classifier over
+recognised speech. `threat_models.py` still reports which modalities are
+genuinely live rather than letting the UI imply three, because a signal can be
+absent for ordinary reasons — no glasses paired, a refused microphone — and an
+absent signal must never be read as a calm one.
 """
 
 from __future__ import annotations

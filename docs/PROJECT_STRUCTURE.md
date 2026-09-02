@@ -14,8 +14,7 @@ SafeHer/
 ├── mobile/            Flutter app (Riverpod + GoRouter), every screen
 ├── glove/             Smart glove — firmware, dataset, and the ML pipeline
 ├── glasses/           Smart glasses — streaming firmware, no model on board
-├── ml_training/       Offline training for the server-side models
-├── cloud_functions/   Serverless inference (motion/voice/weapon/fusion)
+├── ml_models/         Server-side ONNX for the web weapon fallback
 ├── deployment/        Docker Compose stack, service configs, SQL
 ├── alembic/           Database migrations — 13, reversible
 ├── tests/             Backend test suite (pytest)
@@ -151,24 +150,6 @@ firmware side automatically.
 
 ---
 
-## `ml_training/` — offline training for the server-side models
-
-Independent of the backend — no imports in either direction. Distinct from
-`glove/ml/`, which trains the model that runs on the ESP32.
-
-```text
-ml_training/
-├── motion_detection/    train_motion_model.py → xgboost_motion_model.json
-├── voice_detection/     Voice distress detection
-├── weapon_detection/    YOLO-based weapon detection (torch/ultralytics)
-└── utils/               Shared training utilities
-```
-
-Not reproducible from a fresh clone — the raw dataset it expects at
-`dataset/raw/*.csv` is not committed.
-
----
-
 ## `glasses/` — smart glasses firmware
 
 ```text
@@ -207,12 +188,25 @@ mockups with no firmware anywhere in this repo.
 
 ---
 
-## `cloud_functions/` — serverless inference
+## Where model training lives
 
-Four independently-deployable functions (`deploy.sh`), each with its own
-`requirements.txt`: `motion_detection/`, `voice_analysis/`,
-`weapon_detection/`, and `threat_fusion/`, which combines the other three into
-one score.
+Two places, and only one of them is in this repository.
+
+`glove/ml/` trains the model that runs **on the ESP32** — collect, extract
+features, train, evaluate, convert to C arrays. It is here because its output is
+compiled into the firmware sitting beside it.
+
+The weapon, audio and expression models are trained **outside the repository**,
+because their datasets run to gigabytes. What is committed is only what ships:
+`mobile/assets/models/` for on-device artifacts, `ml_models/` for the
+server-side ONNX used by the web weapon fallback.
+
+**Two trees were deleted on 2026-09-02.** `ml_training/` trained on `np.random`
+synthetic data and left a `motion_training_results.json` reporting 98.17%
+accuracy — a model separating two uniform distributions it had generated itself,
+and a number nobody should ever quote. `cloud_functions/` implemented an earlier
+fusion design that `fastapi_app/services/threat_fusion.py` superseded, was never
+deployed, and loaded a `voice_model.pkl` that does not exist.
 
 ---
 

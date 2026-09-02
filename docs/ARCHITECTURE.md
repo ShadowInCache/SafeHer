@@ -15,13 +15,6 @@ flowchart TB
         Glasses["Smart Glasses (glasses/)\nMJPEG + audio to the phone"]
     end
 
-    subgraph CloudFn["cloud_functions/ (serverless)"]
-        Motion["motion_detection"]
-        Voice["voice_analysis"]
-        Weapon["weapon_detection"]
-        Fusion["threat_fusion"]
-    end
-
     subgraph Backend["fastapi_app/ (current backend)"]
         MQTTIn["mqtt_service.py"]
         Routers["routers/*\n/api/v1/..."]
@@ -55,7 +48,7 @@ flowchart TB
 sequenceDiagram
     participant Glove as ESP32 Smart Glove
     participant MQTT as fastapi_app mqtt_service.py
-    participant Fusion as cloud_functions/threat_fusion
+    participant Fusion as fastapi_app services/threat_fusion.py
     participant API as fastapi_app routers/alerts.py
     participant DB as Postgres/SQLite
     participant FCM as Firebase Cloud Messaging
@@ -250,10 +243,6 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full tree. In one line 
 - **`mobile/`** — the user-facing app. Every screen is wired to the real backend by
   default (see `AppConfig.useMockApi` in `mobile/lib/core/config`); a fixture-data mock
   flavor remains available via `--dart-define=USE_MOCK_API=true` for UI-only exploration.
-- **`ml_training/`** — produces the model artifacts (`xgboost_motion_model.json`,
-  `motion_training_results.json`) that `cloud_functions/motion_detection/` loads.
-  Training is not reproducible from a fresh clone — the raw dataset directory
-  `scripts/validate_dataset.py` expects isn't committed.
 - **`glove/`** — the smart glove that the app actually pairs with: firmware that
   runs XGBoost on the ESP32, the labelled dataset, and the collect → train →
   convert pipeline that produces the C arrays compiled into it. The only
@@ -273,9 +262,10 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full tree. In one line 
 
   No firmware exists for a "smart ring" or "pendant" despite both appearing in
   the mobile UI (see Known Gaps below).
-- **`cloud_functions/`** — the ML inference layer, deployable independently of the
-  main backend. `threat_fusion` is what `fastapi_app/routers/alerts.py` ultimately
-  calls through `services/processor_client.py`.
+- **`ml_models/`** — the ONNX weapon and expression models the backend loads for
+  the web fallback, where the phone has no on-device runtime. Optional: both
+  imports are lazy, and a deployment without them reports the modality
+  unavailable rather than failing.
 - **`deployment/`** — the only actively-used deployment path is
   `deployment/docker/docker-compose.yml`, a 4-container stack (Postgres, Redis,
   Mosquitto, one unified event-processor). `deployment/config/nginx.conf` and
@@ -318,9 +308,9 @@ Carried forward from the pre-audit documentation (`docs/archive/PROJECT_STATUS.m
 `TECHNICAL_INVENTORY.md`), reconfirmed during the 2026-08-08 audit, and revised
 on 2026-08-29 when the glove landed:
 
-- Weapon detection and voice analysis in `cloud_functions/` fall back to
-  `_create_synthetic_model()` in places — real trained models for those two modalities
-  were not fully wired in as of this audit.
+- The audio corpus is synthetic speech with a realistically degraded channel.
+  Nobody in it is genuinely frightened, and recording real distress speech
+  remains the honest next step.
 - No firmware exists for the "smart ring" or "pendant" device concepts shown in the
   mobile UI — only the glove and glasses are real.
 - **No physical glove has ever been paired.** BLE scanning and connection were
@@ -336,5 +326,7 @@ on 2026-08-29 when the glove landed:
 - Heart rate and battery are not implemented in the glove firmware. The
   telemetry characteristic sends zeros for both; the app reads a zero heart
   rate as "no sensor" rather than as a measurement.
-- The ML training pipeline (`ml_training/`) cannot be re-run from a clean clone — the
-  raw dataset it expects at `dataset/raw/*.csv` is not committed.
+- The weapon, audio and expression models cannot be retrained from a clean clone
+  — their datasets are gigabytes and live outside this repository. Only the
+  shipped artifacts and their measured results are committed. The glove's model
+  *is* reproducible here, from `glove/ml/`.

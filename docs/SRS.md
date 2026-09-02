@@ -421,9 +421,9 @@ Reduced motion: All animations respect MediaQuery.disableAnimations
 > **Motion Classifier revised 2026-08-21.** This row previously specified a
 > BiLSTM(128)+Attention over a 250×11 tensor including five flex-sensor
 > channels, producing five classes. That was never what was built or intended:
-> `ml_training/motion_detection/train_motion_model.py` trains an XGBoost
-> classifier over seven features — `acceleration_x/y/z`, `gyroscope_x/y/z` and
-> a derived `magnitude` — and flex readings do not enter the model at all. The
+> `glove/ml/scripts/train_glove_7class_xgboost_v5.py` trains an XGBoost
+> classifier over accelerometer and gyroscope statistics, and flex readings do
+> not enter the model at all — the 51 feature names confirm it. The
 > spec is corrected to the design rather than the design bent to a spec nobody
 > implemented. The flex sensors that tensor assumed have been removed from the
 > §9.1 BOM entirely — the glove senses motion and pulse only.

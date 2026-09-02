@@ -18,7 +18,7 @@ pip install -r requirements.txt
 
 `requirements.txt` covers three concerns in one file: the current FastAPI backend, the
 and the ML training pipeline
-(`ml_training/`). You don't need the ML stack (`torch`, `ultralytics`, `librosa`, ...)
+for model training. You don't need the ML stack (`torch`, `ultralytics`, `librosa`, ...)
 just to run the backend — see [DEPENDENCIES.md](DEPENDENCIES.md) if you want to trim
 your local install.
 
@@ -395,23 +395,32 @@ the account is created and the backend session provisioned, and the OTP screen s
 so and offers "Continue to SafeHer" rather than waiting on a code that will never
 arrive. Linking a phone credential is an enhancement, not a precondition.
 
-## 5. Run the ML training pipeline (optional)
+## 5. Retrain a model (optional)
+
+Only the glove's model trains inside this repository, because its output is
+compiled into the firmware beside it:
 
 ```bash
-python scripts/validate_dataset.py   # checks for a dataset/raw/*.csv tree — not committed
-python ml_training/motion_detection/train_motion_model.py
+python glove/ml/scripts/extract_glove_features.py
+python glove/ml/scripts/train_glove_7class_xgboost_v5.py
+python glove/ml/scripts/evaluate_v5.py          # the one that matters
 ```
 
-`validate_dataset.py` will fail its dataset checks on a fresh clone — the raw training
-data referenced by `ml_training/motion_detection/train_motion_model.py` isn't part of
-this repo. You need your own labeled dataset to reproduce `xgboost_motion_model.json`.
+`evaluate_v5.py` simulates the rule the app actually applies — two FALL windows
+above threshold within five seconds — over held-out recordings, rather than
+reporting a per-window accuracy that a mostly-NORMAL dataset would flatter.
+
+The weapon, audio and expression models train outside this repository; their
+datasets run to gigabytes. Only the shipped artifacts are committed, under
+`mobile/assets/models/` and `ml_models/`, each with its measured result recorded
+in `mobile/assets/models/README.md`.
 
 ## Development workflow
 
 ```bash
 make help          # list convenience targets
 make install        # pip install -r requirements.txt
-make clean           # remove __pycache__, *.pyc, ml_training/outputs/*, flutter build artifacts
+make clean           # remove __pycache__, *.pyc, flutter build artifacts
 make flutter-setup    # flutter pub get
 make flutter-run       # flutter run
 make flutter-build      # flutter build apk --release
