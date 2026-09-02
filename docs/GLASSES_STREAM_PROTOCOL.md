@@ -75,8 +75,13 @@ GET /status
 Returning JSON, used for pairing and for showing battery in the app:
 
 ```json
-{ "device": "safeher-glasses", "firmware": "1.0.0", "battery": 87 }
+{ "device": "safeher-glasses", "firmware": "1.1.0",
+  "video": true, "audio": true, "battery": 87 }
 ```
+
+`video` and `audio` report which streams actually came up. `audio: false` is an
+ordinary outcome — the expansion board may be absent, and the app does not use
+glasses audio regardless.
 
 `battery` is a percentage, or omitted if unknown. **Omit it rather than sending
 `0`** — the app treats an implausible zero as absent, the same way it does for
@@ -154,9 +159,22 @@ A dead stream reads as "not watching". It must never read as "watching and
 seeing nothing" — those are opposite claims, and the second one tells a woman
 she is covered when she is not.
 
+## Audio endpoints — served, not yet consumed
+
+The firmware also serves `GET /audio` (16 kHz mono WAV, streaming PCM) and
+`GET /level` (a single RMS figure in dBFS). **Neither is read by the app
+today**, and `/status` advertises `"audio": true|false` so a future client can
+tell whether the microphone came up.
+
+They are here so the hardware stops being the thing blocking that decision. See
+`hardware/smart_glasses/SETUP.md` for what glasses audio is and is not suited
+to.
+
 ## Not part of this contract
 
 The glasses' microphone is **not** used for the audio threat signal. That runs
 on the phone's own microphone through the platform speech recogniser, which is
-both better than anything achievable over an I2S link and already installed. See
-`mobile/assets/models/README.md`.
+better placed, better than anything achievable over an I2S link, and already
+installed. Android's `SpeechRecognizer` also cannot be fed a remote stream, so
+glasses audio could not simply be substituted for it — it would need its own
+transcription path. See `mobile/assets/models/README.md`.
