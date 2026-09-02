@@ -74,9 +74,24 @@ Frames arrive from the glasses over MJPEG (`mjpeg_client.dart`),
 15-frame window, and the result reaches `ThreatSignals.weapon` via
 `ThreatSignalAggregator`.
 
-**Android only.** The plugin has no web implementation, so `ThreatPipeline`
-refuses to construct the detector on web and the weapon signal is reported as
-absent there rather than as zero.
+**Two paths, and they are not the same promise.** The plugin has no web
+implementation, so `ThreatPipeline` picks a detector per platform:
+
+| | rate | where | what leaves the device |
+|---|---|---|---|
+| Android | ~5 fps, continuous | on the phone | nothing — only a score |
+| web | 1 frame / 2 s, sampled | `POST /alerts/weapon-frame` | the frame itself |
+
+`ThreatPipelineStatus.weaponOnDevice` publishes which one is running so the UI
+can say so. A sampled server-side check is weaker than a continuous local one,
+and presenting them as one thing would be the sort of claim this codebase keeps
+having to remove.
+
+The server path runs the **INT8 ONNX** export of the same weights from
+`ml_models/`, because `onnxruntime` on a CPU-only host is the opposite trade to
+Android's GPU delegate: INT8 is faster there. If no model is deployed the
+endpoint answers `available: false` and the client reports the modality
+**absent** — never zero, which would claim the camera looked and saw calm.
 
 ### Why fp16 and not INT8, and the export that had to be re-done
 
@@ -120,7 +135,16 @@ Training pipeline and full runs live outside this repo at
 
 ---
 
-## `emotion_mobilenetv3_fp16.onnx`
+## `emotion_mobilenetv3_fp16.onnx` — moved to `ml_models/`
+
+**No longer bundled in the app.** Nothing in `lib/` ever loaded it, so it was
+3.09 MB in every APK doing nothing. It now lives in `ml_models/` beside the
+server's weapon ONNX, where it is actually used: it runs on frames already
+uploaded by the web fallback, and its output goes into `SupportingContext`.
+
+It still cannot touch the threat score, and `tests/test_fusion_architecture.py`
+still fails if that drifts. The rest of this section describes the model as
+trained.
 
 MobileNetV3-Small, 7 expression classes, fp16. **3.09 MB.**
 
@@ -183,11 +207,23 @@ been deleted so they cannot be picked up by mistake.
 
 fp16 is the right target here: half the size, no measurable loss.
 
-### Not yet wired up
+### Where it runs, and the preprocessing that has to match
 
-As with the weapon detector, nothing in `lib/` loads this. There is no ONNX
-runtime dependency and no inference code. It is bundled and measured, and it
-does not run.
+Server-side only, in `fastapi_app/services/weapon_detector.py`, on frames the
+web fallback has already uploaded. Reading a frame twice is free; uploading one
+for this alone would not be worth it.
+
+**It classifies a face, not a scene.** A frame is passed through OpenCV's
+frontal-face cascade first, and no face means no expression rather than a
+confident label about a street. Input is 96×96, greyscale expanded to three
+channels, normalised with ImageNet statistics — the pipeline it was fine-tuned
+through.
+
+That contract was got wrong first: the initial version fed 48×48 scaled to
+0–1, which threw on every frame, was swallowed by the error handler, and
+returned null forever while the endpoint test passed. Only running it over real
+images surfaced it. `TestPreprocessingContract` now asserts the module's input
+size against the size the model itself declares.
 
 ### Licence
 

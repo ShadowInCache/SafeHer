@@ -39,6 +39,9 @@ torchaudio>=2.1.0
 xgboost>=2.0.0
 ultralytics>=8.0.0
 
+# Inference runtime for the server-side weapon fallback (web clients only)
+onnxruntime==1.29.0
+
 # Image Processing (for weapon detection)
 opencv-python==4.8.0.76
 Pillow==10.0.0

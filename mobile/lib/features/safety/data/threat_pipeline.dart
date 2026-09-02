@@ -10,6 +10,7 @@ import '../../../core/local/app_preferences.dart';
 import '../../../core/network/network_providers.dart';
 import '../../devices/data/glove_link_providers.dart';
 import '../../devices/data/mjpeg_client.dart';
+import '../../devices/data/remote_weapon_detector.dart';
 import '../../devices/data/ultralytics_weapon_detector.dart';
 import '../../devices/data/weapon_detection_service.dart';
 import '../../../shared/models/threat_level.dart';
@@ -165,13 +166,25 @@ class ThreatPipeline extends _$ThreatPipeline {
     // is absent rather than zero. Absent is the honest answer: a camera that
     // does not exist has not looked and seen nothing.
     final uri = ref.read(appPreferencesProvider).glassesStreamUri;
-    if (uri == null || !_canRunDetector) {
+    if (uri == null) {
       _setStatus(state.copyWith(weaponAvailable: false));
       return;
     }
 
+    // Android scores frames on the phone; web uploads a sample of them. The
+    // second is a weaker promise -- sampled rather than continuous, and the
+    // frame leaves the device -- which is why `weaponOnDevice` is published
+    // rather than left for the UI to assume.
+    final onDevice = _canRunDetector;
     final service = WeaponDetectionService(
-      detector: UltralyticsWeaponDetector(),
+      detector: onDevice
+          ? UltralyticsWeaponDetector()
+          : RemoteWeaponDetector(apiClient: ref.read(apiClientProvider)),
+      // Uploading at the on-device rate would be a frame every 200 ms over the
+      // network. The remote detector throttles itself as well; this keeps the
+      // service from even trying.
+      inferenceInterval:
+          onDevice ? const Duration(milliseconds: 200) : const Duration(seconds: 2),
     );
     final stream = GlassesVideoStream(streamUri: uri);
     _weapons = service;
@@ -190,7 +203,7 @@ class ThreatPipeline extends _$ThreatPipeline {
 
     service.watch(stream.frames);
     await stream.start();
-    _setStatus(state.copyWith(weaponAvailable: true));
+    _setStatus(state.copyWith(weaponAvailable: true, weaponOnDevice: onDevice));
   }
 
   /// The detector is Android-only. On web the plugin has no implementation, and
@@ -237,6 +250,7 @@ class ThreatPipelineStatus {
     this.audioUnavailable = false,
     this.glassesStreaming = false,
     this.weaponAvailable = false,
+    this.weaponOnDevice = false,
   });
 
   final bool armed;
@@ -253,8 +267,15 @@ class ThreatPipelineStatus {
   /// intention. A dead stream must never read as "watching and seeing nothing".
   final bool glassesStreaming;
 
-  /// Glasses are paired and this platform can run the detector.
+  /// Glasses are paired and something is scoring their frames.
   final bool weaponAvailable;
+
+  /// Whether that scoring happens on the phone.
+  ///
+  /// False means the web fallback: frames are uploaded and sampled rather than
+  /// scored continuously on the device. Those are different promises and the
+  /// UI must not present them as one.
+  final bool weaponOnDevice;
 
   ThreatPipelineStatus copyWith({
     bool? armed,
@@ -262,6 +283,7 @@ class ThreatPipelineStatus {
     bool? audioUnavailable,
     bool? glassesStreaming,
     bool? weaponAvailable,
+    bool? weaponOnDevice,
   }) =>
       ThreatPipelineStatus(
         armed: armed ?? this.armed,
@@ -269,5 +291,6 @@ class ThreatPipelineStatus {
         audioUnavailable: audioUnavailable ?? this.audioUnavailable,
         glassesStreaming: glassesStreaming ?? this.glassesStreaming,
         weaponAvailable: weaponAvailable ?? this.weaponAvailable,
+        weaponOnDevice: weaponOnDevice ?? this.weaponOnDevice,
       );
 }

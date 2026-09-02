@@ -138,6 +138,11 @@ DEFAULT_RULES = (
     # it several times -- and low enough that a script cannot spam a contact
     # list indefinitely.
     RateLimitRule("/api/v1/alerts/emergency", limit=30, window_seconds=600),
+    # Each frame runs YOLOv8n on the server's CPU, which is the most expensive
+    # thing an authenticated caller can ask for. The limit suits the sampled
+    # web fallback -- roughly one frame every two seconds for ten minutes --
+    # and refuses a client looping it as free GPU-less inference.
+    RateLimitRule("/api/v1/alerts/weapon-frame", limit=300, window_seconds=600),
     # Emails a code to an address the *caller* chose, which makes it the one
     # authenticated route that can send mail to a stranger. Without a limit,
     # an account can add any address as a "contact" and loop this endpoint to
