@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/audio/audio_threat_monitor.dart';
+import '../../../core/audio/microphone_arbiter.dart';
 import '../../../core/audio/threat_phrase_classifier.dart';
 import '../../../core/local/app_preferences.dart';
 import '../../../core/network/network_providers.dart';
@@ -112,6 +113,20 @@ class ThreatPipeline extends _$ThreatPipeline {
           );
     });
 
+    // Evidence recording outranks threat listening for the microphone. The
+    // platform hands it to one caller at a time, and the emergency screen
+    // starts recording the instant a countdown begins -- so the monitor has to
+    // be off the device by then, not competing with it.
+    ref.listen<MicrophoneUse>(microphoneArbiterProvider, (previous, use) {
+      if (use == MicrophoneUse.evidence) {
+        unawaited(_releaseMicrophone());
+      } else if (use == MicrophoneUse.idle && state.armed && _audio == null) {
+        unawaited(_guarded('audio', () => _startAudio(
+              ref.read(threatSignalAggregatorProvider),
+            )));
+      }
+    });
+
     ref.onDispose(() => unawaited(_stop()));
     return const ThreatPipelineStatus();
   }
@@ -136,13 +151,72 @@ class ThreatPipeline extends _$ThreatPipeline {
 
   Future<void> _start() async {
     final aggregator = ref.read(threatSignalAggregatorProvider)..arm();
-    await _startAudio(aggregator);
-    await _startVideo(aggregator);
-    _publish();
+    _setStatus(state.copyWith(armed: true));
+
+    // Started together, and each isolated from the other's failure.
+    //
+    // These used to run in sequence, `await _startAudio` then
+    // `await _startVideo`. That made the camera depend on the microphone: a
+    // phone that refused speech recognition, or a missing classifier asset,
+    // threw out of the first call and the weapon detector was never
+    // constructed. One unavailable signal silently became two, and the fusion
+    // engine cannot tell the difference between a signal that is absent
+    // because the hardware is missing and one that is absent because an
+    // unrelated component threw.
+    //
+    // `Future.wait` with `eagerError: false` starts both regardless and lets
+    // each fail alone; the per-signal catch below records which one did.
+    await Future.wait<void>(
+      [
+        _guarded('audio', () => _startAudio(aggregator)),
+        _guarded('video', () => _startVideo(aggregator)),
+      ],
+      eagerError: false,
+    );
+  }
+
+  /// Runs one signal's start-up so that its failure cannot reach the others.
+  ///
+  /// A thrown signal is recorded as unavailable rather than swallowed. "It did
+  /// not start" and "it started and heard nothing" are different facts, and
+  /// only the first one should ever be shown as a warning.
+  Future<void> _guarded(String signal, Future<void> Function() start) async {
+    try {
+      await start();
+    } catch (error, stackTrace) {
+      debugPrint('SafeHer: $signal signal failed to start: $error');
+      debugPrintStack(stackTrace: stackTrace, maxFrames: 6);
+      _setStatus(
+        signal == 'audio'
+            ? state.copyWith(audioListening: false, audioUnavailable: true)
+            : state.copyWith(weaponAvailable: false),
+      );
+    }
+  }
+
+  /// Stops listening and hands the microphone over, keeping the pipeline armed.
+  ///
+  /// Distinct from [_stop]: the journey is still running and the camera is
+  /// still watching. Only the audio signal pauses, and it resumes when the
+  /// recording ends.
+  Future<void> _releaseMicrophone() async {
+    if (_audio == null) return;
+    await _audioSub?.cancel();
+    _audioSub = null;
+    await _audio?.dispose();
+    _audio = null;
+    _setStatus(state.copyWith(audioListening: false, audioYieldedToEvidence: true));
   }
 
   Future<void> _startAudio(ThreatSignalAggregator aggregator) async {
     if (_audio != null) return;
+
+    // Refused while evidence holds the device. Starting anyway would make the
+    // two contend, and the one that loses might be the recording.
+    if (!ref.read(microphoneArbiterProvider.notifier).claimForThreatListening()) {
+      _setStatus(state.copyWith(audioListening: false, audioYieldedToEvidence: true));
+      return;
+    }
 
     final classifier = await ref.read(threatPhraseClassifierProvider.future);
     final monitor = AudioThreatMonitor(classifier: classifier);
@@ -153,9 +227,13 @@ class ThreatPipeline extends _$ThreatPipeline {
     });
 
     final started = await monitor.start();
+    if (!started) {
+      ref.read(microphoneArbiterProvider.notifier).releaseThreatListening();
+    }
     _setStatus(state.copyWith(
       audioListening: started,
       audioUnavailable: !started,
+      audioYieldedToEvidence: false,
     ));
   }
 
@@ -228,10 +306,9 @@ class ThreatPipeline extends _$ThreatPipeline {
     _weapons = null;
 
     ref.read(threatSignalAggregatorProvider).disarm();
+    ref.read(microphoneArbiterProvider.notifier).releaseThreatListening();
     _setStatus(const ThreatPipelineStatus());
   }
-
-  void _publish() => _setStatus(state.copyWith(armed: true));
 
   /// Single place every status change goes through, so the mirror the UI reads
   /// can never drift from what is actually running.
@@ -251,6 +328,7 @@ class ThreatPipelineStatus {
     this.glassesStreaming = false,
     this.weaponAvailable = false,
     this.weaponOnDevice = false,
+    this.audioYieldedToEvidence = false,
   });
 
   final bool armed;
@@ -277,6 +355,12 @@ class ThreatPipelineStatus {
   /// UI must not present them as one.
   final bool weaponOnDevice;
 
+  /// Listening paused because evidence recording holds the microphone.
+  ///
+  /// Not the same as unavailable: nothing is broken and it resumes on its own.
+  /// The UI must not warn about it.
+  final bool audioYieldedToEvidence;
+
   ThreatPipelineStatus copyWith({
     bool? armed,
     bool? audioListening,
@@ -284,6 +368,7 @@ class ThreatPipelineStatus {
     bool? glassesStreaming,
     bool? weaponAvailable,
     bool? weaponOnDevice,
+    bool? audioYieldedToEvidence,
   }) =>
       ThreatPipelineStatus(
         armed: armed ?? this.armed,
@@ -292,5 +377,7 @@ class ThreatPipelineStatus {
         glassesStreaming: glassesStreaming ?? this.glassesStreaming,
         weaponAvailable: weaponAvailable ?? this.weaponAvailable,
         weaponOnDevice: weaponOnDevice ?? this.weaponOnDevice,
+        audioYieldedToEvidence:
+            audioYieldedToEvidence ?? this.audioYieldedToEvidence,
       );
 }

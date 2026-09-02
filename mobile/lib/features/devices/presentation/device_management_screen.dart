@@ -10,6 +10,7 @@ import '../../../shared/components/icons/sa_icon.dart';
 import '../../../shared/components/navigation/sa_bottom_nav_bar.dart';
 import '../data/device_providers.dart';
 import 'widgets/ble_pairing_sheet.dart';
+import 'widgets/glasses_status_card.dart';
 import 'widgets/device_expandable_card.dart';
 import 'widgets/pair_device_card.dart';
 
@@ -54,6 +55,18 @@ class DeviceManagementScreen extends ConsumerWidget {
                   data: (devices) => Text('Devices (${devices.length})'),
                   orElse: () => const Text('Devices'),
                 ),
+              ),
+              // The camera is not a BLE peripheral, so it is never in the list
+              // below. Shown above it, always, because "no camera connected"
+              // is the state that silently disables weapon detection.
+              const SliverPadding(
+                padding: EdgeInsets.fromLTRB(
+                  AppSpacing.screenMarginPhone,
+                  AppSpacing.screenMarginPhone,
+                  AppSpacing.screenMarginPhone,
+                  0,
+                ),
+                sliver: SliverToBoxAdapter(child: GlassesStatusCard()),
               ),
               devicesAsync.when(
                 data: (devices) => devices.isEmpty
