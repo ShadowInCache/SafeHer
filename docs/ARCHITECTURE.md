@@ -11,8 +11,8 @@ nothing imported it; it remains in git history if it is ever needed.
 flowchart TB
     subgraph Devices["Physical devices"]
         Glove["ESP32 Smart Glove (glove/)\non-device XGBoost"]
-        GloveOld["ESP32 glove (hardware/)\nraw telemetry"]
-        Glasses["ESP32-CAM Smart Glasses\nframe streaming"]
+        GloveOld["Legacy glove firmware\nraw telemetry over MQTT"]
+        Glasses["Smart Glasses (glasses/)\nMJPEG + audio to the phone"]
     end
 
     subgraph CloudFn["cloud_functions/ (serverless)"]
@@ -258,11 +258,21 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full tree. In one line 
   runs XGBoost on the ESP32, the labelled dataset, and the collect → train →
   convert pipeline that produces the C arrays compiled into it. The only
   detector in the system producing real scores today.
-- **`hardware/`** — an earlier generation: `esp32_glove/` publishes raw telemetry
-  over MQTT and does no inference, and `smart_glasses/` streams camera frames.
-  Kept because the MQTT ingestion path still exists in the backend. No firmware
-  exists for a "smart ring" or "pendant" despite both appearing in the mobile UI
-  (see Known Gaps below).
+- **`glasses/`** — the XIAO ESP32-S3 Sense firmware, which runs no model and
+  streams VGA MJPEG plus 16 kHz audio to the phone. An ESP32-S3 is two orders of
+  magnitude short of YOLOv8n, so the phone scores the frames; see
+  `WEAPON_INFERENCE_PLACEMENT.md`. Legacy sketches sit beside it under
+  `glasses/firmware/legacy_*`, including one that targets a different board and
+  does not compile.
+
+  Each device now owns one folder, current and legacy firmware together. The
+  earlier split — current glove under `glove/` and an older MQTT glove under
+  `hardware/esp32_glove/` — put one device in two trees and read as duplication.
+  The legacy MQTT sketch is kept at `glove/firmware/legacy_mqtt/` because the
+  MQTT ingestion path still exists in the backend.
+
+  No firmware exists for a "smart ring" or "pendant" despite both appearing in
+  the mobile UI (see Known Gaps below).
 - **`cloud_functions/`** — the ML inference layer, deployable independently of the
   main backend. `threat_fusion` is what `fastapi_app/routers/alerts.py` ultimately
   calls through `services/processor_client.py`.

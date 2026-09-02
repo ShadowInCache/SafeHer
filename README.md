@@ -154,7 +154,7 @@ SafeHer/
 ├── tests/             Backend test suite (pytest)
 ├── ml_training/       Offline training pipelines + trained artifacts
 ├── cloud_functions/   Serverless inference (motion/voice/weapon/fusion)
-├── hardware/          ESP32 firmware — smart glove, smart glasses
+├── glasses/           Smart glasses — streaming firmware (runs no model)
 ├── deployment/        Docker Compose stack, configs, SQL
 ├── scripts/           Operational scripts
 └── docs/              Every project document (see below)

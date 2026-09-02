@@ -84,5 +84,5 @@ mobile/flutter_*.txt
 .playwright-mcp/
 
 # Firmware credentials. `secrets.h.example` is committed; `secrets.h` is not.
-hardware/**/secrets.h
+glasses/**/secrets.h
 glove/**/secrets.h

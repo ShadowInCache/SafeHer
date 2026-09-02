@@ -46,7 +46,7 @@ No external libraries are needed. `esp_camera`, `ESPmDNS`, `WiFi`,
 ## 3. Credentials
 
 ```
-cd hardware/smart_glasses/SafeHer_Glasses_Stream
+cd glasses/firmware/SafeHer_Glasses_Stream
 cp secrets.h.example secrets.h
 ```
 

@@ -90,7 +90,7 @@ alike.
 
 ## The change needed to the current firmware
 
-`hardware/smart_glasses/Working_XIAO_ESP32_noise2/` currently does this after
+`glasses/firmware/legacy_noise_alarm/` currently does this after
 cloud setup:
 
 ```c

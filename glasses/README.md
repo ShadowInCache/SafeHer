@@ -14,7 +14,7 @@ own model on the ESP32 and reports a *conclusion* over BLE. The glasses report
 *raw frames* over WiFi. Each sensor's model lives wherever it fits.
 
 ```text
-hardware/smart_glasses/
+glasses/
 ├── SafeHer_Glasses_Stream/          ← the one the app uses
 │   ├── SafeHer_Glasses_Stream.ino   Camera, mic, HTTP server, mDNS
 │   └── secrets.h.example            Copy to secrets.h (gitignored)

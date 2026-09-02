@@ -13,8 +13,8 @@ SafeHer/
 ├── fastapi_app/       Backend — FastAPI, the only backend mobile/ talks to
 ├── mobile/            Flutter app (Riverpod + GoRouter), every screen
 ├── glove/             Smart glove — firmware, dataset, and the ML pipeline
+├── glasses/           Smart glasses — streaming firmware, no model on board
 ├── ml_training/       Offline training for the server-side models
-├── hardware/          Earlier ESP32 sketches (glove over MQTT, smart glasses)
 ├── cloud_functions/   Serverless inference (motion/voice/weapon/fusion)
 ├── deployment/        Docker Compose stack, service configs, SQL
 ├── alembic/           Database migrations — 13, reversible
@@ -34,12 +34,12 @@ move: `fastapi_app.main:app` is the import path the deployment, Dockerfile,
 Makefile and every test rely on, and relocating it would buy tidiness at the
 cost of the one thing that has to keep working.
 
-> **On `glove/` and `hardware/esp32_glove/`.** Both are glove firmware and they
-> are not the same generation. `hardware/esp32_glove/smart_glove.ino` publishes
-> raw telemetry to the backend over MQTT and does no inference. `glove/` runs
-> the model on the ESP32 and talks to the phone over BLE with no server in the
-> path. `glove/` is the one the app pairs with; `hardware/` is kept because the
-> MQTT ingestion path still exists in the backend.
+> **Two glove firmwares, one folder.** `glove/firmware/legacy_mqtt/smart_glove.ino`
+> publishes raw telemetry to the backend over MQTT and does no inference.
+> `glove/firmware/SafeHer_Glove_V5_OnDevice/` runs the model on the ESP32 and
+> talks to the phone over BLE with no server in the path. The second is the one
+> the app pairs with; the first is kept because the MQTT ingestion path still
+> exists in the backend.
 
 ---
 
@@ -169,23 +169,38 @@ Not reproducible from a fresh clone — the raw dataset it expects at
 
 ---
 
-## `hardware/` — device firmware
+## `glasses/` — smart glasses firmware
 
 ```text
-hardware/
-├── esp32_glove/smart_glove.ino          Earlier: MPU6050 + panic button, MQTT over TLS
-└── smart_glasses/
-    ├── README.md                        What it serves and why — start here
-    ├── SETUP.md                         Board settings, flashing, verification
+glasses/
+├── README.md                            What it serves and why — start here
+├── SETUP.md                             Board settings, flashing, verification
+└── firmware/
     ├── SafeHer_Glasses_Stream/          CURRENT — MJPEG + audio + mDNS
-    ├── smart_glasses.ino                Legacy, targets ESP32-CAM, does not compile
-    └── Working_XIAO_ESP32_noise2/       Legacy noise alarm, superseded
+    ├── legacy_esp32cam/                 Targets a different board, does not compile
+    └── legacy_noise_alarm/              Noise alarm that preceded streaming
 ```
 
 The glasses run no model. They stream VGA MJPEG and 16 kHz audio to the phone,
 which scores the frames — an ESP32-S3 is two orders of magnitude short of
 YOLOv8n (`WEAPON_INFERENCE_PLACEMENT.md`). The glove is the opposite: it runs
 its model on-device and reports a conclusion over BLE.
+
+**One folder per device, current and legacy firmware together.** Until
+2026-09-02 the glove lived in two trees — `glove/` for the current BLE firmware
+and `hardware/esp32_glove/` for an older MQTT one — which read as duplication
+rather than as two generations. The legacy sketches now sit beside the firmware
+they succeeded:
+
+```text
+glove/firmware/
+├── SafeHer_Glove_V5_OnDevice/           CURRENT — on-device XGBoost over BLE
+└── legacy_mqtt/smart_glove.ino          Earlier: raw telemetry over MQTT
+```
+
+`legacy_mqtt` is kept because the MQTT ingestion path still exists in the
+backend. `legacy_esp32cam` is kept for reference only — it includes two headers
+that are not in this repository and cannot be built.
 
 The mobile UI also shows a "Smart Ring" and "Pendant". Those are product-vision
 mockups with no firmware anywhere in this repo.
