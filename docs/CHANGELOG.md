@@ -7,6 +7,48 @@ until the first tagged release.
 
 ## [Unreleased]
 
+### 2026-09-01 — the third signal, and the scorer that decides what a detection means
+
+#### Added
+- **CNN+LSTM audio keyword spotter.** Google Speech Commands v0.02, canonical
+  split. **98.9% test accuracy**, `stop` at 99.3% recall / 99.0% precision,
+  every target word above 93% on both. INT8 at **1.12 MB**, lossless.
+- **`WeaponScorer`** — turns per-frame detections into `weapon_score` using a
+  vote over the last five frames rather than the best single frame. `0.84,
+  0.88, 0.86` is a weapon; `0.42, 0.08, 0.03` is a reflection and scores as
+  one. Frames expire, so a detection from before the camera cut out cannot
+  combine with one after it. 11 tests.
+
+#### Fixed
+- **`_silence_` was a class with zero samples** — declared in the label space
+  and absent from the data, because torchaudio's loader yields only spoken
+  words. It scored 0.0% recall on 0 support. Now built from the corpus's
+  `_background_noise_`, reaching 100% recall. This matters for deployment more
+  than for the metric: a keyword spotter that has only ever heard speech will
+  confidently hear a word in traffic noise.
+- **The silence generator re-decoded minute-long WAVs hundreds of times**,
+  exhausting virtual memory on a 3.7 MiB allocation and starving the GPU to 7%
+  utilisation. Each source is now read once and sliced; GPU went to 97%.
+
+#### Not done, deliberately
+The `onnxruntime` Flutter package was **not** added. It has no web support
+("coming soon") and web is a declared target; it was last published two years
+ago by an unverified uploader. Taking an unmaintained native dependency that
+breaks one of two platforms, for a code path with no camera or microphone feed,
+is not correct wiring. The scoring rules are built and tested; running the
+models stays a seam, as `BleService` and `SafetyForegroundService` already are.
+
+#### Where the three signals stand
+- **glove** — trained, connected, raising alarms
+- **weapon** — trained (mAP@0.5 0.907), scorer built and tested, no frame source
+- **audio** — trained (98.9%), no scorer yet, no microphone feed
+
+Emotion is trained too (65.5%) and stays supporting evidence: its `fear` class
+runs at 47% recall, which is the argument for keeping it out of the score.
+
+758 mobile tests, 468 backend, analyzer clean. APK 76.3 → 77.2 MB.
+
+
 ### 2026-09-01 — a facial-expression classifier, and why it stays out of the score
 
 #### Added

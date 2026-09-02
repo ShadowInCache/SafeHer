@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/sensors/shake_detector.dart';
 import '../../data/glove_auto_trigger.dart';
 import '../../data/safety_providers.dart';
+import '../../data/threat_pipeline.dart';
 
 /// Runs the opt-in shake trigger, and turns the glove's alarm decisions into
 /// the SOS countdown.
@@ -122,6 +123,15 @@ class _SafetyTriggerListenerState extends ConsumerState<SafetyTriggerListener> {
     // connected. Watched here because this widget sits above the router and
     // so outlives every screen, which is the lifetime the service needs.
     ref.watch(gloveWatchServiceProvider);
+
+    // Starts and stops the three-signal pipeline with the active journey.
+    //
+    // A `keepAlive` provider is still lazy — it does nothing at all until
+    // something reads it — so without this line the microphone and the weapon
+    // detector would be fully wired, fully tested and never once constructed.
+    // Read here for the same reason as the line above: this widget outlives
+    // every screen, and detection must not stop because she navigated away.
+    ref.watch(threatPipelineProvider);
 
     return widget.child;
   }

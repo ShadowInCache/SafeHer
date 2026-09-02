@@ -10,6 +10,8 @@ abstract class LocalKeyValueStore {
   Future<void> setDouble(String key, double value);
   int getInt(String key, {int defaultValue = 0});
   Future<void> setInt(String key, int value);
+  String getString(String key, {String defaultValue = ''});
+  Future<void> setString(String key, String value);
 }
 
 class HiveKeyValueStore implements LocalKeyValueStore {
@@ -34,4 +36,11 @@ class HiveKeyValueStore implements LocalKeyValueStore {
 
   @override
   Future<void> setInt(String key, int value) => _box.put(key, value);
+
+  @override
+  String getString(String key, {String defaultValue = ''}) =>
+      _box.get(key, defaultValue: defaultValue) as String;
+
+  @override
+  Future<void> setString(String key, String value) => _box.put(key, value);
 }

@@ -228,7 +228,7 @@ Every one of these is enforced in CI and measured, not asserted.
 | `pytest tests/` | **468 passing**, 7 skipped |
 | `flutter test` | **747 passing** |
 | `flutter analyze` | **0 issues** |
-| `flutter build apk --release` | **0 errors** (76.3 MB) |
+| `flutter build apk --release` | **0 errors** (77.2 MB) |
 | `flutter build web --release` | **0 errors** |
 | Mobile line coverage | **75.2%** (SRS gate: >70%) |
 | Alembic empty → head → base → head | **reversible**, verified on SQLite *and* Postgres |
@@ -333,7 +333,10 @@ Requirement-by-requirement detail: [docs/SRS_STATUS.md](docs/SRS_STATUS.md).
       detector
 - [x] Train the facial-expression classifier — done 2026-09-01, 65.5%, and
       `fear` is its weakest class at 47% recall; supporting evidence only
-- [ ] Train the audio (CNN+LSTM) model
+- [x] Train the audio CNN+LSTM — done 2026-09-01, 98.9%, `stop` at 99.3%
+      recall. It does **not** detect "help"; no public dataset contains real
+      distress speech, so that needs SafeHer's own recordings
+- [ ] Record a `help` corpus — the one thing no dataset can supply
 - [ ] Verify a deployed web build end to end (it compiles; nobody has used it)
 - [ ] Move `/alerts/live` scoring into Redis so it survives restarts
 - [ ] Sweep for stale `in_progress` dispatches (a killed worker currently strands one)

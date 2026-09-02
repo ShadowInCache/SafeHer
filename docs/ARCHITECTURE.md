@@ -196,9 +196,12 @@ shouting — capped so corroboration alone can never trigger.
   no inference code, so `weapon_score` has no producer. It runs on the phone
   rather than the glasses — an ESP32 is two orders of magnitude short, and
   `docs/WEAPON_INFERENCE_PLACEMENT.md` has the arithmetic.
-- **Audio** — does not exist. `ml_training/voice_detection/` holds a script
-  that extracts scalar summary features and is not the CNN+LSTM the
-  architecture calls for.
+- **Audio** — *trained but not connected*, as of 2026-09-01. A CNN+LSTM
+  keyword spotter at 98.9% on Speech Commands, `stop` at 99.3% recall,
+  quantised to 1.12 MB at `mobile/assets/models/`. **It does not detect
+  "help"** — no public dataset holds genuine distress speech, and none can be
+  collected with consent. What it proves is the pipeline; the vocabulary needs
+  SafeHer's own recordings. `ThreatSignals.audio` still has no producer.
 
 **Facial expression** is trained too (MobileNetV3-Small, 65.5% on FER2013,
 `mobile/assets/models/emotion_mobilenetv3_fp16.onnx`) and is **not** in the

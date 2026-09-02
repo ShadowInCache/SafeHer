@@ -1,14 +1,14 @@
 # On-device models
 
-## `weapon_yolov8n_int8.onnx`
+## `weapon_yolov8n_fp16.tflite`
 
-YOLOv8-nano, two classes, INT8-quantised. **3.36 MB.**
+YOLOv8-nano, two classes, LiteRT with fp16 weights. **6.13 MB.**
 
 | | |
 |---|---|
 | Classes | `0 pistol`, `1 knife` — order matters, see `weapon_labels.txt` |
-| Input | `1×3×640×640`, RGB, float32, normalised 0–1 |
-| Output | `1×6×8400` — `[cx, cy, w, h, pistol_conf, knife_conf]` per anchor |
+| Input | `1×640×640×3` (NHWC), RGB, float32, normalised 0–1 |
+| Output | `1×6×8400` — `[cx, cy, w, h, pistol_conf, knife_conf]` per anchor, **box coordinates normalised 0–1** |
 | Trained | v2, 2026-08-31, 120 epochs, RTX 3050 |
 | Data | 7,539 images / 8,689 boxes — Open Images V7 + OD-WeaponDetection + Sohas |
 
@@ -66,12 +66,45 @@ persistence rule and the fusion engine's smoothing. **Trading precision for
 recall by lowering the confidence threshold is a product decision that has not
 been made.**
 
-### Not yet wired up
+### Wired up
 
-Nothing in `lib/` loads this file. It is bundled and validated; there is no
-inference code, no ONNX runtime dependency in `pubspec.yaml`, and
-`weapon_score` still has no producer. `DetectionSources` does not claim
-otherwise.
+`UltralyticsWeaponDetector` loads it through the `ultralytics_yolo` plugin.
+Frames arrive from the glasses over MJPEG (`mjpeg_client.dart`),
+`WeaponDetectionService` throttles inference to ~5 fps and votes over a
+15-frame window, and the result reaches `ThreatSignals.weapon` via
+`ThreatSignalAggregator`.
+
+**Android only.** The plugin has no web implementation, so `ThreatPipeline`
+refuses to construct the detector on web and the weapon signal is reported as
+absent there rather than as zero.
+
+### Why fp16 and not INT8, and the export that had to be re-done
+
+INT8 would be 3.4 MB against 6.13, and it is the wrong trade here. The GPU
+delegate executes in fp16; an INT8 graph often falls back to CPU and loses more
+to the fallback than it saved in size, and this runs continuously on live video.
+
+The first conversion also had to be thrown away, which is the more useful
+lesson. Ultralytics refuses TFLite export on Windows, so the model was
+converted by hand via ONNX and `onnx2tf`. It measured **mAP 0.0** — while being
+a perfectly healthy model. `diagnose_tflite.py` ran the interpreter directly and
+found sensible detections with boxes spanning 4.9 to 635.9 pixels. The problem
+was a convention mismatch: ultralytics' own exports normalise box coordinates to
+0–1 and its runtime multiplies them back up, so absolute pixels were multiplied
+by 640 and every box landed off-frame.
+
+That mattered beyond the test. The Flutter plugin is Ultralytics' own and reads
+Ultralytics' convention, so the same file would have failed identically on the
+phone — where there is no mAP to notice it with. The export now normalises, and
+`export_tflite.py` re-validates on the real 658-image test split and refuses to
+ship anything more than 0.03 below the PyTorch baseline.
+
+| | mAP@0.5 | mAP@0.5:0.95 | P | R |
+|---|---|---|---|---|
+| PyTorch fp32 | 0.907 | 0.653 | 0.896 | 0.833 |
+| **LiteRT fp16** | **0.906** | 0.627 | 0.903 | 0.831 |
+
+Per class after conversion: pistol 0.931, knife 0.881.
 
 ### Attribution required
 
@@ -161,3 +194,110 @@ does not run.
 FER2013 was released for the ICML 2013 Challenges in Representation Learning.
 Verify the terms attach to your use before any commercial release. Weights are
 initialised from torchvision's ImageNet MobileNetV3-Small.
+
+---
+
+## `phrase_classifier.json`
+
+TF-IDF into logistic regression, executed in pure Dart. **196 kB.**
+
+| | |
+|---|---|
+| Classes | `distress`, `normal`, `threat` |
+| Input | a transcript string from the platform's speech recogniser |
+| Output | three probabilities; the fusion signal is `P(threat) + P(distress)` |
+| Features | 1,005 word 1–2 grams + 2,882 `char_wb` 3–5 grams = 3,887 |
+| Trained | 2026-09-02, on 348 phrases of text |
+
+### What replaced the CNN+LSTM, and why
+
+`audio_cnnlstm_int8.onnx` used to sit here — a waveform classifier that scored
+**98.9%** on Google Speech Commands. It has been removed from the app.
+
+Two things were wrong with it. The first was the task: it spotted the words
+`stop`, `no`, `off`, `down`. Nobody being attacked says "down". The second was
+that when it was re-measured on the phrases that actually matter, it scored
+**54.5%** on unseen phrasings — *below* the 70.5% that a plain fuzzy string
+match managed. It was 1.12 MB shipped to every user to do worse than `if`.
+
+The replacement splits the problem in two. The platform's own speech recogniser
+turns audio into words, and this model reads the words. That generalises to
+phrasings nobody wrote down, which was the whole difficulty: "I'll hurt you"
+and "I'm going to hurt you" share `hurt` and `you`, and a model over words
+sees that where a model over waveforms does not.
+
+### Measured on held-out phrasings
+
+The test set is 714 clips of phrases **never seen in training** — the split is
+by phrase, not by clip, so no wording appears on both sides.
+
+| boundary | accuracy | recall | specificity |
+|---|---|---|---|
+| **elevated vs normal** | **0.905** | **0.968** | 0.790 |
+| three-way label | 0.877 | — | — |
+
+The binary row is the headline because it is the decision the model actually
+makes. `ThreatSignals.audio` is a single number; threat and distress both mean
+"raise the score", so a distress clip labelled `threat` costs nothing, while a
+distress clip labelled `normal` is a woman asking for help and being scored as
+small talk. Only 15 of 462 elevated clips were missed, and twelve of those are
+the ASR truncating a phrase to the words "this way".
+
+Specificity 0.790 is the real cost: about a fifth of ordinary speech scores
+above 0.5. That is survivable only because no signal triggers an alarm alone —
+`threat_fusion` weights audio at 0.35 and applies a solo-signal floor, a
+threshold, hysteresis and dedup on top.
+
+### What the training data is, and what it is not
+
+`phrases.py` holds 174 phrases synthesised with `edge-tts` across many voices;
+`extra_training_phrases.py` adds ~250 more as **text only**, which is free for a
+model that reads strings and never sees a waveform.
+
+The additions were chosen from measured errors rather than intuition. The
+largest single cluster of misses was "this is an emergency" — wrong on all
+seventeen of its clips, because the training vocabulary contained no form of the
+word *emergency* at all. `assert_no_leakage()` fails the build if any added
+phrase collides verbatim with one in `phrases.py`; it caught eight collisions on
+the day it was written, and one (`"I'm being followed"`) that had been inflating
+every number measured before it.
+
+**These are TTS voices reading calmly, not people in danger.** ASR quality on
+real shouted speech was measured separately on BERSt: `tiny.en` reached 60% word
+error rate on *non-shouted* speech and 78% on shouted. That is why the front
+half is the platform recogniser rather than a bundled Whisper — and why the
+honest next step is recording real speech, not adding more synthetic phrases.
+
+### Preprocessing is a contract
+
+The weights were fitted by scikit-learn and are executed by hand-written Dart,
+so the features must be built exactly as scikit-learn builds them. Three details
+do the damage if missed: the word analyser drops single-character tokens;
+`char_wb` pads each word with spaces before cutting n-grams; and each vectoriser
+L2-normalises **its own block** before they are concatenated.
+
+Get any of them wrong and the classifier stays confident and becomes incorrect,
+silently. So `export_phrase_classifier.py` also writes 50 fixtures of real
+transcripts with the probabilities the Python model produced, and
+`threat_phrase_classifier_test.dart` asserts parity to 1e-4. It currently agrees
+to **7e-7** — and it earned its place immediately, by catching that the first
+version of the exporter fed raw transcripts to `predict_proba` while every other
+consumer used the normaliser.
+
+### One deliberate refusal
+
+A transcript containing no known word returns `normal` at 0.0 elevated, rather
+than falling through to the model's class prior. `class_weight="balanced"` was
+fitted across two elevated classes and one normal one, so an empty input scores
+**0.56 elevated** on the intercepts alone — a microphone hearing silence would
+report more than halfway to an emergency, continuously. "Nothing heard" and
+"nothing wrong" are different claims, and this is the only place that can tell
+them apart.
+
+### Licence
+
+The phrases are original to this project. Voices are Microsoft Edge neural TTS,
+used to generate training audio only. BERSt (CC BY 4.0) was used for evaluation
+and is not redistributed here.
+
+Training pipeline lives outside this repo at `D:\SafeHer-ML\audio_threat\`.

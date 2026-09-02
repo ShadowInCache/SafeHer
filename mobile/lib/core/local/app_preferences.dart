@@ -29,6 +29,7 @@ const kDefaultCountdownSeconds = 5;
 const _kAutoRecord = 'autoRecordEnabled';
 const _kDarkMode = 'darkModeEnabled';
 const _kBiometric = 'biometricEnabled';
+const _kGlassesHost = 'glassesHost';
 
 /// User-configurable safety/appearance preferences (Profile > Preferences),
 /// persisted via [LocalKeyValueStore] so they survive app restarts.
@@ -62,6 +63,26 @@ class AppPreferences {
   Future<void> setDarkModeEnabled(bool value) => _store.setBool(_kDarkMode, value);
 
   bool get biometricEnabled => _store.getBool(_kBiometric, defaultValue: false);
+
+  /// Where the glasses serve their video, as `host` or `host:port`.
+  ///
+  /// Empty until a pair of glasses has actually been paired, and that emptiness
+  /// is load-bearing: with no address there is no stream, so weapon detection
+  /// reports nothing rather than reporting calm. A default guess like
+  /// `192.168.4.1` would be worse than nothing — it would let the app claim to
+  /// be watching whatever happened to answer on that address.
+  String get glassesHost => _store.getString(_kGlassesHost, defaultValue: '');
+
+  Future<void> setGlassesHost(String value) =>
+      _store.setString(_kGlassesHost, value.trim());
+
+  /// The MJPEG endpoint, or null when no glasses are paired.
+  Uri? get glassesStreamUri {
+    final host = glassesHost;
+    if (host.isEmpty) return null;
+    final withScheme = host.startsWith('http') ? host : 'http://$host';
+    return Uri.tryParse('$withScheme/stream');
+  }
 
   /// Puts every account-scoped preference back to its default.
   ///
