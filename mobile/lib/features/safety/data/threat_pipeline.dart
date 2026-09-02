@@ -150,7 +150,20 @@ class ThreatPipeline extends _$ThreatPipeline {
   }
 
   Future<void> _start() async {
-    final aggregator = ref.read(threatSignalAggregatorProvider)..arm();
+    // The one step both signals genuinely depend on, so it is guarded too.
+    // It sat outside the isolation below and threw into an unawaited future:
+    // if the aggregator could not be built, all three signals died at once
+    // and nothing recorded why. Nothing can be reported without it, so the
+    // honest outcome is an unarmed pipeline that says so.
+    final ThreatSignalAggregator aggregator;
+    try {
+      aggregator = ref.read(threatSignalAggregatorProvider)..arm();
+    } catch (error, stackTrace) {
+      debugPrint('SafeHer: threat pipeline could not arm: $error');
+      debugPrintStack(stackTrace: stackTrace, maxFrames: 6);
+      _setStatus(const ThreatPipelineStatus());
+      return;
+    }
     _setStatus(state.copyWith(armed: true));
 
     // Started together, and each isolated from the other's failure.
