@@ -381,7 +381,7 @@ generic 500. No secrets are tracked in the repository.
 - `audit_system.py` — dead script auditing the (now-archived) legacy Flask gateway,
   referenced by nothing else in the repo.
 - `hardware/esp32_cam/smart_glasses.ino` — byte-identical duplicate of
-  `hardware/smart_glasses/smart_glasses.ino`.
+  `glasses/firmware/legacy_esp32cam/smart_glasses.ino`.
 - `deployment/docker/dy` — a stray cached HTTP error response, not source code.
 
 ### Fixed / Security

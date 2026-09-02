@@ -172,6 +172,18 @@ class GlassesPairing extends _$GlassesPairing {
     }
   }
 
+  /// `http://<host>/audio`, or null when no camera is paired.
+  ///
+  /// Separate from the stream URI because the two are consumed by different
+  /// things for different reasons: video feeds the weapon detector during a
+  /// journey, audio is captured only as evidence during an incident.
+  Uri? get audioUri {
+    final host = state.host;
+    if (host.isEmpty) return null;
+    final withScheme = host.startsWith('http') ? host : 'http://$host';
+    return Uri.tryParse('$withScheme/audio');
+  }
+
   Future<void> unpair() async {
     await ref.read(appPreferencesProvider).setGlassesHost('');
     state = const GlassesPairingState();

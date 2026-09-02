@@ -13,9 +13,8 @@ SafeHer/
 ├── fastapi_app/       Backend — FastAPI, the only backend mobile/ talks to
 ├── mobile/            Flutter app (Riverpod + GoRouter), every screen
 ├── glove/             Smart glove — firmware, dataset, and the ML pipeline
-├── ml_training/       Offline training for the server-side models
-├── hardware/          Earlier ESP32 sketches (glove over MQTT, smart glasses)
-├── cloud_functions/   Serverless inference (motion/voice/weapon/fusion)
+├── glasses/           Smart glasses — streaming firmware, no model on board
+├── ml_models/         Server-side ONNX for the web weapon fallback
 ├── deployment/        Docker Compose stack, service configs, SQL
 ├── alembic/           Database migrations — 13, reversible
 ├── tests/             Backend test suite (pytest)
@@ -34,12 +33,12 @@ move: `fastapi_app.main:app` is the import path the deployment, Dockerfile,
 Makefile and every test rely on, and relocating it would buy tidiness at the
 cost of the one thing that has to keep working.
 
-> **On `glove/` and `hardware/esp32_glove/`.** Both are glove firmware and they
-> are not the same generation. `hardware/esp32_glove/smart_glove.ino` publishes
-> raw telemetry to the backend over MQTT and does no inference. `glove/` runs
-> the model on the ESP32 and talks to the phone over BLE with no server in the
-> path. `glove/` is the one the app pairs with; `hardware/` is kept because the
-> MQTT ingestion path still exists in the backend.
+> **Two glove firmwares, one folder.** `glove/firmware/legacy_mqtt/smart_glove.ino`
+> publishes raw telemetry to the backend over MQTT and does no inference.
+> `glove/firmware/SafeHer_Glove_V5_OnDevice/` runs the model on the ESP32 and
+> talks to the phone over BLE with no server in the path. The second is the one
+> the app pairs with; the first is kept because the MQTT ingestion path still
+> exists in the backend.
 
 ---
 
@@ -151,43 +150,63 @@ firmware side automatically.
 
 ---
 
-## `ml_training/` — offline training for the server-side models
-
-Independent of the backend — no imports in either direction. Distinct from
-`glove/ml/`, which trains the model that runs on the ESP32.
+## `glasses/` — smart glasses firmware
 
 ```text
-ml_training/
-├── motion_detection/    train_motion_model.py → xgboost_motion_model.json
-├── voice_detection/     Voice distress detection
-├── weapon_detection/    YOLO-based weapon detection (torch/ultralytics)
-└── utils/               Shared training utilities
+glasses/
+├── README.md                            What it serves and why — start here
+├── SETUP.md                             Board settings, flashing, verification
+└── firmware/
+    ├── SafeHer_Glasses_Stream/          CURRENT — MJPEG + audio + mDNS
+    ├── legacy_esp32cam/                 Targets a different board, does not compile
+    └── legacy_noise_alarm/              Noise alarm that preceded streaming
 ```
 
-Not reproducible from a fresh clone — the raw dataset it expects at
-`dataset/raw/*.csv` is not committed.
+The glasses run no model. They stream VGA MJPEG and 16 kHz audio to the phone,
+which scores the frames — an ESP32-S3 is two orders of magnitude short of
+YOLOv8n (`WEAPON_INFERENCE_PLACEMENT.md`). The glove is the opposite: it runs
+its model on-device and reports a conclusion over BLE.
 
----
-
-## `hardware/` — earlier device firmware
+**One folder per device, current and legacy firmware together.** Until
+2026-09-02 the glove lived in two trees — `glove/` for the current BLE firmware
+and `hardware/esp32_glove/` for an older MQTT one — which read as duplication
+rather than as two generations. The legacy sketches now sit beside the firmware
+they succeeded:
 
 ```text
-hardware/
-├── esp32_glove/smart_glove.ino      MPU6050 + panic button, MQTT over TLS
-└── smart_glasses/smart_glasses.ino  ESP32-CAM frame streaming
+glove/firmware/
+├── SafeHer_Glove_V5_OnDevice/           CURRENT — on-device XGBoost over BLE
+└── legacy_mqtt/smart_glove.ino          Earlier: raw telemetry over MQTT
 ```
+
+`legacy_mqtt` is kept because the MQTT ingestion path still exists in the
+backend. `legacy_esp32cam` is kept for reference only — it includes two headers
+that are not in this repository and cannot be built.
 
 The mobile UI also shows a "Smart Ring" and "Pendant". Those are product-vision
 mockups with no firmware anywhere in this repo.
 
 ---
 
-## `cloud_functions/` — serverless inference
+## Where model training lives
 
-Four independently-deployable functions (`deploy.sh`), each with its own
-`requirements.txt`: `motion_detection/`, `voice_analysis/`,
-`weapon_detection/`, and `threat_fusion/`, which combines the other three into
-one score.
+Two places, and only one of them is in this repository.
+
+`glove/ml/` trains the model that runs **on the ESP32** — collect, extract
+features, train, evaluate, convert to C arrays. It is here because its output is
+compiled into the firmware sitting beside it.
+
+The weapon, audio and expression models are trained **outside the repository**,
+because their datasets run to gigabytes. What is committed is only what ships:
+`mobile/assets/models/` for on-device artifacts, `ml_models/` for the
+server-side ONNX used by the web weapon fallback.
+
+**Two trees were deleted on 2026-09-02.** `ml_training/` trained on `np.random`
+synthetic data and left a `motion_training_results.json` reporting 98.17%
+accuracy — a model separating two uniform distributions it had generated itself,
+and a number nobody should ever quote. `cloud_functions/` implemented an earlier
+fusion design that `fastapi_app/services/threat_fusion.py` superseded, was never
+deployed, and loaded a `voice_model.pkl` that does not exist.
 
 ---
 

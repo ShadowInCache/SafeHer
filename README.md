@@ -104,16 +104,14 @@ flowchart LR
     subgraph Cloud
         API["fastapi_app<br/>14 routers · 78 routes"]
         DB[("Postgres<br/>13 migrations")]
-        CF["cloud_functions<br/>motion · voice · weapon · fusion"]
     end
 
     P["Emergency contacts<br/>SMS · email · push"]
     M["Flutter app<br/>263 Dart files"]
 
     G -- "BLE, no server" --> M
-    S -- MQTT --> API
+    S -- "MJPEG over WiFi" --> M
     API <--> DB
-    CF --> API
     API -- "WebSocket + FCM" --> M
     M -- "REST + JWT, cert-pinned" --> API
     API -. "background fan-out" .-> P
@@ -152,9 +150,8 @@ SafeHer/
 ├── glove/             Smart glove — firmware, dataset, on-device ML pipeline
 ├── alembic/           Database migrations (13, reversible)
 ├── tests/             Backend test suite (pytest)
-├── ml_training/       Offline training pipelines + trained artifacts
-├── cloud_functions/   Serverless inference (motion/voice/weapon/fusion)
-├── hardware/          ESP32 firmware — smart glove, smart glasses
+├── ml_models/         Server-side ONNX for the web weapon fallback
+├── glasses/           Smart glasses — streaming firmware (runs no model)
 ├── deployment/        Docker Compose stack, configs, SQL
 ├── scripts/           Operational scripts
 └── docs/              Every project document (see below)

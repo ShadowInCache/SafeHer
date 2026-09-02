@@ -28,6 +28,8 @@ import 'widgets/emergency_countdown_stage.dart';
 import 'widgets/emergency_dispatched_stage.dart';
 import 'widgets/emergency_pre_activation_stage.dart';
 import '../../../core/audio/microphone_arbiter.dart';
+import '../../devices/data/glasses_pairing_controller.dart';
+import '../../devices/data/glasses_audio_recorder.dart';
 
 enum EmergencyStage { preActivation, countdown, dispatched, cancelled }
 
@@ -93,9 +95,20 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
   /// journey — leaving the screen would silently cost a signal.
   late final MicrophoneArbiter _microphone;
 
+  /// Records the glasses' microphone, when a pair is connected.
+  ///
+  /// Null whenever no camera is paired, which is the ordinary case — the
+  /// recorder is built at trigger time from the saved address rather than held
+  /// open for a journey that may never need it.
+  GlassesAudioRecorder? _glassesAudio;
+
   /// Whether the camera actually opened. Reported after dispatch so the
   /// user knows what was captured, never prompted for mid-emergency.
   bool _hasVideo = false;
+
+  /// Whether the glasses' stream actually opened. Reported after dispatch,
+  /// never prompted for mid-emergency.
+  bool _hasGlassesAudio = false;
   LocationResult? _location;
 
   @override
@@ -119,6 +132,7 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
     // Not awaited: dispose cannot be async, and an abandoned recording must
     // still be torn down rather than left holding the microphone.
     unawaited(_recorder.cancel());
+    unawaited(_glassesAudio?.cancel() ?? Future<void>.value());
     // And the arbiter must be told, or threat listening never resumes for the
     // rest of the journey — leaving the screen would silently cost a signal.
     //
@@ -258,6 +272,7 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
       }),
     );
     _startVideo();
+    _startGlassesAudio();
   }
 
   /// Video runs alongside audio, on its own failure path.
@@ -268,6 +283,50 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
   /// no permission, no lens, already in use — is an ordinary outcome and
   /// must cost nothing. It is swallowed here rather than surfaced, because
   /// there is no action the user could usefully take mid-emergency.
+  /// Records the glasses' microphone alongside everything else.
+  ///
+  /// Its own failure path, and deliberately silent. A pair of glasses out of
+  /// range, switched off, or never paired is the ordinary case, and there is
+  /// nothing the user could usefully do about it mid-emergency.
+  ///
+  /// Unlike the phone recorder this needs no microphone permission and takes
+  /// nothing from `MicrophoneArbiter` — it is a network socket, so it runs
+  /// alongside both the phone recording and threat listening without
+  /// contending for the device.
+  void _startGlassesAudio() {
+    final uri = ref.read(glassesPairingProvider.notifier).audioUri;
+    if (uri == null) return;
+
+    final recorder = GlassesAudioRecorder(streamUri: uri);
+    _glassesAudio = recorder;
+    unawaited(
+      recorder.start().then((started) {
+        if (mounted && started) setState(() => _hasGlassesAudio = true);
+      }).catchError((Object _) {}),
+    );
+  }
+
+  /// Stops the glasses recording and returns it for upload, or null.
+  ///
+  /// A discarded alert discards this too, for the same reason it discards the
+  /// video: an incident that was never created has nothing to attach it to,
+  /// and keeping a recording of someone's emergency on the device is exactly
+  /// what the evidence path exists to avoid.
+  Future<EvidenceRecording?> _finishGlassesAudio(String? incidentId) async {
+    final recorder = _glassesAudio;
+    _glassesAudio = null;
+    if (recorder == null) return null;
+    if (incidentId == null) {
+      await recorder.cancel();
+      return null;
+    }
+    try {
+      return await recorder.stop();
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _startVideo() {
     unawaited(
       _videoRecorder.start().then((_) {
@@ -295,6 +354,7 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
     // Video is settled first and independently, so that an audio path that
     // returns early below cannot strand a camera still recording.
     final video = await _finishVideo(incidentId);
+    final glassesAudio = await _finishGlassesAudio(incidentId);
 
     if (!_recorder.isRecording) return;
 
@@ -333,6 +393,22 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
     // Audio first, then video. If the connection dies partway, the
     // recording that works regardless of where the phone was is the one
     // already on the server.
+    // The glasses recording goes up after the phone's, for the same reason
+    // video does: the phone's microphone is the one recording guaranteed to
+    // exist, so it is the one that must reach the server first. This is a
+    // second vantage point, not a replacement.
+    if (glassesAudio != null) {
+      try {
+        await ref
+            .read(evidenceRepositoryProvider)
+            .upload(incidentId: incidentId, recording: glassesAudio);
+      } catch (_) {
+        // Not surfaced. Reporting "evidence not uploaded" because the glasses
+        // leg failed would misdescribe a phone recording that is safely
+        // stored, and there is nothing the user could do about it either way.
+      }
+    }
+
     if (video != null) {
       // Not retried as hard as the audio and its failure is not surfaced:
       // video is a bonus when the lens happened to be pointed at something,
@@ -591,6 +667,7 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
                     dispatchResult: _dispatchResult,
                     evidence: _evidence,
                     hasVideo: _hasVideo,
+                    hasGlassesAudio: _hasGlassesAudio,
                     onMarkSafe: _markSafe,
                     location: _location,
                   ),

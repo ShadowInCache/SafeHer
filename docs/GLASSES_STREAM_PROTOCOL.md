@@ -75,8 +75,13 @@ GET /status
 Returning JSON, used for pairing and for showing battery in the app:
 
 ```json
-{ "device": "safeher-glasses", "firmware": "1.0.0", "battery": 87 }
+{ "device": "safeher-glasses", "firmware": "1.1.0",
+  "video": true, "audio": true, "battery": 87 }
 ```
+
+`video` and `audio` report which streams actually came up. `audio: false` is an
+ordinary outcome — the expansion board may be absent, and the app does not use
+glasses audio regardless.
 
 `battery` is a percentage, or omitted if unknown. **Omit it rather than sending
 `0`** — the app treats an implausible zero as absent, the same way it does for
@@ -85,7 +90,7 @@ alike.
 
 ## The change needed to the current firmware
 
-`hardware/smart_glasses/Working_XIAO_ESP32_noise2/` currently does this after
+`glasses/firmware/legacy_noise_alarm/` currently does this after
 cloud setup:
 
 ```c
@@ -154,9 +159,28 @@ A dead stream reads as "not watching". It must never read as "watching and
 seeing nothing" — those are opposite claims, and the second one tells a woman
 she is covered when she is not.
 
+## Audio endpoints
+
+The firmware also serves `GET /audio` (16 kHz mono WAV, streaming PCM) and
+`GET /level` (a single RMS figure in dBFS). **Neither is read by the app
+today**, and `/status` advertises `"audio": true|false` so a future client can
+tell whether the microphone came up.
+
+`/audio` **is** now consumed, for one purpose: evidence. During an emergency the
+app records it alongside the phone's own microphone, capped at two minutes or
+4 MB, and uploads it as a second `audio/wav` file on the incident. A microphone
+on the wearer's head is better placed than one in a bag, and because this is a
+network socket rather than the device microphone, it contends with nothing —
+the phone recording and threat listening both continue.
+
+It is still **not** a threat signal and feeds nothing into the fusion. `/level`
+remains unconsumed.
+
 ## Not part of this contract
 
 The glasses' microphone is **not** used for the audio threat signal. That runs
 on the phone's own microphone through the platform speech recogniser, which is
-both better than anything achievable over an I2S link and already installed. See
-`mobile/assets/models/README.md`.
+better placed, better than anything achievable over an I2S link, and already
+installed. Android's `SpeechRecognizer` also cannot be fed a remote stream, so
+glasses audio could not simply be substituted for it — it would need its own
+transcription path. See `mobile/assets/models/README.md`.
