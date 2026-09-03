@@ -93,7 +93,15 @@ WiFiClient videoClient;
 
 // SafeHer app: a separate slot for the HTTP audio stream, so a phone recording
 // evidence does not evict the video client and vice versa.
+//
+// Guarded by a mutex because it is the one object two cores share: the
+// streaming task (core 0) assigns it when a client asks for /audio, and loop()
+// (core 1) writes samples to it. WiFiClient is reference-counted, so an
+// assignment landing mid-write frees the socket underneath the writer and the
+// board reboots — intermittently, and only once someone actually records
+// evidence, which is the worst way to find a bug.
 WiFiClient audioHttpClient;
+SemaphoreHandle_t audioClientLock = NULL;
 
 // =====================================================
 // CAMERA INITIALIZATION
@@ -383,9 +391,13 @@ void videoStreamTask(void *parameter) {
 
       } else if (path == "/audio") {
 
+        sendWavHeader(newClient);
+
+        xSemaphoreTake(audioClientLock, portMAX_DELAY);
         if (audioHttpClient) audioHttpClient.stop();
         audioHttpClient = newClient;
-        sendWavHeader(audioHttpClient);
+        xSemaphoreGive(audioClientLock);
+
         Serial.println("Audio client connected (HTTP).");
 
       } else {
@@ -519,13 +531,16 @@ void streamAudio() {
   }
 
   // SafeHer app: the same samples over HTTP, for the evidence recorder.
-  if (audioHttpClient) {
-    if (audioHttpClient.connected()) {
-      audioHttpClient.write((uint8_t*)audioBuffer, bytesRead);
-    } else {
-      audioHttpClient.stop();
-      Serial.println("Audio client disconnected (HTTP).");
+  if (xSemaphoreTake(audioClientLock, 0) == pdTRUE) {
+    if (audioHttpClient) {
+      if (audioHttpClient.connected()) {
+        audioHttpClient.write((uint8_t*)audioBuffer, bytesRead);
+      } else {
+        audioHttpClient.stop();
+        Serial.println("Audio client disconnected (HTTP).");
+      }
     }
+    xSemaphoreGive(audioClientLock);
   }
 }
 
@@ -543,6 +558,8 @@ void setup() {
   Serial.println("       SAFEHER LIVE STREAMING");
   Serial.println("       XIAO ESP32-S3 SENSE");
   Serial.println("========================================");
+
+  audioClientLock = xSemaphoreCreateMutex();
 
   startCamera();
   startMicrophone();
