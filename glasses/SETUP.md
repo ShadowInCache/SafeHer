@@ -40,8 +40,13 @@ will get `fatal error: driver/i2s_pdm.h: No such file or directory`.
 | Flash Size | 8 MB | — |
 | Upload Speed | 921600 | Slower is fine if uploads fail |
 
-No external libraries are needed. `esp_camera`, `ESPmDNS`, `WiFi`,
-`esp_http_server` and `driver/i2s_pdm.h` all ship with the board package.
+**One external library.** Sketch → Include Library → Manage Libraries →
+install **WebSockets** by Markus Sattler. It serves the raw-PCM WebSocket on
+port 81 that the standalone demo uses; the app itself does not need it, but the
+sketch will not compile without it.
+
+Everything else — `esp_camera`, `ESPmDNS`, `WiFi`, `driver/i2s_pdm.h` — ships
+with the board package.
 
 ## 3. Credentials
 
@@ -84,7 +89,7 @@ From a computer on the same WiFi:
 
 | Check | Expect |
 |---|---|
-| `http://safeher-glasses.local/status` | `{"device":"safeher-glasses","firmware":"1.1.0","video":true,"audio":true}` |
+| `http://safeher-glasses.local/status` | `{"device":"safeher-glasses","firmware":"1.2.0","video":true,"audio":true}` |
 | `http://safeher-glasses.local/stream` in a browser | Live video |
 | `http://safeher-glasses.local/level` | `{"level_db":-42.3,"available":true}` — clap and watch it rise |
 | `http://safeher-glasses.local/audio` | Downloads/plays a WAV stream |
