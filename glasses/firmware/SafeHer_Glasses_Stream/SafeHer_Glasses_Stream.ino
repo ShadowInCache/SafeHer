@@ -146,19 +146,19 @@ void startCamera() {
   //
   // If FB-OVF errors return on the serial monitor, this is the first thing to
   // put back to FRAMESIZE_QVGA; a stable QVGA stream beats a stuttering VGA one.
-  config.frame_size = FRAMESIZE_VGA;
+  config.frame_size = FRAMESIZE_QVGA;
 
   // Lower number = better quality on this driver. 20 was chosen for a smaller
   // frame at QVGA; 12 at VGA keeps frames near 30-60 kB, which is what
   // sustains a usable rate over 2.4 GHz WiFi.
-  config.jpeg_quality = 12;
+  config.jpeg_quality = 20;
 
   // SafeHer app: two buffers so capture and transmit overlap. With one, the
   // sensor stalls waiting for the previous frame to finish sending and the
   // frame rate roughly halves. Needs PSRAM, which the Sense variant has.
-  config.fb_count = 2;
+  config.fb_count = 1;
 
-  config.grab_mode = CAMERA_GRAB_LATEST;
+  config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
   config.fb_location = CAMERA_FB_IN_PSRAM;
 
   if (!psramFound()) {
@@ -228,8 +228,12 @@ void startMicrophone() {
 void connectWiFi() {
 
   WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+WiFi.setSleep(false);
+
+// Set the Wi-Fi hostname used by the SafeHer app
+WiFi.setHostname(MDNS_HOSTNAME);
+
+WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   Serial.print("Connecting to Wi-Fi");
 
@@ -329,29 +333,58 @@ void sendWavHeader(WiFiClient &client) {
 // pairing failed with no useful message.
 
 String readRequestPath(WiFiClient &client) {
+    unsigned long start = millis();
 
-  unsigned long deadline = millis() + 1000;
+    // Wait briefly for the HTTP request to arrive
+    while (client.connected() && !client.available()) {
+        if (millis() - start > 2000) {
+            return "";
+        }
+        delay(1);
+    }
 
-  while (!client.available()) {
-    if (millis() > deadline) return "";
-    delay(1);
-  }
+    if (!client.available()) {
+        return "";
+    }
 
-  String line = client.readStringUntil('\n');   // e.g. "GET /status HTTP/1.1"
+    // Read the first HTTP request line
+    String requestLine = client.readStringUntil('\n');
+    requestLine.trim();
 
-  int first = line.indexOf(' ');
-  if (first < 0) return "";
+    Serial.print("HTTP REQUEST: ");
+    Serial.println(requestLine);
 
-  int second = line.indexOf(' ', first + 1);
-  if (second < 0) return "";
+    // Expected:
+    // GET /stream HTTP/1.1
 
-  // Drain the remaining headers so the socket is clean.
-  while (client.available()) {
-    String header = client.readStringUntil('\n');
-    if (header.length() <= 1) break;
-  }
+    if (!requestLine.startsWith("GET ")) {
+        return "";
+    }
 
-  return line.substring(first + 1, second);
+    int startPos = 4;
+    int endPos = requestLine.indexOf(' ', startPos);
+
+    if (endPos == -1) {
+        return "";
+    }
+
+    String path = requestLine.substring(startPos, endPos);
+
+    // Read and discard the remaining HTTP headers
+    while (client.connected() && client.available()) {
+        String header = client.readStringUntil('\n');
+        header.trim();
+
+        if (header.length() == 0) {
+            break;
+        }
+    }
+
+    Serial.print("REQUEST PATH: [");
+    Serial.print(path);
+    Serial.println("]");
+
+    return path;
 }
 
 // =====================================================
@@ -381,42 +414,61 @@ void videoStreamTask(void *parameter) {
       newClient.setTimeout(1000);
 
       String path = readRequestPath(newClient);
+      Serial.print("REQUEST PATH: [");
+Serial.print(path);
+Serial.println("]");
 
       if (path == "/status") {
 
-        // Answered and closed immediately, so pairing never has to wait for
-        // the video slot to free up.
-        sendStatus(newClient);
-        newClient.stop();
+    sendStatus(newClient);
+    newClient.stop();
 
-      } else if (path == "/audio") {
+} else if (path == "/audio") {
 
-        sendWavHeader(newClient);
+    sendWavHeader(newClient);
 
-        xSemaphoreTake(audioClientLock, portMAX_DELAY);
-        if (audioHttpClient) audioHttpClient.stop();
-        audioHttpClient = newClient;
-        xSemaphoreGive(audioClientLock);
+    xSemaphoreTake(audioClientLock, portMAX_DELAY);
+    if (audioHttpClient) {
+        audioHttpClient.stop();
+    }
 
-        Serial.println("Audio client connected (HTTP).");
+    audioHttpClient = newClient;
 
-      } else {
+    xSemaphoreGive(audioClientLock);
 
-        // "/stream", "/" or anything else — the app asks for /stream.
-        if (videoClient) videoClient.stop();
-        videoClient = newClient;
+    Serial.println("Audio client connected (HTTP).");
 
-        Serial.println("Video client connected.");
+} else if (path == "/stream") {
 
-        videoClient.println("HTTP/1.1 200 OK");
-        videoClient.println(
-            "Content-Type: multipart/x-mixed-replace; boundary=frame");
-        videoClient.println("Cache-Control: no-cache, no-store, must-revalidate");
-        videoClient.println("Access-Control-Allow-Origin: *");
-        videoClient.println();
+    if (videoClient) {
+        videoClient.stop();
+    }
 
-        delay(50);
-      }
+    videoClient = newClient;
+
+    Serial.println("Video client connected.");
+
+    videoClient.println("HTTP/1.1 200 OK");
+    videoClient.println(
+        "Content-Type: multipart/x-mixed-replace; boundary=frame");
+    videoClient.println(
+        "Cache-Control: no-cache, no-store, must-revalidate");
+    videoClient.println("Access-Control-Allow-Origin: *");
+    videoClient.println();
+
+    delay(50);
+
+} else {
+
+    // Ignore browser requests such as /favicon.ico
+    Serial.print("Unknown request: ");
+    Serial.println(path);
+
+    newClient.println("HTTP/1.1 404 Not Found");
+    newClient.println("Connection: close");
+    newClient.println();
+    newClient.stop();
+}
     }
 
     // =================================================
@@ -438,27 +490,50 @@ void videoStreamTask(void *parameter) {
       // The phone's parser reads Content-Length and consumes exactly that many
       // bytes, so a part without one is skipped and a wrong one desynchronises
       // the whole stream rather than costing a single frame.
-      videoClient.print("--frame\r\n");
-      videoClient.print("Content-Type: image/jpeg\r\n");
-      videoClient.print("Content-Length: ");
-      videoClient.print(frameLength);
-      videoClient.print("\r\n\r\n");
+     videoClient.print("--frame\r\n");
+videoClient.print("Content-Type: image/jpeg\r\n");
+videoClient.print("Content-Length: ");
+videoClient.print(frameLength);
+videoClient.print("\r\n\r\n");
 
-      size_t written = videoClient.write(fb->buf, frameLength);
+// Send the JPEG in smaller chunks.
+// This prevents a large frame from being only partially written.
+size_t sent = 0;
 
-      esp_camera_fb_return(fb);
+while (sent < frameLength && videoClient.connected()) {
 
-      videoClient.print("\r\n");
+    size_t remaining = frameLength - sent;
+    size_t chunkSize = (remaining > 1024) ? 1024 : remaining;
 
-      if (written != frameLength) {
-        Serial.println("Incomplete video transmission.");
-        videoClient.stop();
-      }
+    size_t written = videoClient.write(
+        fb->buf + sent,
+        chunkSize
+    );
 
+    if (written == 0) {
+        Serial.println("Video transmission failed.");
+        break;
+    }
+
+    sent += written;
+
+    // Give the Wi-Fi stack time to process the data.
+    delay(1);
+}
+
+esp_camera_fb_return(fb);
+
+if (sent != frameLength) {
+    Serial.println("Incomplete video transmission.");
+    videoClient.stop();
+    continue;
+}
+
+videoClient.print("\r\n");
       // SafeHer app: the phone infers at about 5 fps and votes over a window
       // of frames, so ~10 fps here is ample. The old 150 ms gave 6-7 fps at
       // QVGA; 100 ms at VGA is a better match without saturating the link.
-      delay(100);
+      delay(150);
 
     } else {
       delay(10);
