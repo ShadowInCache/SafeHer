@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/local/app_preferences.dart';
+import 'glasses_dio.dart';
+import 'glasses_providers.dart';
 
 part 'glasses_pairing_controller.g.dart';
 
@@ -99,8 +101,9 @@ class GlassesPairing extends _$GlassesPairing {
   @visibleForTesting
   set client(Dio value) => _client = value;
 
-  Dio get _dio => _client ??= Dio(
-        BaseOptions(connectTimeout: _timeout, receiveTimeout: _timeout),
+  Dio get _dio => _client ??= glassesDio(
+        resolver: ref.read(glassesResolverProvider),
+        timeout: _timeout,
       );
 
   static Uri? statusUri(String host) {
@@ -185,6 +188,7 @@ class GlassesPairing extends _$GlassesPairing {
   }
 
   Future<void> unpair() async {
+    ref.read(glassesResolverProvider).clearCache();
     await ref.read(appPreferencesProvider).setGlassesHost('');
     state = const GlassesPairingState();
   }
@@ -193,7 +197,9 @@ class GlassesPairing extends _$GlassesPairing {
   static String _explain(DioException error) => switch (error.type) {
         DioExceptionType.connectionTimeout ||
         DioExceptionType.receiveTimeout =>
-          'No answer. Check the camera is on and on this WiFi network.',
+          'No answer. Check the camera is on and on the same WiFi. If it '
+              'still will not connect, enter its IP address instead of the '
+              '.local name.',
         DioExceptionType.badResponse =>
           'The camera answered with an error (${error.response?.statusCode}).',
         _ => 'Could not reach the camera at that address.',

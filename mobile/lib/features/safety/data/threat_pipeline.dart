@@ -8,6 +8,8 @@ import '../../../core/audio/audio_threat_monitor.dart';
 import '../../../core/audio/microphone_arbiter.dart';
 import '../../../core/audio/threat_phrase_classifier.dart';
 import '../../../core/local/app_preferences.dart';
+import '../../devices/data/glasses_dio.dart';
+import '../../devices/data/glasses_providers.dart';
 import '../../../core/network/network_providers.dart';
 import '../../devices/data/glove_link_providers.dart';
 import '../../devices/data/mjpeg_client.dart';
@@ -286,7 +288,13 @@ class ThreatPipeline extends _$ThreatPipeline {
       inferenceInterval:
           onDevice ? const Duration(milliseconds: 200) : const Duration(seconds: 2),
     );
-    final stream = GlassesVideoStream(streamUri: uri);
+    // The stream reaches the glasses through the same mDNS-resolving client
+    // pairing uses, so `safeher-glasses.local` connects on Android too. The
+    // resolver's cache is shared, so reconnects do not re-query.
+    final stream = GlassesVideoStream(
+      streamUri: uri,
+      dio: glassesDio(resolver: ref.read(glassesResolverProvider)),
+    );
     _weapons = service;
     _video = stream;
 

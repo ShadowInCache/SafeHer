@@ -127,6 +127,7 @@ dependencies:
   # Misc used by connectivity-aware offline queue
   connectivity_plus: ^6.1.4
   flutter_foreground_task: ^10.0.0
+  multicast_dns: ^0.3.3+1
 
 dev_dependencies:
   flutter_launcher_icons: ^0.14.1

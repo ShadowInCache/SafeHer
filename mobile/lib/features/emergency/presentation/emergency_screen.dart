@@ -15,6 +15,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/theme/theme_extensions.dart';
+import '../../devices/data/glasses_providers.dart';
+import '../../devices/data/glasses_dio.dart';
 import '../../../shared/components/icons/sa_icon.dart';
 import '../../../shared/utils/random_id.dart';
 import '../../../shared/components/overlays/sa_bottom_sheet.dart';
@@ -297,7 +299,10 @@ class _EmergencyScreenState extends ConsumerState<EmergencyScreen> {
     final uri = ref.read(glassesPairingProvider.notifier).audioUri;
     if (uri == null) return;
 
-    final recorder = GlassesAudioRecorder(streamUri: uri);
+    final recorder = GlassesAudioRecorder(
+      streamUri: uri,
+      dio: glassesDio(resolver: ref.read(glassesResolverProvider)),
+    );
     _glassesAudio = recorder;
     unawaited(
       recorder.start().then((started) {
