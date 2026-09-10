@@ -123,7 +123,7 @@ though not drawing, so the countdown is already up when the activity arrives
 rather than racing it.
 
 The BLE wire format is a contract between two codebases that cannot import each
-other, duplicated in `glove/firmware/SafeHer_Glove_V5_OnDevice/` and
+other, duplicated in `glove/firmware/SafeHer_Glove_Final/` and
 `mobile/lib/features/devices/domain/glove_protocol.dart`. The Dart half is
 pinned by tests carrying the firmware's literal payloads; nothing can check the
 firmware half automatically. See [glove/README.md](../glove/README.md).
@@ -179,22 +179,26 @@ below half the strongest single reading.
 watching different things, both alarmed, is stronger evidence than one
 shouting — capped so corroboration alone can never trigger.
 
-**What actually produces these scores today: one of the three.**
+**What produces these scores today: all three now have a producer** (as of
+2026-09-11); what none has is verification against a real feed.
 
 - **Glove** — trained and live. Classifies on the ESP32, reaches the app over
-  BLE, and raises the alarm.
-- **Weapon** — *trained but not connected*, as of 2026-08-31. YOLOv8n at
-  mAP@0.5 0.907 (knife AP 0.884) on a held-out split, quantised to 3.36 MB and
-  bundled at `mobile/assets/models/`. There is no ONNX runtime dependency and
-  no inference code, so `weapon_score` has no producer. It runs on the phone
-  rather than the glasses — an ESP32 is two orders of magnitude short, and
-  `docs/WEAPON_INFERENCE_PLACEMENT.md` has the arithmetic.
-- **Audio** — *trained but not connected*, as of 2026-09-01. A CNN+LSTM
-  keyword spotter at 98.9% on Speech Commands, `stop` at 99.3% recall,
-  quantised to 1.12 MB at `mobile/assets/models/`. **It does not detect
-  "help"** — no public dataset holds genuine distress speech, and none can be
-  collected with consent. What it proves is the pipeline; the vocabulary needs
-  SafeHer's own recordings. `ThreatSignals.audio` still has no producer.
+  BLE, and raises the alarm. Firmware hardware-validated on a real ESP32-C3
+  (2026-09-10); app pairing still pending.
+- **Weapon** — *trained and wired.* YOLOv8n at mAP@0.5 0.907 (knife AP 0.884)
+  on a held-out split. `ultralytics_weapon_detector.dart` scores frames
+  on-device on Android via `ultralytics_yolo`; `remote_weapon_detector.dart`
+  uploads a sampled frame to `POST /alerts/weapon-frame` on web (a weaker
+  guarantee, published as such); `weapon_scorer.dart` votes over a window. It
+  runs on the phone rather than the glasses — an ESP32 is two orders of
+  magnitude short, and `docs/WEAPON_INFERENCE_PLACEMENT.md` has the arithmetic.
+  What it lacks is a real glasses stream.
+- **Audio** — *wired.* A pure-Dart TF-IDF + logistic-regression phrase
+  classifier (`threat_phrase_classifier.dart` + `phrase_classifier.json`) over
+  the platform speech recogniser, replacing the earlier CNN+LSTM keyword spotter
+  (which scored below a fuzzy string match on real phrases). It is measured on
+  synthetic and degraded TTS; a genuine distress corpus is deferred — no public
+  dataset holds it — so its real-world recall is unproven.
 
 **Facial expression** is trained too (MobileNetV3-Small, 65.5% on FER2013,
 `mobile/assets/models/emotion_mobilenetv3_fp16.onnx`) and is **not** in the
@@ -304,21 +308,21 @@ packages, so copying was never an option even where licensing allowed it.
 
 ## Known gaps
 
-Carried forward from the pre-audit documentation (`docs/archive/PROJECT_STATUS.md`,
-`TECHNICAL_INVENTORY.md`), reconfirmed during the 2026-08-08 audit, and revised
-on 2026-08-29 when the glove landed:
+Carried forward from the pre-audit documentation (since removed; in git
+history), reconfirmed during the 2026-08-08 audit, and revised on 2026-09-11:
 
 - The audio corpus is synthetic speech with a realistically degraded channel.
-  Nobody in it is genuinely frightened, and recording real distress speech
-  remains the honest next step.
+  Nobody in it is genuinely frightened; recording real distress speech is the
+  honest next step but is deferred for now (no public dataset supplies it).
 - No firmware exists for the "smart ring" or "pendant" device concepts shown in the
   mobile UI — only the glove and glasses are real.
-- **No physical glove has ever been paired.** BLE scanning and connection were
-  verified against other hardware on 2026-08-17, but the whole glove path —
-  firmware inference, the classification notify, the vote, the foreground
-  service, the woken screen — has only ever run against `FakeBleService`. This
-  is the largest untested surface in the project and the one with the least
-  excuse, since the hardware exists.
+- **The glove firmware is hardware-validated; the app path is not.** A real
+  ESP32-C3 was exercised on 2026-09-10 (MPU-6500, 100 Hz sampling, on-device
+  inference timing — `glove/firmware/SafeHer_Glove_Final/HARDWARE_VALIDATION_REPORT.md`),
+  but **no physical glove has ever been paired with the app**: the whole app-side
+  path — the classification notify, the vote, the foreground service, the woken
+  screen — has only ever run against `FakeBleService`, and physical motion/FALL/BLE
+  behaviour is untested. This is the largest untested surface in the project.
 - The foreground service is built and present in the merged manifest, but no
   one has put a phone in a pocket and confirmed an alarm still gets out. The UI
   is written so that an unstarted service reads as a stated limitation rather

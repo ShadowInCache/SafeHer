@@ -1,6 +1,6 @@
 # SafeHer Mobile
 
-The Flutter client. 263 Dart files, 747 tests, zero analyzer issues.
+The Flutter client. 889 tests, zero analyzer issues.
 
 Its job is narrow and load-bearing: **get an alert out.** Everything here —
 the screens, the BLE link, the offline queue — exists to serve that, and the
@@ -130,7 +130,7 @@ Flashing firmware or collecting training data is a separate procedure — see
 ## Testing
 
 ```bash
-flutter test                    # 747 tests
+flutter test                    # 889 tests
 flutter analyze                 # 0 issues
 flutter test --update-goldens   # after a deliberate visual change
 ```
@@ -182,15 +182,20 @@ targeting it.
 
 ## What is honestly not finished
 
-- **No glove has ever been paired.** The BLE layer is written against the real
-  `flutter_blue_plus` API and every test runs against `FakeBleService`. The
+- **No glove has ever been paired with the app.** The glove *firmware* was
+  validated on a real ESP32-C3 on 2026-09-10 (sensor, sampling, on-device
+  inference), but the app side — the BLE layer, written against the real
+  `flutter_blue_plus` API — still runs every test against `FakeBleService`. The
   end-to-end path from a physical ESP32 to a woken screen is unverified.
 - **The foreground service is unverified on a device.** It builds, the service
   is in the merged manifest with the `connectedDevice|location` type, and the
   UI only claims the pocket case works when the platform says the service
   actually started. Nobody has put a phone in a pocket and fallen over yet.
-- **No phone-side detection model.** The app never invents a threat score from
-  the phone's own accelerometer. That shortcut would alert every emergency
+- **The phone-side detectors are wired but unproven on a real feed.** The weapon
+  model runs on-device (Android) and the audio phrase classifier runs over
+  platform ASR, but neither has met a real glasses stream or real distress
+  speech. Crucially, the app still **never invents a threat score from the
+  phone's own accelerometer** — that shortcut would alert every emergency
   contact on a dropped phone, and each false alarm spends the credibility the
-  real alert depends on. The phone's honest trigger is the deliberate shake
-  gesture, which opens the countdown rather than dispatching.
+  real alert depends on. Without a wearable, the phone's honest trigger is the
+  deliberate shake gesture, which opens the countdown rather than dispatching.

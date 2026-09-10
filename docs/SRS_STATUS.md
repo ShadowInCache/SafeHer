@@ -2024,3 +2024,32 @@ Recall 0.827 also means roughly one weapon in six is missed, with precision
 (0.901) above it — the confidence threshold is tuned conservative, which for a
 safety product is probably the wrong direction. Changing it is a product
 decision that has not been made.
+
+---
+
+## Session update — 2026-09-11
+
+**State.** 483 backend tests and 889 mobile tests passing (7 backend skipped),
+analyzer clean. `main` at `0fb6075` (glove ML integration, PR #30). Remotes now
+point at `ShadowInCache/SafeHer`.
+
+**All three detectors now have a producer** — this supersedes the "nothing
+loads the model" note above.
+
+- **Weapon** is wired: `ultralytics_weapon_detector.dart` scores on-device on
+  Android via `ultralytics_yolo`; `remote_weapon_detector.dart` uploads a
+  sampled frame to `POST /alerts/weapon-frame` on web; `weapon_scorer.dart`
+  votes over a 15-frame window; `mjpeg_client.dart` parses the glasses stream.
+  `DetectionSources` now names which path is live. What is missing is a real
+  glasses stream, not code.
+- **Audio** is a pure-Dart TF-IDF + logistic-regression phrase classifier
+  (`threat_phrase_classifier.dart` + `phrase_classifier.json`) over platform
+  ASR, replacing the CNN+LSTM keyword spotter. Validated on synthetic/degraded
+  TTS; a real distress corpus is deferred (no public dataset supplies it).
+- **Motion** runs on the glove as before, now with the firmware validated on a
+  real ESP32-C3 (100 Hz sampling, ~31 ms/window inference; see
+  `glove/firmware/SafeHer_Glove_Final/HARDWARE_VALIDATION_REPORT.md`).
+
+**The remaining gap is real-feed verification, not implementation**: pair a
+physical glove with the app, point the glasses at a real scene, and speak real
+distress. Procedure in `docs/HARDWARE_BRINGUP.md`.

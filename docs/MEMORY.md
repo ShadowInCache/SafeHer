@@ -9,10 +9,13 @@ Never overwrite or delete a prior entry.
 
 SafeHer is an AI-powered wearable safety platform for women. The repo is a monorepo
 containing a current FastAPI backend (`fastapi_app/`), a Flutter mobile app
-(`mobile/`), ESP32 device firmware (`hardware/`), an ML training pipeline
-(`ml_training/`), serverless inference functions (`cloud_functions/`), and a Docker
-Compose deployment (`deployment/`). See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces
-connect and [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full folder tour.
+(`mobile/`), ESP32 device firmware and its ML pipeline (`glove/`, `glasses/`),
+server-side inference models (`ml_models/`), database migrations (`alembic/`), and
+a Docker Compose deployment (`deployment/`). See [ARCHITECTURE.md](ARCHITECTURE.md)
+for how the pieces connect and [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the
+full folder tour. *(Note 2026-09-11: the earlier `hardware/`, `ml_training/` and
+`cloud_functions/` folders no longer exist — firmware moved under `glove/` and
+`glasses/`, and ML training lives outside the repo.)*
 
 ## Architecture Decisions
 
@@ -424,3 +427,36 @@ in future work — this file describes state as of 2026-08-08, not necessarily t
   Nothing loads the model yet — no runtime dependency, no inference code,
   `weapon_score` still has no producer. Bundling a model and having a detector
   are different things and the docs now say so.
+
+- **2026-09-11 — glove ML integration merged, wearables meet real hardware.**
+  PR #30 (`0fb6075`) merged the finalised on-device glove pipeline and firmware
+  (`glove/firmware/SafeHer_Glove_Final/`), a motion risk score with BLE offline
+  detection + auto-reconnect, and new labelled recordings. The glove firmware
+  had its first **real ESP32-C3 validation** (2026-09-10,
+  `HARDWARE_VALIDATION_REPORT.md`): MPU-6500 detected, 100 Hz sampling with
+  sub-11µs jitter, on-device 7-class inference ~31 ms/window, sampling never
+  starved. That run found two build-config bugs invisible to code reading —
+  inference build overflows the default flash partition (needs `huge_app`), and
+  `USB CDC On Boot` must be enabled or `Serial` is silent — and that the
+  production sketch still ships in `DATA_COLLECTION_MODE=1`. App pairing and
+  physical motion/FALL/BLE tests remain undone.
+
+  The two earlier detector gaps are now closed. **Weapon** has a producer:
+  `ultralytics_weapon_detector.dart` (on-device, Android), `remote_weapon_detector.dart`
+  (server frame fallback, web), `weapon_scorer.dart`, `mjpeg_client.dart` — it
+  just has no real glasses stream yet. **Audio** exists as a pure-Dart TF-IDF +
+  logistic-regression phrase classifier (`threat_phrase_classifier.dart` +
+  `phrase_classifier.json`) over platform ASR; the 2026-09-01 CNN+LSTM keyword
+  spotter was dropped (it scored below a fuzzy string match on real phrases).
+  Recording a real distress corpus is deferred — no public dataset supplies it.
+
+  Glasses camera path landed: streaming firmware, pairing that verifies
+  `device: safeher-glasses`, and an mDNS resolver so `safeher-glasses.local`
+  resolves on Android while the release cleartext policy stays keyed on the
+  hostname (`f401821`).
+
+  Housekeeping this session: removed superseded docs (`docs/archive/`, the glove
+  V5-conversion status reports, the stale glove dual-model `SYSTEM_ARCHITECTURE.md`,
+  an April mobile cleanup report). Repo remotes now point at `ShadowInCache/SafeHer`;
+  commits authored as `Akshay <akshayag229@gmail.com>`. State: 889 mobile + 483
+  backend tests passing (7 skipped), analyzer clean.

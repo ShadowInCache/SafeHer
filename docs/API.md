@@ -6,8 +6,9 @@ All resource routes are mounted under `/api/v1`. Interactive docs are served at
 `/api/v1/docs` while the app is running.
 
 This documents `fastapi_app/`, the current backend. It does **not** document
-the deleted Flask gateway — see `docs/archive/BACKEND_INTEGRATION.md`
-if you need the old Flask gateway's shape for historical comparison.
+the deleted Flask gateway; its old REST/WebSocket reference (once
+`docs/archive/BACKEND_INTEGRATION.md`, removed 2026-09-11) is recoverable from
+git history if you need it for historical comparison.
 
 ## Authentication
 

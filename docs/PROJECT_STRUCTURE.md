@@ -33,12 +33,14 @@ move: `fastapi_app.main:app` is the import path the deployment, Dockerfile,
 Makefile and every test rely on, and relocating it would buy tidiness at the
 cost of the one thing that has to keep working.
 
-> **Two glove firmwares, one folder.** `glove/firmware/legacy_mqtt/smart_glove.ino`
-> publishes raw telemetry to the backend over MQTT and does no inference.
-> `glove/firmware/SafeHer_Glove_V5_OnDevice/` runs the model on the ESP32 and
-> talks to the phone over BLE with no server in the path. The second is the one
-> the app pairs with; the first is kept because the MQTT ingestion path still
-> exists in the backend.
+> **Several glove sketches, one folder.** `glove/firmware/SafeHer_Glove_Final/`
+> is the production sketch — it runs the model on the ESP32 and talks to the
+> phone over BLE with no server in the path, and it is the one the app pairs
+> with (hardware-validated 2026-09-10). Alongside it: `SafeHer_Glove_V5_OnDevice/`
+> (the earlier on-device sketch it succeeded), two diagnostic sketches
+> (`SafeHer_Glove_Hardware_Diagnostic/`, `SafeHer_Glove_Inference_Diagnostic/`),
+> `SafeHer_Glove_Failure_Capture/`, and `legacy_mqtt/smart_glove.ino` — kept
+> because the MQTT ingestion path still exists in the backend.
 
 ---
 
@@ -131,19 +133,22 @@ detail in [glove/README.md](../glove/README.md).
 
 ```text
 glove/
-├── firmware/SafeHer_Glove_V5_OnDevice/
-│   ├── SafeHer_Glove_V5_OnDevice.ino   100 Hz sampling, 51 features, BLE notify
-│   └── safeher_v5_model.{h,cpp}        Generated from the trained model
+├── firmware/SafeHer_Glove_Final/                CURRENT, hardware-validated
+│   ├── SafeHer_Glove_Final.ino                  100 Hz sampling, 51 features, BLE notify
+│   ├── safeher_glove_final_model.{h,cpp}        Generated from the trained V5 model
+│   └── HARDWARE_VALIDATION_REPORT.md            Real ESP32-C3 findings (2026-09-10)
+├── firmware/SafeHer_Glove_{Hardware,Inference}_Diagnostic/   Bench sketches
+├── firmware/SafeHer_Glove_V5_OnDevice/          Earlier on-device sketch (superseded)
 ├── ml/
-│   ├── dataset/     Labelled recordings — 140 across 7 classes
+│   ├── dataset/     Labelled recordings across 7 classes
 │   ├── features/    51 features per 1-second window
 │   ├── models/      XGBoost model + column/label/split metadata
 │   └── scripts/     collect → extract → train → evaluate → convert
-└── docs/            Conversion and deployment reports
+└── requirements.txt
 ```
 
 The BLE contract is duplicated by necessity in two codebases:
-`SafeHer_Glove_V5_OnDevice.ino` and
+`SafeHer_Glove_Final.ino` and
 `mobile/lib/features/devices/domain/glove_protocol.dart`. The Dart side is
 pinned by tests carrying the firmware's literal payloads; nothing can check the
 firmware side automatically.
@@ -175,7 +180,8 @@ they succeeded:
 
 ```text
 glove/firmware/
-├── SafeHer_Glove_V5_OnDevice/           CURRENT — on-device XGBoost over BLE
+├── SafeHer_Glove_Final/                 CURRENT — on-device XGBoost over BLE
+├── SafeHer_Glove_V5_OnDevice/           Earlier on-device sketch (superseded)
 └── legacy_mqtt/smart_glove.ino          Earlier: raw telemetry over MQTT
 ```
 

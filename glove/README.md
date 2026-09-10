@@ -12,18 +12,27 @@ reports that none of its own models are ready.
 ```text
 glove/
 ├── firmware/
-│   └── SafeHer_Glove_V5_OnDevice/
-│       ├── SafeHer_Glove_V5_OnDevice.ino   Sampling, windowing, inference, BLE
-│       ├── safeher_v5_model.h              Generated — do not hand-edit
-│       └── safeher_v5_model.cpp            Generated — do not hand-edit
+│   ├── SafeHer_Glove_Final/                The production sketch, hardware-validated
+│   │   ├── SafeHer_Glove_Final.ino         Sampling, windowing, inference, BLE
+│   │   ├── safeher_glove_final_model.h     Generated — do not hand-edit
+│   │   ├── safeher_glove_final_model.cpp   Generated — do not hand-edit
+│   │   ├── FALL_CONFIRMATION_3HIT_EXPERIMENT.md
+│   │   └── HARDWARE_VALIDATION_REPORT.md   Real ESP32-C3 findings (2026-09-10)
+│   ├── SafeHer_Glove_Hardware_Diagnostic/  Sensor + timing only, no model/BLE
+│   ├── SafeHer_Glove_Inference_Diagnostic/ Full pipeline, per-window timing
+│   ├── SafeHer_Glove_Failure_Capture/      Captures the raw stream around a fault
+│   └── SafeHer_Glove_V5_OnDevice/          Earlier on-device sketch (superseded)
 ├── ml/
 │   ├── dataset/          Raw labelled recordings, one folder per class
 │   ├── features/         glove_7class_features.csv — 51 features per window
 │   ├── models/           Trained XGBoost model + column/label/split metadata
 │   └── scripts/          Collect → extract → train → evaluate → convert
-├── docs/                 Conversion and deployment reports
 └── requirements.txt      Python deps for the ML pipeline
 ```
+
+The embedded model is still the V5 7-class XGBoost (4,200 trees, 51 features);
+`safeher_glove_final_model.{h,cpp}` is that same model compiled into C arrays,
+verified node-for-node against `safeher_glove_7class_v5_xgboost.json`.
 
 ---
 
@@ -159,11 +168,27 @@ what the model needs next.
 subscription and vote, and the foreground service that keeps all of it alive
 with the phone in a pocket.
 
+**Validated on real hardware (2026-09-10):** an ESP32-C3 was exercised directly
+— MPU-6500 detected (`WHO_AM_I` `0x70`), sampling holds 100 Hz with sub-11µs
+jitter, and on-device 7-class inference runs at ~31 ms/window (feature ~6.3 ms +
+forest ~24.8 ms) with the sampling task never starved during inference. Full
+evidence and method in
+[`firmware/SafeHer_Glove_Final/HARDWARE_VALIDATION_REPORT.md`](firmware/SafeHer_Glove_Final/HARDWARE_VALIDATION_REPORT.md).
+
+**Two build settings that report as software faults** (found by actually
+compiling): the inference build overflows the default flash partition — select
+**Huge APP (3MB No OTA)** — and **USB CDC On Boot** must be **Enabled** or
+`Serial` is silent on this board. The production sketch also still ships in
+`DATA_COLLECTION_MODE=1` (raw logger); set it to `0` and reflash before any
+classification/FALL/BLE test.
+
 **Not implemented:** heart rate and battery. The firmware has no pulse sensor
 and no battery monitoring.
 
-**Never verified:** all of it, end to end. No physical glove has ever been
-paired with the app. Every app-side test runs against a fake BLE service.
+**Still never verified:** physical motion/FALL behaviour, BLE-connected
+behaviour, and pairing with the app. No physical glove has been paired with the
+phone; every app-side test runs against a fake BLE service. Bench procedure:
+[`docs/HARDWARE_BRINGUP.md`](../docs/HARDWARE_BRINGUP.md).
 
 ---
 

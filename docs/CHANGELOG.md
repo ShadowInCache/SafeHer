@@ -7,6 +7,53 @@ until the first tagged release.
 
 ## [Unreleased]
 
+### 2026-09-11 — glove ML integration merged, and the wearables meet real hardware
+
+#### Added
+- **Glove ML integration (PR #30).** Finalised on-device glove pipeline and
+  firmware (`glove/firmware/SafeHer_Glove_Final/`), a motion risk score with BLE
+  offline detection and auto-reconnect, and a batch of new labelled recordings
+  (fall/jerk/normal). Merged into `main` at `0fb6075`.
+- **First real ESP32-C3 hardware validation of the glove** (2026-09-10,
+  `HARDWARE_VALIDATION_REPORT.md`): MPU-6500 detected, 100 Hz sampling with
+  sub-11µs jitter, on-device 7-class inference at ~31 ms/window with sampling
+  never starved. Plus two new diagnostic sketches (hardware-only, inference) and
+  a failure-capture sketch.
+- **Weapon detector wired into the app.** `ultralytics_weapon_detector.dart`
+  scores frames on-device on Android, `remote_weapon_detector.dart` uploads a
+  sampled frame to the server on web, `weapon_scorer.dart` votes over a window,
+  and `mjpeg_client.dart` parses the glasses stream. This closes the
+  2026-09-01 "nothing loads the model" gap.
+- **Glasses camera path**: streaming firmware (`SafeHer_Glasses_Stream`), pairing
+  that refuses anything not identifying as `safeher-glasses`, and an mDNS resolver
+  so `safeher-glasses.local` resolves on Android (where `.local` otherwise fails)
+  while the release cleartext policy stays keyed on the hostname (`f401821`).
+
+#### Changed
+- **Audio distress signal replaced.** The CNN+LSTM keyword spotter (below,
+  2026-09-01) was dropped — it spotted `stop`/`no`/`off`/`down`, not real
+  phrases, and scored below a fuzzy string match on real speech. Replaced by a
+  pure-Dart TF-IDF + logistic-regression phrase classifier
+  (`threat_phrase_classifier.dart` + `phrase_classifier.json`, ~196 kB, web-safe)
+  over the platform speech recogniser. Measured on synthetic/degraded TTS;
+  recording a real distress corpus is deferred (no public dataset supplies it).
+
+#### Two build settings the hardware run surfaced
+The inference firmware overflows the default flash partition (needs **Huge APP
+3MB No OTA**), and **USB CDC On Boot** must be **Enabled** or `Serial` is silent
+on the ESP32-C3. Both are board-menu settings, not code changes.
+
+#### Where the three signals stand
+- **glove** — trained, connected, firmware hardware-validated; app pairing +
+  motion/FALL/BLE still unverified
+- **weapon** — trained (mAP@0.5 0.907), wired on-device (Android) and via server
+  fallback (web); no real glasses stream yet
+- **audio** — pure-Dart classifier wired; validated on synthetic TTS, not real
+  distress
+
+889 mobile tests, 483 backend (7 skipped), analyzer clean.
+
+
 ### 2026-09-01 — the third signal, and the scorer that decides what a detection means
 
 #### Added
