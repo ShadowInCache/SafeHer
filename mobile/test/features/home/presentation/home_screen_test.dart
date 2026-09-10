@@ -97,7 +97,7 @@ class _FakeDeviceRepository implements DeviceRepository {
         signalStrength: 3,
         firmwareVersion: 'v2.4.1',
         updateAvailable: false,
-        sensors: const SensorReading(accelG: 1.02, gyroDps: 4.3, flexPercent: 0),
+        sensors: const SensorReading(accelG: 1.02, gyroDps: 4.3, heartRateBpm: 0),
         lastSeen: DateTime.now().subtract(const Duration(seconds: 30)),
       ),
     ];

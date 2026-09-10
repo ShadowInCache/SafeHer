@@ -12,6 +12,11 @@
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- The glove watch runs as a connectedDevice service: its job is to hold
+         a BLE link to the wearable open while the phone is pocketed. Android
+         14 checks the declared type against the permissions actually held,
+         and BLUETOOTH_CONNECT above is granted by the time a glove is paired. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
@@ -55,6 +60,22 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Keeps the process alive so a connected glove can still raise the
+             alarm with the phone in a pocket. Without it Android freezes the
+             app when it leaves the screen, the BLE notifications stop being
+             delivered, and automatic detection silently becomes a thing that
+             only works while you are looking at it.
+
+             No android:stopWithTask="true": a glove should keep watching after
+             the user swipes SafeHer off the recents list, which is exactly the
+             "put the phone away" case this exists for.
+
+             Warning: the service name is the plugin's and must not change. -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="connectedDevice|location"
+            android:exported="false" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

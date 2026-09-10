@@ -28,7 +28,7 @@ List<DeviceDetail> _sampleDevices() => const [
     signalStrength: 3,
     firmwareVersion: 'v2.4.1',
     updateAvailable: false,
-    sensors: SensorReading(accelG: 1.02, gyroDps: 4.3, flexPercent: 0),
+    sensors: SensorReading(accelG: 1.02, gyroDps: 4.3, heartRateBpm: 0),
   ),
   DeviceDetail(
     id: 'glove',
@@ -40,7 +40,7 @@ List<DeviceDetail> _sampleDevices() => const [
     signalStrength: 3,
     firmwareVersion: 'v1.2.3',
     updateAvailable: true,
-    sensors: SensorReading(accelG: 1.05, gyroDps: 6.7, flexPercent: 42),
+    sensors: SensorReading(accelG: 1.05, gyroDps: 6.7, heartRateBpm: 42),
   ),
 ];
 
@@ -165,23 +165,31 @@ void main() {
       expect(find.text('Calibrate'), findsOneWidget);
       expect(find.text('Accel'), findsOneWidget);
       expect(find.text('Gyro'), findsOneWidget);
-      expect(find.text('Flex'), findsOneWidget);
+      // Heart rate, not flex: the glove has a pulse sensor and never had a
+      // flex sensor, so the third readout was labelling hardware that does
+      // not exist.
+      expect(find.text('Heart'), findsOneWidget);
     });
 
     testWidgets(
-      'expanding the glove card shows Motion Risk Score instead of Accel/Gyro/Flex',
+      'expanding the glove card shows Motion Risk Score alongside Accel/Gyro/Heart Rate',
       (tester) async {
         await tester.pumpWidget(_harness());
         await tester.pump(const Duration(milliseconds: 100));
 
         await tester.tap(find.text('Safety Glove'));
         await tester.pump(const Duration(milliseconds: 300));
+        // 3D visual shows a shimmer for 400ms before swapping to the viewer.
+        await tester.pump(const Duration(milliseconds: 500));
 
+        // Motion Risk Score is glove-only, shown in addition to the
+        // sensor readouts — the merged design keeps Accel/Gyro/Heart Rate
+        // visible for every device type, glove included.
         expect(find.text('MOTION RISK SCORE'), findsOneWidget);
         expect(find.text('--'), findsOneWidget);
-        expect(find.text('Accel'), findsNothing);
-        expect(find.text('Gyro'), findsNothing);
-        expect(find.text('Flex'), findsNothing);
+        expect(find.text('Accel'), findsOneWidget);
+        expect(find.text('Gyro'), findsOneWidget);
+        expect(find.text('Heart'), findsOneWidget);
         // Existing device controls stay, per the "do not remove" list.
         expect(find.text('Calibrate'), findsOneWidget);
         expect(find.text('Remove Device'), findsOneWidget);
@@ -203,6 +211,10 @@ void main() {
 
       await tester.tap(find.text('Safety Glove'));
       await tester.pump(const Duration(milliseconds: 300));
+      // The 3D visual now renders for every device type, glove included —
+      // its loading shimmer resolves after 400ms; wait it out so no timer
+      // is left pending when the test tears down.
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('--'), findsOneWidget);
       expect(find.text('CONNECTED'), findsOneWidget);
 

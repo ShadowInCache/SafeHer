@@ -44,7 +44,7 @@ refuses to run it), **not built**.
 
 | ID | Status | Implementation |
 |----|--------|----------------|
-| FR-DEV-01 | partial | `mobile/lib/features/devices/data/ble_service_flutter_blue_plus.dart` — scan/connect/discover verified on real hardware 2026-08-17; **no 6-digit PIN step**, which needs firmware to present one |
+| FR-DEV-01 | partial | `mobile/lib/features/devices/data/ble_service_flutter_blue_plus.dart` — scan/connect/discover verified against real BLE hardware 2026-08-17, though never against a SafeHer glove. `mobile/lib/features/devices/data/glove_link_providers.dart` subscribes to the glove's characteristics once paired. **No 6-digit PIN step**, which needs firmware to present one |
 | FR-DEV-02 | partial | `mobile/lib/features/devices/data/ble_service_flutter_blue_plus.dart` — same as FR-DEV-01; the glasses themselves do not exist |
 | FR-DEV-03 | done | `mobile/lib/features/devices/data/device_repository_remote.dart`, `fastapi_app/routers/devices.py` — 60s online window, 20% low-battery band |
 | FR-DEV-04 | not built | Firmware OTA has no implementation anywhere |
@@ -57,7 +57,7 @@ refuses to run it), **not built**.
 | ID | Status | Implementation |
 |----|--------|----------------|
 | FR-EMG-01 | done | `mobile/lib/features/emergency/presentation/emergency_screen.dart` |
-| FR-EMG-02 | partial | `fastapi_app/services/threat_fusion.py`, `fastapi_app/routers/alerts.py` — the decision path is complete and tested end to end, but no model produces a score to decide on, so it never fires in practice. `mobile/lib/core/detection/detection_status.dart` says so on the Profile screen rather than letting the threshold slider imply protection. The phone's own honest trigger (deliberate shake → countdown) does work. |
+| FR-EMG-02 | partial | Two producers, one of which now exists. **Server-side:** `fastapi_app/services/threat_fusion.py` and `fastapi_app/routers/alerts.py` implement the decision path in full. The weapon model is trained as of 2026-08-31 and bundled at `mobile/assets/models/weapon_yolov8n_int8.onnx`, but nothing loads it and the audio model does not exist, so the fused score still has no producer and this path never fires. **On the glove:** `glove/firmware/SafeHer_Glove_V5_OnDevice/SafeHer_Glove_V5_OnDevice.ino` runs XGBoost on the ESP32 and notifies over BLE with no server in the path; `mobile/lib/features/devices/domain/glove_threat_detector.dart` votes on it and `mobile/lib/features/safety/data/glove_auto_trigger.dart` fires the countdown without needing a frame to be drawn. `mobile/lib/core/background/safety_foreground_service.dart` keeps that alive off screen. `mobile/lib/core/detection/detection_sources.dart` reports which of the two is actually live rather than letting either imply the other. Partial, not done: no physical glove has been paired, so this is verified only against a fake BLE service. |
 | FR-EMG-03 | done | `mobile/lib/features/emergency/presentation/emergency_screen.dart` |
 | FR-EMG-04 | partial | `fastapi_app/services/emergency_dispatch.py` — **unblocked 2026-08-22**. Email was blocked, not broken: Render's free tier refuses outbound SMTP 25/465/587, so correct code with valid credentials timed out in production. `fastapi_app/services/brevo_email.py` delivers over HTTPS instead; a real send with the incident report attached was accepted by Brevo (messageId returned) and the sender address is verified. Push is configured. **SMS remains unconfigured** (Twilio is paid), which is the stated limitation keeping this partial rather than done. |
 | FR-EMG-05 | partial | `fastapi_app/services/emergency_dispatch.py` — evidence URL follows in a second email, not the alert |
@@ -98,14 +98,14 @@ because nothing else would catch them drifting.
 
 | Spec | Status | Notes |
 |------|--------|-------|
-| §6.2 fusion weights, EMA, boosters, dedup | partial | `fastapi_app/services/threat_fusion.py` implements all of it; `fuse()` is unreachable end to end until firmware produces motion/audio/vision scores |
+| §6.2 fusion weights, EMA, boosters, dedup | partial | `fastapi_app/services/threat_fusion.py` implements all of it; `fuse()` is unreachable end to end until something produces motion/audio/vision scores. The glove bypasses fusion entirely — it classifies on-device and reaches the phone over BLE, so it is a second detection path rather than an input to this one |
 | §10.1 backend coverage > 80% | **not met** | 65% on 2026-08-17, from 58% at the first audit. The number matters less than where it sits: `emergency_dispatch.py` is at 93%, and the lines added were the failure paths — unreachable contact, unconfigured channel, a send that throws — which is what actually happens in the field. The remaining gap is mostly network I/O that needs a live third party. |
-| §10.1 Flutter coverage > 70% | unmeasured | 596 tests pass; line coverage not measured |
+| §10.1 Flutter coverage > 70% | unmeasured | 747 tests pass; line coverage not re-measured since 2026-08-22, when it was 75.2% |
 | §5.2 no cleartext in release | done | `mobile/android/app/src/main/res/xml/network_security_config.xml` forbids it; debug and profile permit it for LAN testing. Verified against the packaged resources of both variants, not the source. |
 | §10.2 TC-EMG-01 auto-alert | done | `tests/test_threat_fusion.py` |
 | §10.2 TC-EMG-05 deduplication | done | `tests/test_threat_fusion.py` |
 | §5.1 alert dispatch < 5s | partial | Warm requests answer in ~0.2–0.5s. Render's free tier suspends the instance after ~15 minutes idle, and an SOS is by nature the first request after a long idle period. Mitigated by `mobile/lib/core/network/backend_warmer.dart`, which wakes the instance at the *start* of the countdown so the ten deliberate seconds absorb the spin-up (measured at 3.4s). A paid instance removes the risk entirely. |
-| §6.1 three-model pipeline | scaffolded | `fastapi_app/services/threat_models.py` — contract, registry and `POST /alerts/analyze` ready; **no model trained**, so nothing produces these scores yet |
+| §6.1 three-model pipeline | partial | `fastapi_app/services/threat_models.py` — contract, registry and `POST /alerts/analyze` ready. **Weapon: trained** 2026-08-31, `mobile/assets/models/weapon_yolov8n_int8.onnx`, mAP@0.5 0.907 on a held-out split — bundled but not loaded by any code. **Motion:** the glove's XGBoost is trained and live. **Audio:** does not exist. See `docs/WEAPON_INFERENCE_PLACEMENT.md` for why the weapon model runs on the phone and not the glasses |
 
 ---
 

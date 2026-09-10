@@ -33,13 +33,24 @@ from fastapi_app.services import threat_fusion as tf
 class TestFusionArithmetic(unittest.TestCase):
     """SRS §6.2, quoted rather than paraphrased."""
 
-    def test_the_weights_are_the_ones_the_srs_specifies(self):
-        # 0.40*motion + 0.35*audio + 0.25*vision
-        self.assertAlmostEqual(tf.fuse(motion=1.0, audio=0.0, vision=0.0), 0.40)
-        self.assertAlmostEqual(tf.fuse(motion=0.0, audio=1.0, vision=0.0), 0.35)
-        self.assertAlmostEqual(tf.fuse(motion=0.0, audio=0.0, vision=1.0), 0.25)
-        # The weights are a partition, so a maximal reading is exactly 1.0.
-        self.assertAlmostEqual(tf.fuse(motion=1.0, audio=1.0, vision=1.0), 1.0)
+    def test_the_weights_invert_the_srs_deliberately(self):
+        """SRS §6.2 is 0.40 motion / 0.35 audio / 0.25 vision. This is not.
+
+        Under those weights a knife detected at 0.90 confidence scored 0.28 --
+        SAFE -- because the least ambiguous signal in the system carried the
+        least weight. The ordering is now by ambiguity: a weapon is a discrete
+        object claim, a help word is a deliberate utterance, and motion is the
+        noisiest of the three. Recorded as a deviation in docs/SRS_STATUS.md.
+        """
+        self.assertEqual(
+            tf.FUSION_WEIGHTS, {"weapon": 0.40, "audio": 0.35, "glove": 0.25}
+        )
+        self.assertAlmostEqual(sum(tf.FUSION_WEIGHTS.values()), 1.0)
+
+    def test_a_maximal_reading_is_exactly_one(self):
+        self.assertAlmostEqual(
+            tf.fuse(tf.ThreatSignals(glove=1.0, audio=1.0, weapon=1.0)), 1.0
+        )
 
     def test_smoothing_follows_the_specified_ratio(self):
         # smoothed(t) = 0.30*raw(t) + 0.70*smoothed(t-1)
@@ -59,28 +70,32 @@ class TestFusionArithmetic(unittest.TestCase):
         for hour in (6, 12, 21):
             self.assertFalse(tf.is_night(datetime(2026, 8, 17, hour)), hour)
 
-    def test_boosters_are_additive_and_match_the_srs(self):
-        noon = datetime(2026, 8, 17, 12)
-        self.assertAlmostEqual(tf.apply_boosters(0.5, moment=noon), 0.5)
-        self.assertAlmostEqual(tf.apply_boosters(0.5, moment=datetime(2026, 8, 17, 23)), 0.60)
-        self.assertAlmostEqual(tf.apply_boosters(0.5, moment=noon, in_high_risk_zone=True), 0.55)
-        self.assertAlmostEqual(tf.apply_boosters(0.5, moment=noon, weapon_confidence=0.8), 0.65)
+    def test_context_no_longer_boosts_the_score(self):
+        """SRS §6.2's additive boosters were removed on 2026-08-30.
 
-    def test_a_weapon_at_or_below_the_floor_does_not_boost(self):
-        # The SRS says `> 0.70`, not `>=`.
-        noon = datetime(2026, 8, 17, 12)
-        self.assertAlmostEqual(tf.apply_boosters(0.5, moment=noon, weapon_confidence=0.70), 0.5)
+        Night, high-risk zone and a weapon-confidence bonus each modified the
+        score. Under the three-signal architecture they are context, not
+        threat signals -- and the weapon bonus counted the same detection
+        twice, once through the vision weight and once again on top.
 
-    def test_boosted_scores_stay_on_the_scale(self):
-        # Three boosters on a high score would otherwise exceed 1.0 and
-        # break every consumer that assumes a 0-1 range.
-        score = tf.apply_boosters(
-            0.95,
-            moment=datetime(2026, 8, 17, 23),
-            in_high_risk_zone=True,
-            weapon_confidence=0.9,
-        )
+        There is no longer a function that applies them, which is the
+        strongest form this assertion can take.
+        """
+        self.assertFalse(hasattr(tf, "apply_boosters"))
+        self.assertFalse(hasattr(tf, "heart_rate_boost"))
+        self.assertFalse(hasattr(tf, "NIGHT_BOOST"))
+        self.assertFalse(hasattr(tf, "HIGH_RISK_ZONE_BOOST"))
+
+    def test_night_is_still_computed_for_the_incident_record(self):
+        # Removed from the score, kept as evidence: an incident at 3am is
+        # worth knowing about even though 3am is not a threat.
+        self.assertTrue(tf.is_night(datetime(2026, 8, 17, 23)))
+        self.assertFalse(tf.is_night(datetime(2026, 8, 17, 12)))
+
+    def test_scores_stay_on_the_scale(self):
+        score = tf.fuse(tf.ThreatSignals(glove=1.0, weapon=1.0, audio=1.0))
         self.assertLessEqual(score, 1.0)
+        self.assertGreaterEqual(score, 0.0)
 
 
 class TestDecision(unittest.TestCase):
@@ -91,31 +106,31 @@ class TestDecision(unittest.TestCase):
 
     def test_a_score_at_the_threshold_triggers(self):
         # "score >= 0.75" -- the boundary itself must fire, not just above.
-        decision = tf.evaluate(raw_score=0.75, previous_smoothed=0.75, moment=self.NOON)
+        decision = tf.evaluate(signals=tf.ThreatSignals(glove=0.75), previous_smoothed=0.75, moment=self.NOON)
         self.assertTrue(decision.should_trigger)
 
     def test_a_score_below_the_threshold_does_not(self):
-        decision = tf.evaluate(raw_score=0.5, previous_smoothed=0.5, moment=self.NOON)
+        decision = tf.evaluate(signals=tf.ThreatSignals(glove=0.5), previous_smoothed=0.5, moment=self.NOON)
         self.assertFalse(decision.should_trigger)
 
     def test_a_chosen_threshold_overrides_the_default(self):
         # The slider on the Profile screen is the point of this.
         decision = tf.evaluate(
-            raw_score=0.6, previous_smoothed=0.6, threshold=0.55, moment=self.NOON
+            signals=tf.ThreatSignals(glove=0.6), previous_smoothed=0.6, threshold=0.55, moment=self.NOON
         )
         self.assertTrue(decision.should_trigger)
 
     def test_one_noisy_reading_does_not_raise_the_alarm(self):
         # The whole purpose of smoothing: a single 1.0 against a calm
         # history smooths to 0.3*1.0 + 0.7*0.1 = 0.37, well under 0.75.
-        decision = tf.evaluate(raw_score=1.0, previous_smoothed=0.1, moment=self.NOON)
+        decision = tf.evaluate(signals=tf.ThreatSignals(glove=1.0), previous_smoothed=0.1, moment=self.NOON)
         self.assertFalse(decision.should_trigger)
         self.assertAlmostEqual(decision.smoothed_score, 0.37)
 
     def test_a_sustained_threat_does_raise_it(self):
         smoothed = None
         for _ in range(8):
-            decision = tf.evaluate(raw_score=1.0, previous_smoothed=smoothed, moment=self.NOON)
+            decision = tf.evaluate(signals=tf.ThreatSignals(glove=1.0), previous_smoothed=smoothed, moment=self.NOON)
             smoothed = decision.smoothed_score
         self.assertTrue(decision.should_trigger)
 
@@ -123,7 +138,7 @@ class TestDecision(unittest.TestCase):
         # SRS §6.2 deduplication. Alerting every contact twice for one
         # emergency is worse than a missed duplicate.
         decision = tf.evaluate(
-            raw_score=0.9,
+            signals=tf.ThreatSignals(glove=0.9),
             previous_smoothed=0.9,
             moment=self.NOON,
             last_alert_at=self.NOON - timedelta(seconds=30),
@@ -134,7 +149,7 @@ class TestDecision(unittest.TestCase):
 
     def test_the_window_expires(self):
         decision = tf.evaluate(
-            raw_score=0.9,
+            signals=tf.ThreatSignals(glove=0.9),
             previous_smoothed=0.9,
             moment=self.NOON,
             last_alert_at=self.NOON - timedelta(seconds=tf.DEDUP_WINDOW_SECONDS + 1),
@@ -146,7 +161,7 @@ class TestDecision(unittest.TestCase):
         # aware `now` raises TypeError, and doing that here would turn a
         # dispatch into a 500 at the worst possible moment.
         decision = tf.evaluate(
-            raw_score=0.9,
+            signals=tf.ThreatSignals(glove=0.9),
             previous_smoothed=0.9,
             moment=self.NOON,
             last_alert_at=datetime(2026, 8, 17, 11, 59, 30),  # naive

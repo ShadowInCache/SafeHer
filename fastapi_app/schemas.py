@@ -123,7 +123,13 @@ class TokenRefreshRequest(BaseModel):
 
 class FirebaseTokenExchangeRequest(BaseModel):
     id_token: str = Field(min_length=10)
-    role: str = Field(default="user")
+    # `role` deliberately absent. It used to be accepted here, allow-listed
+    # to user/guardian and applied when the account was provisioned -- which
+    # let a caller choose its own role at sign-up. That granted nothing only
+    # because `require_roles` is used by no route today, and it would have
+    # become privilege escalation the moment one was gated on `guardian`.
+    # Role is a server decision; an unknown field here is ignored, so a
+    # client still sending one is simply not listened to.
     full_name: Optional[str] = None
     # Firebase only holds displayName/email/photoURL. The phone captured
     # during sign-up exists nowhere else, so the client sends it here or the

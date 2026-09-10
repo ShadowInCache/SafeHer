@@ -353,3 +353,74 @@ in future work — this file describes state as of 2026-08-08, not necessarily t
   depend on. A `backend/` folder or an `apps/`-style monorepo was considered and
   rejected — it would trade a tidier tree for a broken production deploy, and the tree
   was never what made this repo hard to work in.
+
+- **2026-08-29** — Glove detection made real off screen, and the docs brought back
+  in line with the code. Three things were wrong at once and only one was obvious.
+  The glove's vote ran in `SafetyTriggerListener.build()`, so it stopped the moment
+  the app left the screen — automatic detection was quietly conditional on being
+  looked at, which is the inverse of what the glove is for. It moved to
+  `GloveAutoTrigger`, a `keepAlive` provider driven by `ref.listen`, whose tests run
+  against a bare `ProviderContainer` so a regression back into a widget fails the
+  suite. Android froze the process independently of that, so
+  `core/background/safety_foreground_service.dart` runs a
+  `connectedDevice|location` foreground service while a glove is connected. And
+  because starting that service can be refused, `DetectionSources` gained
+  `backgroundWatchActive` and reports the platform's answer rather than the app's
+  intention — the fourth time a control here would have looked like protection while
+  governing nothing.
+
+  Separately, `b0e1813` (Akhilesh) added the firmware's telemetry characteristic.
+  Its UUID and field order match the app exactly, but `sendTelemetry` sends `0` for
+  heart rate and battery to *avoid* fabricating data, and a literal zero parses as a
+  measurement — the device card rendered "0 bpm". The app now reads a zero heart rate
+  and a zero battery as absent, keeping zero as a real value for accel and gyro.
+  The firmware fix is still open and needs no app change when it lands.
+
+  Two defects were found by tests already in the repo rather than by review:
+  `ref.read` throws once disposal has begun, and `dart:io` is banned in any
+  web-reachable library under `lib/`.
+
+  Documentation was rewritten against current source in the same pass.
+  `mobile/README.md` described `lib/app/core`, an `integration_test/` directory and
+  four `--dart-define` names, **none of which exist** — it had been describing a
+  different app for some time. `docs/PROJECT_STRUCTURE.md` had no `glove/` entry at
+  all and still cited a 67-test backend suite. Counts across `README.md` were three
+  sessions stale. New: `glove/README.md`, covering the firmware, the dataset, the
+  collect → train → convert pipeline and the two path traps in it.
+
+- **2026-09-01** — First detection model trained end to end. A YOLOv8n weapon
+  detector (pistol, knife) reached mAP@0.5 0.907 and recall 0.835 on a held-out
+  split, from 7,539 images pulled together out of Open Images V7,
+  OD-WeaponDetection and Sohas. Quantised to 3.36 MB and bundled at
+  `mobile/assets/models/`.
+
+  The interesting part was the second training run. v1 detected knives much
+  worse than pistols, and the instinct is to blame resolution — knives are thin
+  and small. The measurement said otherwise: knife recall was *flat* across box
+  sizes and worse than pistol even on large boxes, meaning a knife filling the
+  frame was still missed one time in six. That is intra-class variance, not
+  scale. The cause turned out to be a data-collection mistake: Open Images
+  treats `Knife`, `Kitchen knife` and `Dagger` as three separate boxable
+  classes, and the first download asked only for `Knife`. Adding the other two
+  took knife recall from 0.763 to 0.827 and closed the pistol/knife gap from
+  6.7 points to 1.6.
+
+  Two methodological points worth carrying forward. The test split was kept
+  byte-identical between runs — had new data been spread across all three
+  splits, "knife AP went up" would have been unfalsifiable. And every candidate
+  image was content-hashed against all three existing splits, which caught
+  3,541 duplicates out of 4,511, since Sohas overlaps Granada's other folders
+  heavily; without that check images already in `test` would have landed in
+  `train` and inflated the exact metric under investigation.
+
+  Also settled: the model cannot run on the glasses and never could. An
+  ESP32-CAM is two orders of magnitude short on memory and compute, and
+  compression does not touch the part that breaks — activation memory. The
+  glove is not a counterexample; a tree ensemble over 51 scalar features is a
+  different kind of workload from a convnet over 409,600 pixels. Inference runs
+  on the phone; the glasses capture and transmit. Recorded in
+  `docs/WEAPON_INFERENCE_PLACEMENT.md`.
+
+  Nothing loads the model yet — no runtime dependency, no inference code,
+  `weapon_score` still has no producer. Bundling a model and having a detector
+  are different things and the docs now say so.

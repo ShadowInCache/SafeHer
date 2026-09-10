@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -27,6 +28,8 @@ from fastapi_app.services.contact_verification import (
 MAX_EMERGENCY_CONTACTS = 10
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
+
+logger = logging.getLogger(__name__)
 
 
 @router.get("/me", response_model=UserPublic)
@@ -348,10 +351,15 @@ async def send_contact_verification(
         )
     except ContactVerificationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    except Exception as exc:  # delivery failed
+    except Exception:  # delivery failed
+        # The provider's exception is logged, never returned. It can carry the
+        # upstream error body, internal hostnames and configuration detail, and
+        # this response goes to whoever asked -- which on this route is any
+        # authenticated caller. The user is told what to do instead.
+        logger.exception("Contact verification email failed for contact %s", contact_id)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Could not send the code: {exc}",
+            detail="Could not send the code right now. Please try again in a moment.",
         )
 
     return {"already_verified": False}

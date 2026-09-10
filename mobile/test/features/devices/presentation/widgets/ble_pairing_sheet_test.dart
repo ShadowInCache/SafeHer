@@ -87,7 +87,7 @@ DeviceDetail _registeredDetail({required String name, required DeviceType type, 
       signalStrength: 0,
       firmwareVersion: 'v1',
       updateAvailable: false,
-      sensors: const SensorReading(accelG: 0, gyroDps: 0, flexPercent: 0),
+      sensors: const SensorReading(accelG: 0, gyroDps: 0, heartRateBpm: 0),
     );
 
 Widget _harness({

@@ -7,7 +7,7 @@ part of 'offline_queue_providers.dart';
 // **************************************************************************
 
 String _$offlineQueueServiceHash() =>
-    r'dcecebec765bd047fae0182886e134eb521ece0a';
+    r'c5948766d17fcf7a2caa61132d772add22c0fbe1';
 
 /// See also [offlineQueueService].
 @ProviderFor(offlineQueueService)

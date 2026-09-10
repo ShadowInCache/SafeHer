@@ -212,6 +212,29 @@ class FakeBleService implements BleService {
     return BleConnectionInfo(deviceId: deviceId, serviceUuids: serviceUuids);
   }
 
+  /// Notifications a test wants the fake glove to emit, keyed by
+  /// characteristic UUID. Unset characteristics yield an empty stream, which
+  /// is how firmware without the telemetry characteristic behaves.
+  final Map<String, List<String>> notifications = {};
+
+  /// Characteristics the fake should refuse, to exercise the "older firmware"
+  /// path where a subscription throws rather than silently doing nothing.
+  final Set<String> missingCharacteristics = {};
+
+  @override
+  Stream<String> subscribeToCharacteristic(
+    String deviceId, {
+    required String serviceUuid,
+    required String characteristicUuid,
+  }) async* {
+    if (missingCharacteristics.contains(characteristicUuid)) {
+      throw StateError('Service $serviceUuid has no characteristic $characteristicUuid');
+    }
+    for (final message in notifications[characteristicUuid] ?? const <String>[]) {
+      yield message;
+    }
+  }
+
   @override
   Future<void> disconnect(String deviceId) async {
     disconnectCalls++;

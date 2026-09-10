@@ -66,6 +66,42 @@ def create_refresh_token(*, subject: str, role: str, settings: Settings) -> str:
     return jwt.encode(to_encode, settings.jwt_secret_key, algorithm="HS256")
 
 
+def create_ws_ticket(*, subject: str, role: str, settings: Settings) -> str:
+    """A short-lived credential for opening the alert WebSocket.
+
+    **Why this exists.** A browser cannot set headers on a WebSocket
+    handshake -- the JavaScript API has no place to put them -- so the
+    credential has to travel in the URL. A URL is the one place a
+    credential should never be: query strings are written to proxy and
+    access logs, kept in history, and forwarded in referrers.
+
+    The answer is not to move the access token, but to send something else
+    entirely. This ticket is obtained with a normal `Authorization` header,
+    lives for [Settings.ws_ticket_expire_seconds] and opens nothing but the
+    alert feed -- `decode_token` refuses it anywhere `access` is expected.
+    By the time a log line containing one is read by anybody, it has been
+    useless for a long while.
+
+    Deliberately a signed JWT rather than a random string in a server-side
+    table. A stored ticket would be single-use, which is stricter, but it
+    would live in one process's memory: minted on one worker and redeemed
+    on another, it would simply fail, and the reconnect loop would look
+    like a flaky network to the one person who needs the live feed.
+    """
+    now = datetime.now(timezone.utc)
+    to_encode = {
+        "exp": now + timedelta(seconds=settings.ws_ticket_expire_seconds),
+        "iat": now,
+        "sub": subject,
+        "role": role,
+        "iss": settings.jwt_issuer,
+        "aud": settings.jwt_audience,
+        "jti": str(uuid4()),
+        "type": "ws_ticket",
+    }
+    return jwt.encode(to_encode, settings.jwt_secret_key, algorithm="HS256")
+
+
 def decode_token(token: str, settings: Settings, expected_type: str = "access") -> TokenPayload:
     try:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=["HS256"], audience=settings.jwt_audience, issuer=settings.jwt_issuer)

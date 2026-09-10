@@ -25,21 +25,22 @@ to run.
 
 ## Blocking conditions (SRS "Stop and Fix Before Continuing")
 
-All four gates pass as of the last refresh.
+All four gates pass. Measured 2026-09-01 unless the row says otherwise.
 
 | Gate | Requirement | Last measured | Status |
 |------|-------------|---------------|--------|
 | `flutter analyze` | 0 issues | 0 issues | ✅ |
-| `flutter test --coverage` | > 70% line coverage | **75.2%** (6,024 / 8,009 lines) | ✅ |
-| `flutter build apk --release` | 0 errors | 70.7 MB APK, exit 0 | ✅ |
-| `dart run build_runner build` | 0 conflicts | 46 outputs, 0 conflicts | ✅ |
+| `flutter test --coverage` | > 70% line coverage | **75.2%** (6,024 / 8,009 lines), measured 2026-08-22 and not re-run since | ✅ |
+| `flutter build apk --release` | 0 errors | 73.7 MB APK, exit 0 | ✅ |
+| `dart run build_runner build` | 0 conflicts | 50 outputs, 0 conflicts | ✅ |
 
 Beyond the SRS's four, the repo also runs:
 
 | Check | Last measured | Status |
 |-------|---------------|--------|
-| `flutter test` (full suite) | 639 passing, 0 failing | ✅ |
-| `pytest tests/` (in-process suites) | 341 passing, 0 failing | ✅ |
+| `flutter test` (full suite) | 747 passing, 0 failing | ✅ |
+| `pytest tests/` | 468 passing, 7 skipped, 0 failing | ✅ |
+| `flutter build web --release` | compiles, 0 errors | ✅ |
 | Alembic from empty → head → downgrade → head | 13 migrations, reversible | ✅ |
 
 Coverage by area — the thin spots are where next session's tests should go:
@@ -173,7 +174,7 @@ All 17 specified component groups exist under `lib/shared/components/`, at
 
 | ID | Requirement | Status |
 |----|-------------|--------|
-| FR-DEV-01/02 | BLE pairing, glove + glasses | 🚧 fake BLE service only |
+| FR-DEV-01/02 | BLE pairing, glove + glasses | 🚧 **glove path built 2026-08-29** — pairing, characteristic subscription, classification and telemetry all implemented against the real `flutter_blue_plus` API and the real firmware's wire format. Every test runs against `FakeBleService`; no physical glove has ever been paired |
 | FR-DEV-03 | Real-time battery, low at 20% | 🟡 |
 | FR-DEV-04 | Firmware OTA, SHA-256 verified | ⛔ **Gap** — UI shows `updateAvailable`; no OTA pipeline |
 | FR-DEV-05 | Disconnection alert within 5s | 🟡 |
@@ -185,7 +186,7 @@ All 17 specified component groups exist under `lib/shared/components/`, at
 | ID | Requirement | Status |
 |----|-------------|--------|
 | FR-EMG-01 | Manual SOS, dispatched < 3s | ✅ **2026-08-21** — the fan-out moved to a background task, so the response no longer waits on it. It previously took ~2 minutes against a blocked channel while the client timed out at 15s. The incident is committed and answered before any channel is attempted |
-| FR-EMG-02 | Auto-SOS at threat ≥ 0.75 | 🟡 backend threshold implemented |
+| FR-EMG-02 | Auto-SOS at threat ≥ 0.75 | 🟡 **a real producer exists 2026-08-29** — the glove classifies on the ESP32 and the app fires on two qualifying FALLs inside 5s, off screen as well as on. The backend threshold is implemented and still has no trained model behind it. Verified against a fake glove only |
 | FR-EMG-03 | 10s countdown, cancellable | ✅ |
 | FR-EMG-04 | FCM + SMS to all contacts | 🟡 **unblocked 2026-08-21** — email was *blocked*, not broken: Render's free tier refuses outbound 25/465/587, so correct code with valid credentials simply timed out in production. `brevo_email.py` sends over HTTPS instead; set `BREVO_API_KEY` and it delivers. SMS ⛔ still unconfigured (paid). `emergency_dispatch.py` keeps priority order, per-contact isolation and 3 attempts, now off the request path |
 | FR-EMG-05 | Alert payload contents | ✅ name, time, maps link, within the 160-char budget. Evidence URL is carried when one exists (see FR-EMG-06) |
@@ -222,6 +223,37 @@ All 17 specified component groups exist under `lib/shared/components/`, at
 ## Deliberate deviations
 
 These differ from the SRS on purpose. Each is a decision, not an omission.
+
+**Three signals decide the threat score, and context does not (§6.2).**
+Changed 2026-08-30 on the product owner's instruction. §6.2 fuses motion,
+audio and vision and then applies additive context boosters: +0.10 at
+night, +0.05 in a high-risk zone, +0.15 for a confident weapon. The score
+is now decided by exactly three primary signals — the glove's XGBoost
+output, YOLOv8 weapon detection, and the CNN+LSTM audio classifier — and
+the boosters are gone from it.
+
+The reasoning: night, location and heart rate are context, not evidence
+that an assault is happening, and acting on them raises alarms during
+ordinary life. The weapon booster was also double-counting, since the same
+detection already entered through the vision weight. All of it is still
+recorded on the incident through `SupportingContext`, for the summary and
+the dashboard.
+
+**The consequence is that scores at night and in high-risk zones are lower
+than before.** That is the intended effect of the decision, and it is
+stated here rather than left to be discovered.
+
+**The weights also invert §6.2**, to 0.40 weapon / 0.35 audio / 0.25 glove.
+Under the specified ordering a knife detected at 0.90 confidence fused to
+0.28 — SAFE — because the least ambiguous signal in the system carried the
+least weight and two quiet sensors averaged it away. That was found by the
+acceptance matrix in `tests/test_fusion_architecture.py`, not by reading
+the code. A solo-signal floor was added for the same reason: the score
+never falls below half the strongest single reading, because a knife in
+view is not made safe by a calm wrist.
+
+None of these weights is validated. Two of the three producers do not
+exist, so there is nothing yet to validate them against.
 
 **Monolith, not ten microservices (§7.1).** The SRS lists ten services on
 ports 8000–8009. The repo runs one FastAPI app with ten routers. Same
@@ -1299,8 +1331,11 @@ about.
 ### FR-EMG-02 downgraded to partial, deliberately
 
 The decision path is complete and tested end to end. What it lacks is a
-producer: no detection model is trained, so no score is ever evaluated and the
-automatic alarm never fires.
+producer. That was written when nothing was trained. As of 2026-08-31 the
+glove is trained and connected, and the weapon detector is trained but not
+connected — bundled at `mobile/assets/models/` with no code that loads it. The
+audio model does not exist. So the server-side fused score still has no
+producer, and the glove is the only path that actually raises an alarm.
 
 The tempting shortcut — post the phone's accelerometer magnitude as a
 "motion score" — was not taken. It would be an invented number wearing a
@@ -1808,3 +1843,184 @@ passes, confirming the suite cannot reach the real bucket.
 
 356 backend tests pass. Evidence storage is durable in this environment for
 the first time; production still needs the three variables set on the host.
+
+---
+
+## 2026-08-29 — the pocket case, and a glove that finally reports
+
+### The gap
+
+Auto-SOS from the glove worked only while SafeHer was on screen. That is the
+inverse of the situation the feature exists for: a phone put away, a hand
+grabbed, a fall. The Profile screen said so honestly, which was the right thing
+to do about a gap and no substitute for closing it.
+
+Two independent causes, and the obvious fix would have addressed neither.
+
+**The vote lived in a widget.** `SafetyTriggerListener.build()` held the
+decision. Flutter stops pumping frames when the app leaves the screen, so
+`build()` stopped being called and the glove's classifications went nowhere.
+A foreground service alone would have kept the process alive with nothing
+reading the stream.
+
+**Android froze the process.** Even with the vote relocated, a backgrounded app
+stops receiving BLE callbacks.
+
+### Built
+
+`GloveAutoTrigger` — a `keepAlive` provider driven by `ref.listen`, which fires
+on provider state rather than on frames. Its tests run against a bare
+`ProviderContainer`: no widget tree, no pumps. If the decision ever moves back
+into a widget, they fail.
+
+`SafetyForegroundService` — a `connectedDevice|location` foreground service via
+`flutter_foreground_task`, running only while a glove is actually connected.
+It is an interface with a no-op implementation, so everything deciding *whether*
+to watch is testable and only the plugin call is not.
+
+The background alarm path routes to the countdown first and wakes the screen
+second. The widget tree is alive though not drawing, so the countdown is
+already up when the activity arrives rather than racing it.
+
+### The honesty problem this created
+
+Shipping the capability and asserting it unconditionally would have recreated
+the original lie with better machinery behind it. Starting a foreground service
+can fail — notification permission denied, an OEM that kills background work —
+and "we asked for it" is not "it is running".
+
+So `DetectionSources.backgroundWatchActive` reports the platform's answer, and
+the sentence telling a woman she can pocket her phone appears only when the
+service genuinely started. This is the fourth time a control in this codebase
+would have looked like protection while governing nothing; the previous three
+were the threat-threshold slider, the biometric toggle, and the detection
+status itself.
+
+### Two defects found by tests already in the repo
+
+`ref.read` throws once disposal has begun, so the service handle is now
+resolved in `build` and held. And `dart:io` is banned anywhere web-reachable
+under `lib/` — it throws in a browser and appears in no VM test — so the
+platform question is asked of `defaultTargetPlatform` instead. Neither was
+caught by review.
+
+The plugin's method channel is also absent under `flutter test` and in any host
+that has not registered it, which crashed the Profile goldens. Rather than
+special-casing tests, every call through it is guarded and a failure reads as
+"not running" — which is the correct production behaviour too.
+
+### The glove firmware landed, with one bug
+
+`b0e1813` added the telemetry characteristic the app had been tolerating the
+absence of. The UUID and field order match exactly.
+
+`sendTelemetry` sends four fields with `heartRateBpm` and `batteryPercent`
+hardcoded to `0`, under a comment explaining that it is *avoiding* fabricating
+unverified sensor data. The intent is right and the encoding defeats it: on
+this wire, omitting a field means "I do not measure this", while a literal `0`
+parses as a measurement — and the device card rendered **"0 bpm"**, a claim
+about a heart the parser's own documentation forbids.
+
+Fixed app-side, because the app does not choose what firmware it meets: no
+wearer has a heart rate of zero and no glove transmitting over BLE has a
+zero-percent battery, so both read as absent. `accelG` and `gyroDps` keep zero
+as a real measurement — a glove lying still genuinely reads `0.00g`, and
+discarding that would be the same error mirrored. The firmware should still
+send only the two fields it measures; the app already parses that form, which
+is why correcting it needs no further app change.
+
+### State
+
+747 mobile tests, 409 backend tests passing (7 skipped), analyzer clean,
+release APK 71.5 MB, and the service verified present in the merged manifest
+with the right type.
+
+**Nothing in this entry has run against a physical glove.** The firmware
+inference, the notify, the vote, the service and the woken screen have only
+ever met `FakeBleService`. That is now the largest untested surface in the
+project, and the one with the least excuse, since the hardware exists.
+
+---
+
+## 2026-09-01 — the first trained detector, and the gap it exposed
+
+### Built
+
+A YOLOv8n weapon detector, trained on an RTX 3050 laptop from 7,539 images
+assembled out of Open Images V7, OD-WeaponDetection and Sohas. On a held-out
+test split of 658 images it reaches **mAP@0.5 0.907, mAP@0.5:0.95 0.652,
+precision 0.900, recall 0.835** — pistol AP 0.930, knife AP 0.884. Quantised
+to INT8 at 3.36 MB and bundled at `mobile/assets/models/`.
+
+That makes it the second detector in the project that actually exists, after
+the glove, and the first one trained inside this repo's own pipeline.
+
+### The failure worth recording
+
+The first run detected knives much worse than pistols: AP@0.5 0.859 against
+0.929, recall 0.763 against 0.830. The obvious explanation is resolution —
+knives are thin, and thin objects are where detectors lose boxes.
+
+The measurement said otherwise. Knife recall was **flat across box sizes**
+(85.2% medium, 84.2% large) and worse than pistol even on large boxes, where
+pistol reached 90.3%. A knife filling the frame was still missed one time in
+six. Scale cannot explain that; intra-class variance can.
+
+The cause was a data-collection mistake rather than a modelling one. Open
+Images treats `Knife`, `Kitchen knife` and `Dagger` as three separate boxable
+classes, and the first download asked only for `Knife`. The model had been
+trained on a fraction of the knives sitting in the dataset the whole time.
+Adding the other two, plus Granada's Sohas subset filtered to pistol and knife,
+raised knife training boxes 26%:
+
+| | v1 | v2 |
+|---|---|---|
+| knife AP@0.5 | 0.859 | **0.884** |
+| knife recall | 0.763 | **0.827** |
+| pistol recall | 0.830 | 0.843 |
+| pistol − knife recall gap | 6.7 pts | **1.6 pts** |
+
+Pistol barely moved, which is the right shape for a knife-specific fix. Had
+both risen equally it would have meant the extra data was simply more data.
+
+### Two things that made the comparison mean something
+
+**The test split was byte-identical between runs.** New images went to train
+and val only. Spread across all three, "knife AP went up" would have been
+unfalsifiable — the number could move because the model improved or because
+the test got easier.
+
+**Every candidate was content-hashed against all three existing splits.** That
+caught 3,541 duplicates out of 4,511, because Sohas overlaps Granada's other
+folders heavily. Without it, images already in `test` would have landed in
+`train` and inflated precisely the metric under investigation.
+
+### Settled: the model cannot run on the glasses
+
+An ESP32-CAM has 520 KB of SRAM and 4 MB of PSRAM. The INT8 weights are
+3.36 MB, a 640×640 input tensor is 1.23 MB, and the activation memory a
+convolutional forward pass holds runs to tens of megabytes — which is the part
+compression does not touch. The chip has no neural accelerator against 8.1
+GFLOPs per frame.
+
+The glove is not a counterexample: a decision-tree ensemble over 51 scalar
+features is kilobytes of C arrays, a different kind of workload entirely.
+
+So inference runs on the phone and the glasses only capture and transmit,
+which also keeps the alarm independent of connectivity. Full arithmetic in
+`docs/WEAPON_INFERENCE_PLACEMENT.md`.
+
+### State
+
+468 backend tests and 747 mobile tests passing, analyzer clean, APK 73.7 MB and
+`flutter build web` both green.
+
+**Nothing loads the model.** There is no ONNX runtime dependency, no inference
+code, and `weapon_score` still has no producer — `DetectionSources` does not
+claim one. A trained model in the assets folder and a working detector are
+different things, and only the first exists.
+
+Recall 0.827 also means roughly one weapon in six is missed, with precision
+(0.901) above it — the confidence threshold is tuned conservative, which for a
+safety product is probably the wrong direction. Changing it is a product
+decision that has not been made.

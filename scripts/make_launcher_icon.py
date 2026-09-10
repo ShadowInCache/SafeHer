@@ -3,7 +3,8 @@
     python scripts/make_launcher_icon.py
     cd mobile && dart run flutter_launcher_icons
 
-Run this after replacing SafeHer_logo.png. It writes mobile/assets/branding/
+Run this after replacing docs/assets/safeher-logo.png. It writes
+mobile/assets/branding/
 icon.png and icon_foreground.png; flutter_launcher_icons then fans those out to
 every Android density and iOS size.
 
@@ -24,7 +25,7 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "SafeHer_logo.png"
+SRC = ROOT / "docs" / "assets" / "safeher-logo.png"
 BRANDING = ROOT / "mobile" / "assets" / "branding"
 CANVAS = 1024
 
