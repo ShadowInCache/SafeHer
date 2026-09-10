@@ -91,6 +91,7 @@ Widget _harness({
   DeviceRepository? repo,
   String? initialLocation,
   FakeBleService? ble,
+  List<Override> extraOverrides = const [],
 }) {
   return ProviderScope(
     overrides: [
@@ -102,6 +103,7 @@ Widget _harness({
       // The camera card reads the saved glasses address out of preferences,
       // which are Hive-backed through GetIt and unavailable in a widget test.
       localKeyValueStoreProvider.overrideWithValue(FakeKeyValueStore()),
+      ...extraOverrides,
     ],
     child: MaterialApp.router(
     // Mirrors main.dart's shell so screens render over the same ambient
@@ -173,6 +175,91 @@ void main() {
       // flex sensor, so the third readout was labelling hardware that does
       // not exist.
       expect(find.text('Heart'), findsOneWidget);
+    });
+
+    testWidgets(
+      'expanding the glove card shows Motion Risk Score alongside Accel/Gyro/Heart Rate',
+      (tester) async {
+        await tester.pumpWidget(_harness());
+        await tester.pump(const Duration(milliseconds: 100));
+
+        await tester.tap(find.text('Safety Glove'));
+        await tester.pump(const Duration(milliseconds: 300));
+        // 3D visual shows a shimmer for 400ms before swapping to the viewer.
+        await tester.pump(const Duration(milliseconds: 500));
+
+        // Motion Risk Score is glove-only, shown in addition to the
+        // sensor readouts — the merged design keeps Accel/Gyro/Heart Rate
+        // visible for every device type, glove included.
+        expect(find.text('MOTION RISK SCORE'), findsOneWidget);
+        expect(find.text('--'), findsOneWidget);
+        expect(find.text('Accel'), findsOneWidget);
+        expect(find.text('Gyro'), findsOneWidget);
+        expect(find.text('Heart'), findsOneWidget);
+        // Existing device controls stay, per the "do not remove" list.
+        expect(find.text('Calibrate'), findsOneWidget);
+        expect(find.text('Remove Device'), findsOneWidget);
+      },
+    );
+
+    testWidgets('Motion Risk Score updates live as the glove sends BLE motion data', (tester) async {
+      const deviceId = 'AA:BB:CC:DD:EE:FF';
+      final ble = FakeBleService();
+      // A live score requires an actual BLE link, not just the bridge
+      // provider pointing at an id — mirrors what BlePairingController
+      // does on a real connect.
+      await ble.connect(deviceId);
+
+      await tester.pumpWidget(
+        _harness(ble: ble, extraOverrides: [connectedGloveIdProvider.overrideWith((ref) => deviceId)]),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.text('Safety Glove'));
+      await tester.pump(const Duration(milliseconds: 300));
+      // The 3D visual now renders for every device type, glove included —
+      // its loading shimmer resolves after 400ms; wait it out so no timer
+      // is left pending when the test tears down.
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('--'), findsOneWidget);
+      expect(find.text('CONNECTED'), findsOneWidget);
+
+      ble.emitCharacteristicValue(deviceId, 'CLASS=NORMAL,CONFIDENCE=0.9990');
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('0.0'), findsOneWidget);
+      expect(find.text('NORMAL'), findsOneWidget);
+
+      ble.emitCharacteristicValue(deviceId, 'CLASS=FALL,CONFIDENCE=0.9613');
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('96.1'), findsOneWidget);
+      expect(find.text('FALL'), findsOneWidget);
+
+      // Power loss: the glove goes offline without ever sending a final
+      // packet, and the last reading must not be left on screen.
+      ble.dropConnection(deviceId);
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('OFFLINE'), findsOneWidget);
+      expect(find.text('--'), findsOneWidget);
+      expect(find.text('96.1'), findsNothing);
+      expect(find.text('FALL'), findsNothing);
+
+      // Power restored, same physical glove reconnects: a fresh packet
+      // updates the score again, with no duplicate device/card involved.
+      await ble.connect(deviceId);
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('CONNECTED'), findsOneWidget);
+      expect(find.text('--'), findsOneWidget);
+
+      ble.emitCharacteristicValue(deviceId, 'CLASS=PUSH,CONFIDENCE=0.8000');
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('40.0'), findsOneWidget);
+      expect(find.text('PUSH'), findsOneWidget);
+      expect(find.text('Devices (2)'), findsOneWidget);
     });
 
     testWidgets('deep link with initialExpandedId auto-expands that device', (tester) async {

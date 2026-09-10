@@ -12,6 +12,7 @@ import '../domain/device_registration_repository.dart';
 import '../domain/models/ble_models.dart';
 import '../domain/models/ble_pairing_state.dart';
 import '../domain/models/device_detail.dart';
+import '../domain/models/registered_device.dart';
 import 'ble_service_flutter_blue_plus.dart';
 import 'device_providers.dart';
 import 'device_registration_repository_mock.dart';
@@ -29,6 +30,124 @@ BleService bleService(Ref ref) => const FlutterBluePlusBleService();
 DeviceRegistrationRepository deviceRegistrationRepository(Ref ref) {
   if (AppConfig.useMockApi) return DeviceRegistrationRepositoryMock();
   return DeviceRegistrationRepositoryRemote(apiClient: ref.watch(apiClientProvider));
+}
+
+/// The BLE device id (`BleDiscoveredDevice.id`) of the glove
+/// [BlePairingController] currently holds its one GATT link to, or `null`
+/// when there is none.
+///
+/// The registered-device record shown elsewhere in the app (`DeviceDetail`,
+/// from the backend) carries no BLE address — only this in-memory link
+/// knows it, and only for as long as [BlePairingController] keeps it open
+/// (which, per its own doc comment, can outlive the pairing sheet). This
+/// provider exists solely so a screen with a backend `DeviceDetail` but no
+/// BLE id — e.g. the device list's expandable card — can still find the
+/// live [motionDataProvider] stream for the glove already connected here.
+/// It does not open, own, or duplicate a connection; it only names the one
+/// [BlePairingController] already has.
+final connectedGloveIdProvider = StateProvider<String?>((ref) => null);
+
+/// The real, live GATT connection state for [deviceId] — straight from
+/// [BleService.connectionState], not inferred from whether a motion packet
+/// has arrived recently.
+///
+/// `characteristicNotifications` goes quiet (no error, no "done") when the
+/// peripheral disconnects — see its doc comment — so it cannot answer "is
+/// the glove still there right now" on its own. This can. Consumers that
+/// need to know whether the last [MotionData] value is still current
+/// should watch this, not just check whether one exists.
+final gloveConnectionStateProvider = StreamProvider.autoDispose.family<BleConnectionStatus, String>((
+  ref,
+  deviceId,
+) {
+  return ref.watch(bleServiceProvider).connectionState(deviceId);
+});
+
+/// Keeps retrying [BleService.connect] for the glove at
+/// [connectedGloveIdProvider] whenever [gloveConnectionStateProvider]
+/// reports it disconnected — e.g. the ESP32's power was cut and later
+/// restored — so the user is never required to open the pairing sheet and
+/// register it again to pick the same physical device back up.
+///
+/// [BlePairingController] already has bounded auto-reconnect, but it is
+/// `autoDispose` and tied to the pairing sheet: closing the sheet after a
+/// successful registration (the normal flow) disposes it, cancelling that
+/// reconnect logic entirely, even though the GATT link itself is left
+/// running (see that controller's own doc comment on this gap — "a
+/// device-connection manager, which does not exist yet"). This is that
+/// manager: `keepAlive`, so once started it outlives any one screen, and
+/// unbounded, because unlike a mid-session drop (a real failure worth
+/// giving up on after a few tries) a power cycle ends whenever the user
+/// flips the glove back on, which this app has no way to predict.
+///
+/// Reconnecting only calls [BleService.connect] again — it does not touch
+/// [motionDataProvider] or open a second notification subscription.
+/// [LiveMotionDataNotifier] already reacts to
+/// [gloveConnectionStateProvider]'s real connected/disconnected edges
+/// (regardless of what triggered them) to invalidate and cleanly
+/// re-subscribe exactly once; this provider only needs to make that edge
+/// happen again.
+@Riverpod(keepAlive: true)
+class GloveConnectionManager extends _$GloveConnectionManager {
+  static const _retryDelay = Duration(milliseconds: 1500);
+
+  Timer? _retryTimer;
+
+  /// Bumped on every [build] so a reconnect attempt in flight from a
+  /// superseded build (e.g. the glove came back and `build` already reran
+  /// for that) does not schedule a second, redundant retry alongside the
+  /// current one.
+  int _generation = 0;
+
+  @override
+  void build() {
+    final myGeneration = ++_generation;
+    ref.onDispose(() {
+      // A plain `Future.delayed` cannot be cancelled once started — using
+      // a real `Timer` here, and cancelling it, is what lets a rebuild (or
+      // this provider's own disposal) actually stop a pending retry rather
+      // than merely ignoring its result. `flutter_test` fails a widget test
+      // outright over a `Future.delayed` left ticking after teardown for
+      // exactly this reason.
+      _retryTimer?.cancel();
+      _retryTimer = null;
+    });
+
+    final deviceId = ref.watch(connectedGloveIdProvider);
+    if (deviceId == null) return;
+
+    final status = ref.watch(gloveConnectionStateProvider(deviceId)).valueOrNull;
+    // Only a *confirmed* disconnect starts retrying — not the brief
+    // `AsyncLoading` gap before the first real status arrives, which would
+    // otherwise race an in-flight connect attempt from elsewhere (e.g. the
+    // pairing sheet's own initial connect).
+    if (status != BleConnectionStatus.disconnected) return;
+
+    _scheduleRetry(deviceId, myGeneration);
+  }
+
+  void _scheduleRetry(String deviceId, int generation) {
+    _retryTimer?.cancel();
+    _retryTimer = Timer(_retryDelay, () => unawaited(_attemptReconnect(deviceId, generation)));
+  }
+
+  Future<void> _attemptReconnect(String deviceId, int generation) async {
+    if (generation != _generation) return; // superseded — nothing to do
+    try {
+      await ref.read(bleServiceProvider).connect(deviceId);
+      // Success: `gloveConnectionStateProvider`'s real stream will report
+      // `connected` on its own, which reruns `build` — tearing down this
+      // retry cycle via the `onDispose` above — rather than this method
+      // declaring victory itself.
+    } on BleFailure {
+      // Peripheral still not back yet (still powered off, out of range,
+      // or mid-boot) — try again after the next delay.
+    } catch (_) {
+      // Same reasoning as elsewhere in this file: a non-`BleFailure` throw
+      // from the platform channel should not kill the retry loop.
+    }
+    if (generation == _generation) _scheduleRetry(deviceId, generation);
+  }
 }
 
 /// Drives the BLE pairing sheet: permissions → adapter state → live scan →
@@ -306,7 +425,32 @@ class BlePairingController extends _$BlePairingController {
 
   Future<void> openAppSettings() => _service.openPermissionSettings();
 
-  void selectDeviceType(DeviceType type) => _emit(state.copyWith(selectedType: type));
+  void selectDeviceType(DeviceType type) {
+    _emit(state.copyWith(selectedType: type));
+    _syncConnectedGloveId();
+  }
+
+  /// Keeps [connectedGloveIdProvider] in sync with whether the device this
+  /// controller currently holds the connection for is actually a glove.
+  ///
+  /// This controller is shared by every wearable type — ring, glasses,
+  /// glove, pendant — and the radio has no way to know which one a
+  /// peripheral is; [selectDeviceType] is how the user tells it, and it
+  /// can be tapped (and change the answer) *after* connecting. Setting
+  /// [connectedGloveIdProvider] unconditionally on every successful
+  /// connect, regardless of [BlePairingState.selectedType], would wrongly
+  /// point the glove-only motion pipeline — [GloveConnectionManager],
+  /// [motionDataProvider], the device screen's Motion Risk Score — at
+  /// whatever non-glove peripheral the user most recently paired.
+  void _syncConnectedGloveId() {
+    final target = state.target;
+    if (target == null) return;
+    if (state.selectedType == DeviceType.glove) {
+      ref.read(connectedGloveIdProvider.notifier).state = target.id;
+    } else if (ref.read(connectedGloveIdProvider) == target.id) {
+      ref.read(connectedGloveIdProvider.notifier).state = null;
+    }
+  }
 
   Future<void> connect(BleDiscoveredDevice device) async {
     _cancelScanSubscriptions();
@@ -343,6 +487,7 @@ class BlePairingController extends _$BlePairingController {
           reconnectAttempt: 0,
         ),
       );
+      _syncConnectedGloveId();
       _listenToConnectionState(device);
     } on BleFailure catch (failure) {
       _emit(state.copyWith(stage: BlePairingStage.connectionFailed, errorMessage: failure.message));
@@ -377,6 +522,9 @@ class BlePairingController extends _$BlePairingController {
   void _scheduleReconnect(BleDiscoveredDevice device) {
     if (_disposed) return;
     if (state.reconnectAttempt >= maxReconnectAttempts) {
+      if (ref.read(connectedGloveIdProvider) == device.id) {
+        ref.read(connectedGloveIdProvider.notifier).state = null;
+      }
       _emit(
         state.copyWith(
           stage: BlePairingStage.connectionFailed,
@@ -404,6 +552,7 @@ class BlePairingController extends _$BlePairingController {
           reconnectAttempt: 0,
         ),
       );
+      _syncConnectedGloveId();
       _listenToConnectionState(device);
     } on BleFailure catch (failure) {
       _emit(state.copyWith(stage: BlePairingStage.disconnected, errorMessage: failure.message));
@@ -413,15 +562,51 @@ class BlePairingController extends _$BlePairingController {
 
   /// Registers the connected peripheral with the backend using its real
   /// advertised name and the wearable type the user picked.
+  ///
+  /// Reuses an already-registered device of the same name and type instead
+  /// of registering a new one, so reconnecting the SAME physical wearable
+  /// (e.g. after its power was cycled) does not create a duplicate backend
+  /// record and a second card in the device list. The backend has no BLE
+  /// address to match on (`RegisteredDevice` carries none — see its doc
+  /// comment), so the glove's fixed advertised name is the best identity
+  /// signal available; two distinct physical units that happened to
+  /// advertise the identical name would be conflated by this, but that is
+  /// not a case this firmware/app pairing produces today.
   Future<void> registerConnectedDevice() async {
     final target = state.target;
     if (target == null || state.stage != BlePairingStage.connected) return;
 
     _emit(state.copyWith(stage: BlePairingStage.registering, clearError: true));
     try {
-      final registered = await ref
-          .read(deviceRegistrationRepositoryProvider)
-          .registerDevice(deviceName: target.registrationName, deviceType: state.selectedType);
+      var existingDevices = const <DeviceDetail>[];
+      try {
+        existingDevices = await ref.read(devicesProvider.future);
+      } catch (_) {
+        // Can't tell whether this glove is already registered — fall back
+        // to registering it rather than blocking pairing on a transient
+        // list-fetch failure. Worst case: one avoidable duplicate.
+      }
+      DeviceDetail? alreadyRegistered;
+      for (final device in existingDevices) {
+        if (device.name == target.registrationName && device.type == state.selectedType) {
+          alreadyRegistered = device;
+          break;
+        }
+      }
+
+      final RegisteredDevice registered;
+      if (alreadyRegistered != null) {
+        registered = RegisteredDevice(
+          id: alreadyRegistered.id,
+          deviceName: alreadyRegistered.name,
+          deviceType: alreadyRegistered.type,
+          isActive: true,
+        );
+      } else {
+        registered = await ref
+            .read(deviceRegistrationRepositoryProvider)
+            .registerDevice(deviceName: target.registrationName, deviceType: state.selectedType);
+      }
       _emit(state.copyWith(stage: BlePairingStage.registered, registeredDevice: registered));
       // `devicesProvider` (device_repository_remote.dart) now reads from
       // the same `fastapi_app` backend this registration just wrote to —
@@ -453,6 +638,9 @@ class BlePairingController extends _$BlePairingController {
         await _service.disconnect(target.id);
       } on BleFailure catch (failure) {
         failureMessage = failure.message;
+      }
+      if (ref.read(connectedGloveIdProvider) == target.id) {
+        ref.read(connectedGloveIdProvider.notifier).state = null;
       }
     }
 

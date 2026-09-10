@@ -65,23 +65,42 @@ class _FakeRegistrationRepository implements DeviceRegistrationRepository {
 /// 300ms `Future.delayed`, which would otherwise leave a pending Timer
 /// once these tests dispose their widget tree before it fires.
 class _InstantDeviceRepository implements DeviceRepository {
+  _InstantDeviceRepository({this.devices = const []});
+
+  final List<DeviceDetail> devices;
+
   @override
   Future<void> unpairDevice(String id) async {}
 
   @override
-  Future<List<DeviceDetail>> getDevices() async => const [];
+  Future<List<DeviceDetail>> getDevices() async => devices;
 }
+
+DeviceDetail _registeredDetail({required String name, required DeviceType type, String id = 'srv-existing'}) =>
+    DeviceDetail(
+      id: id,
+      name: name,
+      type: type,
+      isOnline: false,
+      batteryPercent: 0,
+      batteryHoursRemaining: 0,
+      signalStrength: 0,
+      firmwareVersion: 'v1',
+      updateAvailable: false,
+      sensors: const SensorReading(accelG: 0, gyroDps: 0, heartRateBpm: 0),
+    );
 
 Widget _harness({
   required FakeBleService ble,
   DeviceRegistrationRepository? registration,
+  DeviceRepository? deviceRepository,
   Brightness brightness = Brightness.dark,
 }) {
   return ProviderScope(
     overrides: [
       bleServiceProvider.overrideWithValue(ble),
       deviceRegistrationRepositoryProvider.overrideWithValue(registration ?? _FakeRegistrationRepository()),
-      deviceRepositoryProvider.overrideWithValue(_InstantDeviceRepository()),
+      deviceRepositoryProvider.overrideWithValue(deviceRepository ?? _InstantDeviceRepository()),
     ],
     child: MaterialApp(
     // Mirrors main.dart's shell so screens render over the same ambient
@@ -370,6 +389,92 @@ void main() {
       expect(registration.lastDeviceType, DeviceType.glasses);
       expect(find.text('Device Registered'), findsOneWidget);
       expect(find.text('Registered as Glasses.'), findsOneWidget);
+    });
+
+    testWidgets(
+      'the glove-only motion display never appears while pairing a non-glove device (e.g. glasses)',
+      (tester) async {
+        await tester.pumpWidget(_harness(ble: ble));
+        await _settle(tester);
+        await _connect(tester, ble);
+
+        await tester.tap(find.text('Glasses'));
+        await _settle(tester);
+
+        expect(find.textContaining('Motion:'), findsNothing);
+        expect(find.textContaining('Motion Risk:'), findsNothing);
+
+        await tester.tap(find.text('Register Device'));
+        await _settle(tester);
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(find.text('Device Registered'), findsOneWidget);
+        expect(find.textContaining('Motion:'), findsNothing);
+        expect(find.textContaining('Motion Risk:'), findsNothing);
+      },
+    );
+
+    testWidgets('the glove motion display appears for the default Glove selection', (tester) async {
+      await tester.pumpWidget(_harness(ble: ble));
+      await _settle(tester);
+      await _connect(tester, ble);
+
+      // No tap on the type picker: the default selection is already Glove.
+      expect(find.textContaining('Motion Risk:'), findsOneWidget);
+    });
+
+    testWidgets(
+      'reconnecting the same physical device reuses the existing registered device, not a duplicate',
+      (tester) async {
+        final registration = _FakeRegistrationRepository();
+        final existing = _registeredDetail(name: 'SmartGlove-01', type: DeviceType.glasses, id: 'srv-existing');
+        await tester.pumpWidget(
+          _harness(
+            ble: ble,
+            registration: registration,
+            deviceRepository: _InstantDeviceRepository(devices: [existing]),
+          ),
+        );
+        await _settle(tester);
+        await _connect(tester, ble);
+
+        await tester.tap(find.text('Glasses'));
+        await _settle(tester);
+        await tester.tap(find.text('Register Device'));
+        await _settle(tester);
+        await tester.pump(const Duration(milliseconds: 100));
+
+        // No new backend record: the already-registered device (matched by
+        // its fixed advertised name + the chosen type) was reused as-is.
+        expect(registration.calls, 0);
+        expect(find.text('Device Registered'), findsOneWidget);
+      },
+    );
+
+    testWidgets('a different device name still registers as a new device', (tester) async {
+      final registration = _FakeRegistrationRepository();
+      final existing = _registeredDetail(name: 'SomeOtherWearable', type: DeviceType.glasses, id: 'srv-other');
+      await tester.pumpWidget(
+        _harness(
+          ble: ble,
+          registration: registration,
+          deviceRepository: _InstantDeviceRepository(devices: [existing]),
+        ),
+      );
+      await _settle(tester);
+      await _connect(tester, ble);
+
+      await tester.tap(find.text('Glasses'));
+      await _settle(tester);
+      await tester.tap(find.text('Register Device'));
+      await _settle(tester);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // A different physical device (different name) is registered
+      // normally rather than being folded into the unrelated existing one.
+      expect(registration.calls, 1);
+      expect(registration.lastDeviceName, 'SmartGlove-01');
+      expect(find.text('Device Registered'), findsOneWidget);
     });
 
     testWidgets('a backend failure keeps the live connection and shows the error', (tester) async {

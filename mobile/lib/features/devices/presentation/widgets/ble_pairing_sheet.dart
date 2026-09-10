@@ -11,6 +11,7 @@ import '../../../../shared/components/feedback/sa_signal_bars.dart';
 import '../../../../shared/components/icons/sa_icon.dart';
 import '../../../../shared/components/overlays/sa_bottom_sheet.dart';
 import '../../data/ble_providers.dart';
+import '../../data/motion_data_providers.dart';
 import '../../domain/models/ble_models.dart';
 import '../../domain/models/ble_pairing_state.dart';
 import '../../domain/models/device_detail.dart';
@@ -391,7 +392,7 @@ class _BluetoothDisabledView extends StatelessWidget {
 }
 
 /// Connected → pick what the wearable physically is → register.
-class _ConnectedView extends StatelessWidget {
+class _ConnectedView extends ConsumerWidget {
   const _ConnectedView({
     required this.state,
     required this.onSelectType,
@@ -405,10 +406,20 @@ class _ConnectedView extends StatelessWidget {
   final Future<void> Function() onDisconnect;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final onSurface = Theme.of(context).colorScheme.onSurface;
     final registered = state.stage == BlePairingStage.registered;
     final device = state.target;
+
+    // Temporary: subscribe so [SAFEHER MOTION] debug logs fire, and show
+    // the live reading, while connected during end-to-end BLE verification.
+    // Glove-only: the glove is the only wearable that speaks this GATT
+    // service, and this must never appear while pairing an unrelated
+    // device type (glasses, ring, pendant) — those are owned elsewhere.
+    final isGlove = state.selectedType == DeviceType.glove;
+    final motionAsync = device != null && isGlove ? ref.watch(motionDataProvider(device.id)) : null;
+    final motion = motionAsync?.value;
+    final motionRiskScore = device != null && isGlove ? ref.watch(motionRiskScoreProvider(device.id)) : null;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -443,6 +454,33 @@ class _ConnectedView extends StatelessWidget {
             state.errorMessage!,
             textAlign: TextAlign.center,
             style: AppTypography.bodyM.copyWith(color: AppColors.coral500),
+          ),
+        ],
+        if (motion != null) ...[
+          const SizedBox(height: AppSpacing.space3),
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              'Motion: ${motion.classification} (${(motion.confidence * 100).toStringAsFixed(1)}%)',
+              textAlign: TextAlign.center,
+              style: AppTypography.bodyM.copyWith(
+                color: AppColors.violet500,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+        if (device != null && isGlove) ...[
+          const SizedBox(height: AppSpacing.space2),
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              motionRiskScore == null
+                  ? 'Motion Risk: --'
+                  : 'Motion Risk: ${motionRiskScore.toStringAsFixed(1)} / 100',
+              textAlign: TextAlign.center,
+              style: AppTypography.bodyM.copyWith(color: onSurface, fontWeight: FontWeight.w600),
+            ),
           ),
         ],
         const SizedBox(height: AppSpacing.space5),

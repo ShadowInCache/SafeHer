@@ -97,12 +97,14 @@ class FakeBleService implements BleService {
   final _scanResults = _ReplayController<List<BleDiscoveredDevice>>(const []);
   final _isScanning = _ReplayController<bool>(false);
   final _connections = <String, _ReplayController<BleConnectionStatus>>{};
+  final _notifications = <String, StreamController<String>>{};
 
   var startScanCalls = 0;
   var stopScanCalls = 0;
   var connectCalls = 0;
   var disconnectCalls = 0;
   var openSettingsCalls = 0;
+  var characteristicNotificationsCalls = 0;
 
   // --- test controls -------------------------------------------------
 
@@ -118,6 +120,17 @@ class FakeBleService implements BleService {
   void dropConnection(String deviceId) =>
       _connectionFor(deviceId).add(BleConnectionStatus.disconnected);
 
+  /// Pushes a raw notification value on [deviceId]'s subscription, as the
+  /// real radio would after [characteristicNotifications] is listened to —
+  /// e.g. `emitCharacteristicValue(id, 'CLASS=FALL,CONFIDENCE=0.9613')`.
+  void emitCharacteristicValue(String deviceId, String value) =>
+      _notificationsFor(deviceId).add(value);
+
+  /// Simulates a subscribed characteristic erroring out (e.g. the link
+  /// dropped mid-notification) without closing the stream outright.
+  void emitCharacteristicError(String deviceId, Object error) =>
+      _notificationsFor(deviceId).addError(error);
+
   Future<void> dispose() async {
     await _adapter.close();
     await _scanResults.close();
@@ -125,10 +138,19 @@ class FakeBleService implements BleService {
     for (final controller in _connections.values) {
       await controller.close();
     }
+    for (final controller in _notifications.values) {
+      await controller.close();
+    }
   }
 
   _ReplayController<BleConnectionStatus> _connectionFor(String deviceId) =>
       _connections.putIfAbsent(deviceId, () => _ReplayController(BleConnectionStatus.disconnected));
+
+  StreamController<String> _notificationsFor(String deviceId) =>
+      // Broadcast: mirrors the real FlutterBluePlusBleService, which
+      // returns a fresh broadcast controller per call and so tolerates
+      // being listened to more than once (e.g. a provider rebuild).
+      _notifications.putIfAbsent(deviceId, StreamController<String>.broadcast);
 
   // --- BleService ----------------------------------------------------
 
@@ -221,4 +243,14 @@ class FakeBleService implements BleService {
 
   @override
   Stream<BleConnectionStatus> connectionState(String deviceId) => _connectionFor(deviceId).stream;
+
+  @override
+  Stream<String> characteristicNotifications(
+    String deviceId, {
+    required String serviceUuid,
+    required String characteristicUuid,
+  }) {
+    characteristicNotificationsCalls++;
+    return _notificationsFor(deviceId).stream;
+  }
 }

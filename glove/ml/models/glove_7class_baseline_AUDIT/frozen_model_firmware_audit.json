@@ -1,0 +1,558 @@
+{
+  "generated_at": "2026-09-08 15:35:12",
+  "step1_file_inventory": [
+    {
+      "path": "A:\\Capstone\\SafeHer\\glove\\ml\\models\\safeher_glove_7class_v5_xgboost.json",
+      "exists": true,
+      "size_bytes": 5257829,
+      "sha256": "69fb6a417af1135bda5f62629691579e2e574bcda1cc3183d9b703ccc83779ea"
+    },
+    {
+      "path": "A:\\Capstone\\SafeHer\\glove\\firmware\\SafeHer_Glove_Final\\safeher_glove_final_model.h",
+      "exists": true,
+      "size_bytes": 3380,
+      "sha256": "7b07e624b508ffaf16ae45a6547517be6a39eebfee5e28d407c7f0a424a7008b"
+    },
+    {
+      "path": "A:\\Capstone\\SafeHer\\glove\\firmware\\SafeHer_Glove_Final\\safeher_glove_final_model.cpp",
+      "exists": true,
+      "size_bytes": 2322831,
+      "sha256": "6051ff13a734e8f0c346c72dade1cf8009616cf42f038362d8000b7413eb7403"
+    },
+    {
+      "path": "A:\\Capstone\\SafeHer\\glove\\firmware\\SafeHer_Glove_V5_OnDevice\\safeher_v5_model.h",
+      "exists": true,
+      "size_bytes": 3380,
+      "sha256": "7b07e624b508ffaf16ae45a6547517be6a39eebfee5e28d407c7f0a424a7008b"
+    },
+    {
+      "path": "A:\\Capstone\\SafeHer\\glove\\firmware\\SafeHer_Glove_V5_OnDevice\\safeher_v5_model.cpp",
+      "exists": true,
+      "size_bytes": 2322822,
+      "sha256": "3cbf7500df9157ce59b7c02050d0b60a3121d5bf9f29e81c5f4229ff2042b1d4"
+    },
+    {
+      "path": "A:\\Capstone\\SafeHer\\glove\\ml\\scripts\\convert_v5_to_embedded_arrays.py",
+      "exists": true,
+      "size_bytes": 36543,
+      "sha256": "af3bde54147bf1eb40ea8a26e3555dd4af2f3b2f54a74e9ed1148af3c2fbee95"
+    },
+    {
+      "path": "A:\\Capstone\\SafeHer\\glove\\ml\\scripts\\extract_glove_features.py",
+      "exists": true,
+      "size_bytes": 8246,
+      "sha256": "b3d145cbced6390f7740396b64013393e9540e0ecdbb0a03260d02ff61acf678"
+    },
+    {
+      "path": "A:\\Capstone\\SafeHer\\glove\\ml\\models\\glove_7class_v5_feature_columns.json",
+      "exists": true,
+      "size_bytes": 711,
+      "sha256": "f4468de0f7d0bb6bd876970bdc95efd2962c39f1a9a4c515e7e0ae5937c6085d"
+    },
+    {
+      "path": "A:\\Capstone\\SafeHer\\glove\\ml\\models\\glove_7class_v5_label_mapping.json",
+      "exists": true,
+      "size_bytes": 102,
+      "sha256": "e52f3f63acf24e1b113fde06ebcda4f651af55805c9a2e3d9404b607af3f0f2c"
+    },
+    {
+      "path": "A:\\Capstone\\SafeHer\\glove\\ml\\models\\glove_7class_v5_train_test_split.json",
+      "exists": true,
+      "size_bytes": 2953,
+      "sha256": "6619c1c33bbefaf79d0677f533522a987224f7d05d6a049fc4f83babc7c1e0f8"
+    }
+  ],
+  "user_claimed_frozen_baseline": {
+    "path": "A:\\Capstone\\SafeHer\\glove\\ml\\models\\glove_7class_baseline\\safeher_glove_7class_baseline_xgboost.json",
+    "sha256": "874daebd6748286d846ea00a8da4749495a0fe07e4f064432c4182e7eb54c791",
+    "trees_per_class": 179,
+    "total_trees": 1253,
+    "best_iteration": 148,
+    "active_rounds": 149,
+    "active_trees": 1043
+  },
+  "user_claimed_baseline_path_exists": false,
+  "step2_python_model_structure": {
+    "path": "A:\\Capstone\\SafeHer\\glove\\ml\\models\\safeher_glove_7class_v5_xgboost.json",
+    "sha256": "69fb6a417af1135bda5f62629691579e2e574bcda1cc3183d9b703ccc83779ea",
+    "num_class": 7,
+    "class_order": [
+      "NORMAL",
+      "JERK",
+      "PUSH",
+      "PULL",
+      "SHAKING",
+      "TWISTING",
+      "FALL"
+    ],
+    "num_feature": 51,
+    "base_score": "[1.1011598E0,-2.7675843E-1,-2.635131E-1,-2.8344727E-1,-2.7675843E-1,-2.7011395E-1,2.6942992E-1]",
+    "total_trees": 4200,
+    "total_nodes": 62804,
+    "num_boosting_rounds": 600,
+    "trees_per_class": 600.0,
+    "tree_info_is_round_robin_tree_id_mod_numclass": true,
+    "objective": "multi:softprob",
+    "no_early_stopping_used": true,
+    "matches_user_claimed_1253_trees": false,
+    "matches_user_claimed_sha256": false
+  },
+  "step3_embedded_firmware_model": {
+    "header_constants": {
+      "NUM_TREES": 4200,
+      "NUM_CLASSES": 7,
+      "NUM_FEATURES": 51,
+      "TOTAL_NODES": 62804
+    },
+    "final_cpp_num_trees_from_offsets": 4200,
+    "final_cpp_num_nodes_parsed": 62804,
+    "final_cpp_num_leaves": 33502,
+    "final_cpp_base_scores": [
+      1.1011598110198975,
+      -0.27675843238830566,
+      -0.26351308822631836,
+      -0.283447265625,
+      -0.27675843238830566,
+      -0.2701139450073242,
+      0.26942992210388184
+    ],
+    "final_cpp_class_mapping_rule": "tree_id % NUM_CLASSES",
+    "v5ondevice_cpp_class_mapping_rule": "tree_id % NUM_CLASSES",
+    "final_and_v5ondevice_cpp_identical_nodes": true,
+    "final_and_v5ondevice_cpp_identical_offsets": true,
+    "final_and_v5ondevice_cpp_identical_base_scores": true,
+    "all_1253_serialized_trees_present": false,
+    "all_4200_trees_present": true,
+    "best_iteration_truncation_applied": false,
+    "note_best_iteration": "The embedded evaluate_forest() has no concept of best_iteration/active rounds - it evaluates every tree from 0 to NUM_TREES-1 unconditionally. The V5 python model was trained with n_estimators=600 and no early stopping, so this is consistent for V5 specifically (there is no 'active' subset to truncate to) - but it means IF the firmware were ever regenerated from an early-stopped model, this code would silently include post-best_iteration trees unless the JSON export itself was already trimmed."
+  },
+  "step4_model_identity_structural_check": {
+    "trees_sampled": 4200,
+    "nodes_checked": 62804,
+    "mismatches_found": 0,
+    "sample_mismatches": [],
+    "verdict": "EXACT_MATCH"
+  },
+  "step5_feature_order": {
+    "python_feature_columns_source": "A:\\Capstone\\SafeHer\\glove\\ml\\models\\glove_7class_v5_feature_columns.json",
+    "python_order_matches_canonical_extractor_order": true,
+    "firmware_source": "A:\\Capstone\\SafeHer\\glove\\firmware\\SafeHer_Glove_Final\\SafeHer_Glove_Final.ino",
+    "on_device_feature_extraction_code_found": true,
+    "firmware_addStats_call_order": [
+      "window.ax",
+      "window.ay",
+      "window.az",
+      "window.gx",
+      "window.gy",
+      "window.gz",
+      "accMag",
+      "gyroMag"
+    ],
+    "pairs": [
+      {
+        "index": 1,
+        "python": "Ax_mean",
+        "firmware": "Ax_mean",
+        "match": true
+      },
+      {
+        "index": 2,
+        "python": "Ax_std",
+        "firmware": "Ax_std",
+        "match": true
+      },
+      {
+        "index": 3,
+        "python": "Ax_min",
+        "firmware": "Ax_min",
+        "match": true
+      },
+      {
+        "index": 4,
+        "python": "Ax_max",
+        "firmware": "Ax_max",
+        "match": true
+      },
+      {
+        "index": 5,
+        "python": "Ax_range",
+        "firmware": "Ax_range",
+        "match": true
+      },
+      {
+        "index": 6,
+        "python": "Ax_rms",
+        "firmware": "Ax_rms",
+        "match": true
+      },
+      {
+        "index": 7,
+        "python": "Ay_mean",
+        "firmware": "Ay_mean",
+        "match": true
+      },
+      {
+        "index": 8,
+        "python": "Ay_std",
+        "firmware": "Ay_std",
+        "match": true
+      },
+      {
+        "index": 9,
+        "python": "Ay_min",
+        "firmware": "Ay_min",
+        "match": true
+      },
+      {
+        "index": 10,
+        "python": "Ay_max",
+        "firmware": "Ay_max",
+        "match": true
+      },
+      {
+        "index": 11,
+        "python": "Ay_range",
+        "firmware": "Ay_range",
+        "match": true
+      },
+      {
+        "index": 12,
+        "python": "Ay_rms",
+        "firmware": "Ay_rms",
+        "match": true
+      },
+      {
+        "index": 13,
+        "python": "Az_mean",
+        "firmware": "Az_mean",
+        "match": true
+      },
+      {
+        "index": 14,
+        "python": "Az_std",
+        "firmware": "Az_std",
+        "match": true
+      },
+      {
+        "index": 15,
+        "python": "Az_min",
+        "firmware": "Az_min",
+        "match": true
+      },
+      {
+        "index": 16,
+        "python": "Az_max",
+        "firmware": "Az_max",
+        "match": true
+      },
+      {
+        "index": 17,
+        "python": "Az_range",
+        "firmware": "Az_range",
+        "match": true
+      },
+      {
+        "index": 18,
+        "python": "Az_rms",
+        "firmware": "Az_rms",
+        "match": true
+      },
+      {
+        "index": 19,
+        "python": "Gx_mean",
+        "firmware": "Gx_mean",
+        "match": true
+      },
+      {
+        "index": 20,
+        "python": "Gx_std",
+        "firmware": "Gx_std",
+        "match": true
+      },
+      {
+        "index": 21,
+        "python": "Gx_min",
+        "firmware": "Gx_min",
+        "match": true
+      },
+      {
+        "index": 22,
+        "python": "Gx_max",
+        "firmware": "Gx_max",
+        "match": true
+      },
+      {
+        "index": 23,
+        "python": "Gx_range",
+        "firmware": "Gx_range",
+        "match": true
+      },
+      {
+        "index": 24,
+        "python": "Gx_rms",
+        "firmware": "Gx_rms",
+        "match": true
+      },
+      {
+        "index": 25,
+        "python": "Gy_mean",
+        "firmware": "Gy_mean",
+        "match": true
+      },
+      {
+        "index": 26,
+        "python": "Gy_std",
+        "firmware": "Gy_std",
+        "match": true
+      },
+      {
+        "index": 27,
+        "python": "Gy_min",
+        "firmware": "Gy_min",
+        "match": true
+      },
+      {
+        "index": 28,
+        "python": "Gy_max",
+        "firmware": "Gy_max",
+        "match": true
+      },
+      {
+        "index": 29,
+        "python": "Gy_range",
+        "firmware": "Gy_range",
+        "match": true
+      },
+      {
+        "index": 30,
+        "python": "Gy_rms",
+        "firmware": "Gy_rms",
+        "match": true
+      },
+      {
+        "index": 31,
+        "python": "Gz_mean",
+        "firmware": "Gz_mean",
+        "match": true
+      },
+      {
+        "index": 32,
+        "python": "Gz_std",
+        "firmware": "Gz_std",
+        "match": true
+      },
+      {
+        "index": 33,
+        "python": "Gz_min",
+        "firmware": "Gz_min",
+        "match": true
+      },
+      {
+        "index": 34,
+        "python": "Gz_max",
+        "firmware": "Gz_max",
+        "match": true
+      },
+      {
+        "index": 35,
+        "python": "Gz_range",
+        "firmware": "Gz_range",
+        "match": true
+      },
+      {
+        "index": 36,
+        "python": "Gz_rms",
+        "firmware": "Gz_rms",
+        "match": true
+      },
+      {
+        "index": 37,
+        "python": "acc_mag_mean",
+        "firmware": "acc_mag_mean",
+        "match": true
+      },
+      {
+        "index": 38,
+        "python": "acc_mag_std",
+        "firmware": "acc_mag_std",
+        "match": true
+      },
+      {
+        "index": 39,
+        "python": "acc_mag_min",
+        "firmware": "acc_mag_min",
+        "match": true
+      },
+      {
+        "index": 40,
+        "python": "acc_mag_max",
+        "firmware": "acc_mag_max",
+        "match": true
+      },
+      {
+        "index": 41,
+        "python": "acc_mag_range",
+        "firmware": "acc_mag_range",
+        "match": true
+      },
+      {
+        "index": 42,
+        "python": "acc_mag_rms",
+        "firmware": "acc_mag_rms",
+        "match": true
+      },
+      {
+        "index": 43,
+        "python": "gyro_mag_mean",
+        "firmware": "gyro_mag_mean",
+        "match": true
+      },
+      {
+        "index": 44,
+        "python": "gyro_mag_std",
+        "firmware": "gyro_mag_std",
+        "match": true
+      },
+      {
+        "index": 45,
+        "python": "gyro_mag_min",
+        "firmware": "gyro_mag_min",
+        "match": true
+      },
+      {
+        "index": 46,
+        "python": "gyro_mag_max",
+        "firmware": "gyro_mag_max",
+        "match": true
+      },
+      {
+        "index": 47,
+        "python": "gyro_mag_range",
+        "firmware": "gyro_mag_range",
+        "match": true
+      },
+      {
+        "index": 48,
+        "python": "gyro_mag_rms",
+        "firmware": "gyro_mag_rms",
+        "match": true
+      },
+      {
+        "index": 49,
+        "python": "jerk_mean",
+        "firmware": "jerk_mean",
+        "match": true
+      },
+      {
+        "index": 50,
+        "python": "jerk_std",
+        "firmware": "jerk_std",
+        "match": true
+      },
+      {
+        "index": 51,
+        "python": "jerk_max",
+        "firmware": "jerk_max",
+        "match": true
+      }
+    ],
+    "mismatch_count": 0,
+    "mismatches": [],
+    "sampling_rate": {
+      "python_expected_hz": 100,
+      "firmware_sample_interval_us": 10000,
+      "firmware_hz": 100.0,
+      "match": true
+    },
+    "window_size": {
+      "python": 100,
+      "firmware": 100,
+      "match": true
+    },
+    "step_size": {
+      "python": 50,
+      "firmware_overlap_define": 50,
+      "firmware_computed_step": 50,
+      "match": true
+    },
+    "formula_checks": {
+      "population_variance_ddof0_matches_numpy_default": true,
+      "rms_is_sqrt_mean_square": true,
+      "range_is_max_minus_min": true,
+      "magnitude_is_sqrt_sum_of_squares": true,
+      "jerk_is_diff_of_consecutive_acc_mag": true
+    }
+  },
+  "step6_prediction_agreement": {
+    "test_windows": {
+      "n": 401,
+      "n_agree": 401,
+      "n_disagree": 0,
+      "max_probability_difference": 0.0172600119624039,
+      "mismatched_rows_sample": [],
+      "note_on_count": "Locked V5 test set has 401 windows (per glove_7class_v5_train_test_split.json: testing_windows=401), not 194 as stated in the audit request - reporting actual count rather than assuming."
+    },
+    "random_vectors": {
+      "n": 100,
+      "n_agree": 100,
+      "n_disagree": 0,
+      "max_probability_difference": 0.018570614635555482,
+      "mismatched_rows_sample": [],
+      "seed": 42,
+      "range": [
+        -30000,
+        30000
+      ]
+    }
+  },
+  "step6_probability_diff_investigation": "A small residual max-probability difference (~0.017-0.019) was observed on both test windows and random vectors despite 100% argmax agreement. Re-running the same comparison in pure float64 Python arithmetic (removing any float32 rounding) produced an almost identical difference, which rules out float32-vs-float64 accumulation as the cause. The most likely explanation is that the C++ source generator printed each tree leaf value/threshold as text with limited significant digits (~7-8 digits, e.g. '0.004135553f'), and this per-node truncation accumulates across ~600 trees per class into a visible margin difference after softmax. This did not flip any of the 501 predictions tested here, but a confidence threshold evaluated close to a decision boundary could in principle be affected by drift of this magnitude on some other input.",
+  "step7_firmware_decision_logic": {
+    "ino_files_found": [
+      "A:\\Capstone\\SafeHer\\glove\\firmware\\legacy_mqtt\\smart_glove.ino",
+      "A:\\Capstone\\SafeHer\\glove\\firmware\\SafeHer_Glove_Final\\SafeHer_Glove_Final.ino",
+      "A:\\Capstone\\SafeHer\\glove\\firmware\\SafeHer_Glove_V5_OnDevice\\SafeHer_Glove_V5_OnDevice.ino"
+    ],
+    "relevant_findings": [
+      {
+        "file": "A:\\Capstone\\SafeHer\\glove\\firmware\\SafeHer_Glove_Final\\SafeHer_Glove_Final.ino",
+        "relevant_lines_sample": [
+          "// window size (100) / step size (50) / sample interval (10 ms), the FALL",
+          "// confirmation algorithm, the FALL confidence threshold, the MPU-6500",
+          "#define FALL_CONFIDENCE_THRESHOLD 0.65f",
+          "  \"NORMAL\", \"JERK\", \"PUSH\", \"PULL\", \"SHAKING\", \"TWISTING\", \"FALL\"",
+          "// Step 5 output: two short lines, unchanged FALL-confirmation algorithm.",
+          "// Unchanged FALL-confirmation algorithm (2-hit debounce at >= threshold).",
+          "  if (confidence >= FALL_CONFIDENCE_THRESHOLD) {",
+          "    SafeHer::V5Embedded::evaluate_forest(features, scores);",
+          "    const int predictedClass = SafeHer::V5Embedded::predict_class(scores);",
+          "    const float confidence = SafeHer::V5Embedded::predict_confidence(scores);",
+          "    Serial.printf(\"RAW: %s | Confidence: %.2f | FALL_COUNT: %d\\n\",",
+          "  Serial.println(\"FALL threshold: 0.65\");"
+        ]
+      },
+      {
+        "file": "A:\\Capstone\\SafeHer\\glove\\firmware\\SafeHer_Glove_V5_OnDevice\\SafeHer_Glove_V5_OnDevice.ino",
+        "relevant_lines_sample": [
+          "#define FALL_CONFIDENCE_THRESHOLD 0.65f",
+          "  \"NORMAL\", \"JERK\", \"PUSH\", \"PULL\", \"SHAKING\", \"TWISTING\", \"FALL\"",
+          "  if (confidence >= FALL_CONFIDENCE_THRESHOLD) {",
+          "  const int predictedClass = SafeHer::V5Embedded::predict_class(scores);",
+          "  SafeHer::V5Embedded::evaluate_forest(features, scores);",
+          "  const int predictedClass = SafeHer::V5Embedded::predict_class(scores);",
+          "  const float confidence = SafeHer::V5Embedded::predict_confidence(scores);",
+          "  Serial.printf(\"RAW: %s | Confidence: %.2f | FALL_COUNT: %d\\n\",",
+          "    Serial.println(\"SAFETY: FALL CANDIDATE\");",
+          "    Serial.println(\"SAFETY: HIGH_RISK - FALL CONFIRMED\");",
+          "  Serial.println(\"FALL threshold: 0.65\");"
+        ]
+      }
+    ],
+    "model_level_postprocessing": "predict_class() is a plain argmax over accumulated+base-score class scores. predict_confidence() returns softmax probability of only the argmax class (not the full vector) - full per-class probabilities require the caller to run softmax(scores) itself, which evaluate_forest()/predict_class() do not do internally."
+  },
+  "final_status": "DO_NOT_DEPLOY_MODEL_FIRMWARE_MISMATCH",
+  "final_status_reasons": [
+    "The 'frozen baseline' model file described in this audit request (path and SHA-256) does not exist anywhere in the repository.",
+    "The only production XGBoost model found (safeher_glove_7class_v5_xgboost.json) has 4200 trees, not the 1,253 trees described for the frozen baseline.",
+    "The only production XGBoost model's SHA-256 does not match the SHA-256 provided for the frozen baseline."
+  ]
+}

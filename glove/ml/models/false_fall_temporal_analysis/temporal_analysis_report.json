@@ -1,0 +1,2207 @@
+{
+  "experiment": "false_fall_temporal_analysis",
+  "description": "Simulation only - the production V5 model's own predictions on development recordings, replaying the exact firmware debounce rule at alternative hit-counts, and testing probability-smoothing as an alternative to changing hit-count. No model/firmware/dataset changes.",
+  "locked_test_recordings_excluded": [
+    "fall_003",
+    "fall_006",
+    "fall_018",
+    "fall_020",
+    "fall_025",
+    "jerk_002",
+    "jerk_009",
+    "normal_014",
+    "normal_016",
+    "normal_020",
+    "normal_022",
+    "normal_025",
+    "normal_027",
+    "normal_030",
+    "pull_008",
+    "pull_010",
+    "push_003",
+    "push_006",
+    "shaking_009",
+    "shaking_010",
+    "twisting_001",
+    "twisting_003"
+  ],
+  "development_recordings": 198,
+  "development_windows": 3395,
+  "fall_threshold_unchanged": 0.65,
+  "task1_burst_length_distribution_by_true_class": {
+    "NORMAL": {
+      "1": 18,
+      "2": 5,
+      "5": 1,
+      "8": 1
+    },
+    "JERK": {},
+    "PUSH": {
+      "1": 24,
+      "2": 11,
+      "3": 1,
+      "4": 2,
+      "5": 1
+    },
+    "PULL": {
+      "1": 14,
+      "4": 1
+    },
+    "SHAKING": {
+      "1": 1
+    },
+    "TWISTING": {
+      "1": 7,
+      "2": 2
+    },
+    "FALL": {
+      "1": 17,
+      "2": 17,
+      "3": 3,
+      "4": 4,
+      "5": 1,
+      "6": 3,
+      "7": 2,
+      "8": 1,
+      "9": 12,
+      "19": 8
+    }
+  },
+  "task1_hitcount_simulation": {
+    "2": {
+      "hit_count": 2,
+      "n_normal_recordings_with_highrisk": 6,
+      "normal_recordings_with_highrisk": [
+        "normal_039",
+        "normal_043",
+        "normal_044",
+        "normal_045",
+        "normal_054",
+        "normal_056"
+      ],
+      "false_fall_windows_normal": 41,
+      "false_fall_windows_total": 133,
+      "n_highrisk_events": 76,
+      "n_highrisk_events_in_normal": 7,
+      "n_highrisk_events_in_fall": 51,
+      "n_highrisk_events_in_other": 18,
+      "n_fall_recordings_detected": 35,
+      "n_fall_recordings_missed": 0,
+      "fall_recordings_missed_ids": [],
+      "highrisk_events_detail": [
+        {
+          "recording_id": "normal_039",
+          "true_label": "NORMAL",
+          "window_idx": 4
+        },
+        {
+          "recording_id": "normal_043",
+          "true_label": "NORMAL",
+          "window_idx": 7
+        },
+        {
+          "recording_id": "normal_044",
+          "true_label": "NORMAL",
+          "window_idx": 4
+        },
+        {
+          "recording_id": "normal_045",
+          "true_label": "NORMAL",
+          "window_idx": 6
+        },
+        {
+          "recording_id": "normal_054",
+          "true_label": "NORMAL",
+          "window_idx": 11
+        },
+        {
+          "recording_id": "normal_056",
+          "true_label": "NORMAL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "normal_056",
+          "true_label": "NORMAL",
+          "window_idx": 7
+        },
+        {
+          "recording_id": "push_016",
+          "true_label": "PUSH",
+          "window_idx": 17
+        },
+        {
+          "recording_id": "push_017",
+          "true_label": "PUSH",
+          "window_idx": 9
+        },
+        {
+          "recording_id": "push_020",
+          "true_label": "PUSH",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "push_020",
+          "true_label": "PUSH",
+          "window_idx": 7
+        },
+        {
+          "recording_id": "push_020",
+          "true_label": "PUSH",
+          "window_idx": 16
+        },
+        {
+          "recording_id": "push_021",
+          "true_label": "PUSH",
+          "window_idx": 9
+        },
+        {
+          "recording_id": "push_022",
+          "true_label": "PUSH",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "push_022",
+          "true_label": "PUSH",
+          "window_idx": 16
+        },
+        {
+          "recording_id": "push_023",
+          "true_label": "PUSH",
+          "window_idx": 5
+        },
+        {
+          "recording_id": "push_023",
+          "true_label": "PUSH",
+          "window_idx": 9
+        },
+        {
+          "recording_id": "push_023",
+          "true_label": "PUSH",
+          "window_idx": 16
+        },
+        {
+          "recording_id": "push_026",
+          "true_label": "PUSH",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "push_026",
+          "true_label": "PUSH",
+          "window_idx": 6
+        },
+        {
+          "recording_id": "push_029",
+          "true_label": "PUSH",
+          "window_idx": 18
+        },
+        {
+          "recording_id": "push_030",
+          "true_label": "PUSH",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "pull_020",
+          "true_label": "PULL",
+          "window_idx": 4
+        },
+        {
+          "recording_id": "twisting_016",
+          "true_label": "TWISTING",
+          "window_idx": 4
+        },
+        {
+          "recording_id": "twisting_016",
+          "true_label": "TWISTING",
+          "window_idx": 10
+        },
+        {
+          "recording_id": "fall_001",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_002",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_004",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_005",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_007",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_008",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_009",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_010",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_011",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_012",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_013",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_014",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_015",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_016",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_017",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_019",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_021",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_022",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_023",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_024",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_026",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_026",
+          "true_label": "FALL",
+          "window_idx": 7
+        },
+        {
+          "recording_id": "fall_026",
+          "true_label": "FALL",
+          "window_idx": 14
+        },
+        {
+          "recording_id": "fall_027",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_028",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_028",
+          "true_label": "FALL",
+          "window_idx": 8
+        },
+        {
+          "recording_id": "fall_029",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_029",
+          "true_label": "FALL",
+          "window_idx": 6
+        },
+        {
+          "recording_id": "fall_029",
+          "true_label": "FALL",
+          "window_idx": 15
+        },
+        {
+          "recording_id": "fall_029",
+          "true_label": "FALL",
+          "window_idx": 18
+        },
+        {
+          "recording_id": "fall_030",
+          "true_label": "FALL",
+          "window_idx": 11
+        },
+        {
+          "recording_id": "fall_030",
+          "true_label": "FALL",
+          "window_idx": 16
+        },
+        {
+          "recording_id": "fall_031",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_031",
+          "true_label": "FALL",
+          "window_idx": 5
+        },
+        {
+          "recording_id": "fall_031",
+          "true_label": "FALL",
+          "window_idx": 10
+        },
+        {
+          "recording_id": "fall_031",
+          "true_label": "FALL",
+          "window_idx": 15
+        },
+        {
+          "recording_id": "fall_032",
+          "true_label": "FALL",
+          "window_idx": 6
+        },
+        {
+          "recording_id": "fall_033",
+          "true_label": "FALL",
+          "window_idx": 4
+        },
+        {
+          "recording_id": "fall_034",
+          "true_label": "FALL",
+          "window_idx": 4
+        },
+        {
+          "recording_id": "fall_035",
+          "true_label": "FALL",
+          "window_idx": 7
+        },
+        {
+          "recording_id": "fall_035",
+          "true_label": "FALL",
+          "window_idx": 18
+        },
+        {
+          "recording_id": "fall_036",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_036",
+          "true_label": "FALL",
+          "window_idx": 5
+        },
+        {
+          "recording_id": "fall_036",
+          "true_label": "FALL",
+          "window_idx": 11
+        },
+        {
+          "recording_id": "fall_037",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_037",
+          "true_label": "FALL",
+          "window_idx": 16
+        },
+        {
+          "recording_id": "fall_038",
+          "true_label": "FALL",
+          "window_idx": 4
+        },
+        {
+          "recording_id": "fall_038",
+          "true_label": "FALL",
+          "window_idx": 7
+        },
+        {
+          "recording_id": "fall_038",
+          "true_label": "FALL",
+          "window_idx": 15
+        },
+        {
+          "recording_id": "fall_039",
+          "true_label": "FALL",
+          "window_idx": 1
+        },
+        {
+          "recording_id": "fall_040",
+          "true_label": "FALL",
+          "window_idx": 7
+        }
+      ]
+    },
+    "3": {
+      "hit_count": 3,
+      "n_normal_recordings_with_highrisk": 2,
+      "normal_recordings_with_highrisk": [
+        "normal_043",
+        "normal_056"
+      ],
+      "false_fall_windows_normal": 41,
+      "false_fall_windows_total": 133,
+      "n_highrisk_events": 41,
+      "n_highrisk_events_in_normal": 2,
+      "n_highrisk_events_in_fall": 34,
+      "n_highrisk_events_in_other": 5,
+      "n_fall_recordings_detected": 32,
+      "n_fall_recordings_missed": 3,
+      "fall_recordings_missed_ids": [
+        "fall_027",
+        "fall_035",
+        "fall_040"
+      ],
+      "highrisk_events_detail": [
+        {
+          "recording_id": "normal_043",
+          "true_label": "NORMAL",
+          "window_idx": 8
+        },
+        {
+          "recording_id": "normal_056",
+          "true_label": "NORMAL",
+          "window_idx": 8
+        },
+        {
+          "recording_id": "push_020",
+          "true_label": "PUSH",
+          "window_idx": 8
+        },
+        {
+          "recording_id": "push_021",
+          "true_label": "PUSH",
+          "window_idx": 10
+        },
+        {
+          "recording_id": "push_022",
+          "true_label": "PUSH",
+          "window_idx": 17
+        },
+        {
+          "recording_id": "push_023",
+          "true_label": "PUSH",
+          "window_idx": 10
+        },
+        {
+          "recording_id": "pull_020",
+          "true_label": "PULL",
+          "window_idx": 5
+        },
+        {
+          "recording_id": "fall_001",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_002",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_004",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_005",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_007",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_008",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_009",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_010",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_011",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_012",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_013",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_014",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_015",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_016",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_017",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_019",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_021",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_022",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_023",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_024",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_026",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_026",
+          "true_label": "FALL",
+          "window_idx": 15
+        },
+        {
+          "recording_id": "fall_028",
+          "true_label": "FALL",
+          "window_idx": 4
+        },
+        {
+          "recording_id": "fall_029",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_029",
+          "true_label": "FALL",
+          "window_idx": 7
+        },
+        {
+          "recording_id": "fall_030",
+          "true_label": "FALL",
+          "window_idx": 17
+        },
+        {
+          "recording_id": "fall_031",
+          "true_label": "FALL",
+          "window_idx": 16
+        },
+        {
+          "recording_id": "fall_032",
+          "true_label": "FALL",
+          "window_idx": 7
+        },
+        {
+          "recording_id": "fall_033",
+          "true_label": "FALL",
+          "window_idx": 5
+        },
+        {
+          "recording_id": "fall_034",
+          "true_label": "FALL",
+          "window_idx": 5
+        },
+        {
+          "recording_id": "fall_036",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_037",
+          "true_label": "FALL",
+          "window_idx": 2
+        },
+        {
+          "recording_id": "fall_038",
+          "true_label": "FALL",
+          "window_idx": 16
+        },
+        {
+          "recording_id": "fall_039",
+          "true_label": "FALL",
+          "window_idx": 2
+        }
+      ]
+    },
+    "4": {
+      "hit_count": 4,
+      "n_normal_recordings_with_highrisk": 2,
+      "normal_recordings_with_highrisk": [
+        "normal_043",
+        "normal_056"
+      ],
+      "false_fall_windows_normal": 41,
+      "false_fall_windows_total": 133,
+      "n_highrisk_events": 37,
+      "n_highrisk_events_in_normal": 2,
+      "n_highrisk_events_in_fall": 31,
+      "n_highrisk_events_in_other": 4,
+      "n_fall_recordings_detected": 30,
+      "n_fall_recordings_missed": 5,
+      "fall_recordings_missed_ids": [
+        "fall_027",
+        "fall_035",
+        "fall_036",
+        "fall_038",
+        "fall_040"
+      ],
+      "highrisk_events_detail": [
+        {
+          "recording_id": "normal_043",
+          "true_label": "NORMAL",
+          "window_idx": 9
+        },
+        {
+          "recording_id": "normal_056",
+          "true_label": "NORMAL",
+          "window_idx": 9
+        },
+        {
+          "recording_id": "push_021",
+          "true_label": "PUSH",
+          "window_idx": 11
+        },
+        {
+          "recording_id": "push_022",
+          "true_label": "PUSH",
+          "window_idx": 18
+        },
+        {
+          "recording_id": "push_023",
+          "true_label": "PUSH",
+          "window_idx": 11
+        },
+        {
+          "recording_id": "pull_020",
+          "true_label": "PULL",
+          "window_idx": 6
+        },
+        {
+          "recording_id": "fall_001",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_002",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_004",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_005",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_007",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_008",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_009",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_010",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_011",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_012",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_013",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_014",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_015",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_016",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_017",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_019",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_021",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_022",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_023",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_024",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_026",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_028",
+          "true_label": "FALL",
+          "window_idx": 5
+        },
+        {
+          "recording_id": "fall_029",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_029",
+          "true_label": "FALL",
+          "window_idx": 8
+        },
+        {
+          "recording_id": "fall_030",
+          "true_label": "FALL",
+          "window_idx": 18
+        },
+        {
+          "recording_id": "fall_031",
+          "true_label": "FALL",
+          "window_idx": 17
+        },
+        {
+          "recording_id": "fall_032",
+          "true_label": "FALL",
+          "window_idx": 8
+        },
+        {
+          "recording_id": "fall_033",
+          "true_label": "FALL",
+          "window_idx": 6
+        },
+        {
+          "recording_id": "fall_034",
+          "true_label": "FALL",
+          "window_idx": 6
+        },
+        {
+          "recording_id": "fall_037",
+          "true_label": "FALL",
+          "window_idx": 3
+        },
+        {
+          "recording_id": "fall_039",
+          "true_label": "FALL",
+          "window_idx": 3
+        }
+      ]
+    }
+  },
+  "task2_smoothing_simulation": {
+    "1": {
+      "window_size": 1,
+      "n_normal_recordings_with_highrisk": 6,
+      "normal_recordings_with_highrisk": [
+        "normal_039",
+        "normal_043",
+        "normal_044",
+        "normal_045",
+        "normal_054",
+        "normal_056"
+      ],
+      "false_fall_windows_normal": 41,
+      "n_highrisk_events": 76,
+      "n_fall_recordings_detected": 35,
+      "n_fall_recordings_missed": 0,
+      "fall_recordings_missed_ids": [],
+      "argmax_change_rate_by_true_class": {
+        "NORMAL": 0.0,
+        "JERK": 0.0,
+        "PUSH": 0.0,
+        "PULL": 0.0,
+        "SHAKING": 0.0,
+        "TWISTING": 0.0,
+        "FALL": 0.0
+      }
+    },
+    "3": {
+      "window_size": 3,
+      "n_normal_recordings_with_highrisk": 5,
+      "normal_recordings_with_highrisk": [
+        "normal_043",
+        "normal_044",
+        "normal_054",
+        "normal_056",
+        "normal_059"
+      ],
+      "false_fall_windows_normal": 21,
+      "n_highrisk_events": 55,
+      "n_fall_recordings_detected": 34,
+      "n_fall_recordings_missed": 1,
+      "fall_recordings_missed_ids": [
+        "fall_035"
+      ],
+      "argmax_change_rate_by_true_class": {
+        "NORMAL": 0.10206084396467124,
+        "JERK": 0.1310344827586207,
+        "PUSH": 0.2946058091286307,
+        "PULL": 0.2630480167014614,
+        "SHAKING": 0.08620689655172414,
+        "TWISTING": 0.15463917525773196,
+        "FALL": 0.10845588235294118
+      }
+    },
+    "5": {
+      "window_size": 5,
+      "n_normal_recordings_with_highrisk": 3,
+      "normal_recordings_with_highrisk": [
+        "normal_043",
+        "normal_056",
+        "normal_059"
+      ],
+      "false_fall_windows_normal": 16,
+      "n_highrisk_events": 45,
+      "n_fall_recordings_detected": 34,
+      "n_fall_recordings_missed": 1,
+      "fall_recordings_missed_ids": [
+        "fall_035"
+      ],
+      "argmax_change_rate_by_true_class": {
+        "NORMAL": 0.11481844946025516,
+        "JERK": 0.1206896551724138,
+        "PUSH": 0.2676348547717842,
+        "PULL": 0.2797494780793319,
+        "SHAKING": 0.1,
+        "TWISTING": 0.15463917525773196,
+        "FALL": 0.13602941176470587
+      }
+    }
+  },
+  "note_on_window_step": "Windows are 100 samples/50-sample step at 100Hz -> consecutive windows are 500ms apart; a '3-window moving average' spans ~1.5s of wall-clock time, '5-window' spans ~2.5s.",
+  "task3_twisting_error_analysis": [
+    {
+      "recording_id": "twisting_016",
+      "n_windows": 19,
+      "pct_TWISTING": 21.05263157894737,
+      "pct_NORMAL": 36.8421052631579,
+      "pct_FALL": 31.57894736842105,
+      "pct_JERK": 0.0,
+      "pct_other": 10.526315789473685,
+      "avg_TWISTING_proba": 0.20001542568206787,
+      "avg_FALL_proba": 0.3243977427482605,
+      "max_FALL_proba": 0.9608153700828552,
+      "v5_never_saw_this_recording": true,
+      "acc_mag_mean": 18202.681785766767,
+      "acc_mag_max": 33518.351818015624,
+      "acc_mag_range": 24617.156228873133,
+      "acc_mag_rms": 19088.60550494797,
+      "acc_mag_std": 5367.263009870499,
+      "gyro_mag_mean": 19502.570398911183,
+      "gyro_mag_max": 41773.26306678287,
+      "gyro_mag_range": 37624.27555196252,
+      "gyro_mag_rms": 22736.78835989631,
+      "jerk_mean": -4.806585220948106,
+      "jerk_std": 1832.404548781802,
+      "jerk_max": 6422.449450599465
+    },
+    {
+      "recording_id": "twisting_018",
+      "n_windows": 19,
+      "pct_TWISTING": 31.57894736842105,
+      "pct_NORMAL": 47.36842105263158,
+      "pct_FALL": 21.05263157894737,
+      "pct_JERK": 0.0,
+      "pct_other": 0.0,
+      "avg_TWISTING_proba": 0.3348208963871002,
+      "avg_FALL_proba": 0.21076683700084686,
+      "max_FALL_proba": 0.8760476112365723,
+      "v5_never_saw_this_recording": true,
+      "acc_mag_mean": 17537.294837031444,
+      "acc_mag_max": 25711.47890237622,
+      "acc_mag_range": 14147.30600832369,
+      "acc_mag_rms": 17814.394338276117,
+      "acc_mag_std": 2853.1126544600384,
+      "gyro_mag_mean": 20185.527261185627,
+      "gyro_mag_max": 41101.80312994594,
+      "gyro_mag_range": 36648.06736454444,
+      "gyro_mag_rms": 23318.771424442657,
+      "jerk_mean": -1.8214704946390654,
+      "jerk_std": 1189.5304232524254,
+      "jerk_max": 4258.764542891205
+    },
+    {
+      "recording_id": "twisting_020",
+      "n_windows": 19,
+      "pct_TWISTING": 36.8421052631579,
+      "pct_NORMAL": 52.63157894736842,
+      "pct_FALL": 5.2631578947368425,
+      "pct_JERK": 0.0,
+      "pct_other": 5.2631578947368425,
+      "avg_TWISTING_proba": 0.3626162111759186,
+      "avg_FALL_proba": 0.14706429839134216,
+      "max_FALL_proba": 0.9502776265144348,
+      "v5_never_saw_this_recording": true,
+      "acc_mag_mean": 17978.905132771382,
+      "acc_mag_max": 30070.835128523053,
+      "acc_mag_range": 20566.642066054046,
+      "acc_mag_rms": 18603.83400936489,
+      "acc_mag_std": 4684.961878451654,
+      "gyro_mag_mean": 22340.633000921178,
+      "gyro_mag_max": 42571.14229298866,
+      "gyro_mag_range": 38645.669016131345,
+      "gyro_mag_rms": 25330.34195337448,
+      "jerk_mean": 4.2646386764280155,
+      "jerk_std": 1466.3085257000873,
+      "jerk_max": 4489.1380499867055
+    },
+    {
+      "recording_id": "twisting_017",
+      "n_windows": 19,
+      "pct_TWISTING": 42.10526315789474,
+      "pct_NORMAL": 31.57894736842105,
+      "pct_FALL": 21.05263157894737,
+      "pct_JERK": 0.0,
+      "pct_other": 5.2631578947368425,
+      "avg_TWISTING_proba": 0.39870381355285645,
+      "avg_FALL_proba": 0.21896326541900635,
+      "max_FALL_proba": 0.9002887606620789,
+      "v5_never_saw_this_recording": true,
+      "acc_mag_mean": 17745.803685351693,
+      "acc_mag_max": 30372.244782635622,
+      "acc_mag_range": 20467.05735637851,
+      "acc_mag_rms": 18331.794913122903,
+      "acc_mag_std": 4243.918680194631,
+      "gyro_mag_mean": 26159.643422495534,
+      "gyro_mag_max": 49271.891482674,
+      "gyro_mag_range": 44093.304831574,
+      "gyro_mag_rms": 29685.317891497325,
+      "jerk_mean": 6.752965365874463,
+      "jerk_std": 1751.8909679229266,
+      "jerk_max": 6316.497824179456
+    },
+    {
+      "recording_id": "twisting_019",
+      "n_windows": 19,
+      "pct_TWISTING": 42.10526315789474,
+      "pct_NORMAL": 36.8421052631579,
+      "pct_FALL": 10.526315789473685,
+      "pct_JERK": 5.2631578947368425,
+      "pct_other": 5.2631578947368425,
+      "avg_TWISTING_proba": 0.39339661598205566,
+      "avg_FALL_proba": 0.11725852638483047,
+      "max_FALL_proba": 0.4842328131198883,
+      "v5_never_saw_this_recording": true,
+      "acc_mag_mean": 17811.23919217752,
+      "acc_mag_max": 31256.539163894897,
+      "acc_mag_range": 20494.820647935394,
+      "acc_mag_rms": 18466.36371183163,
+      "acc_mag_std": 4435.684011004993,
+      "gyro_mag_mean": 24608.918835717803,
+      "gyro_mag_max": 46178.61004789649,
+      "gyro_mag_range": 41206.208426809775,
+      "gyro_mag_rms": 27572.85818705645,
+      "jerk_mean": 5.472511504121509,
+      "jerk_std": 1607.9478415478568,
+      "jerk_max": 5480.841059314342
+    },
+    {
+      "recording_id": "twisting_011",
+      "n_windows": 9,
+      "pct_TWISTING": 66.66666666666667,
+      "pct_NORMAL": 0.0,
+      "pct_FALL": 0.0,
+      "pct_JERK": 0.0,
+      "pct_other": 33.333333333333336,
+      "avg_TWISTING_proba": 0.5614310503005981,
+      "avg_FALL_proba": 0.02697913721203804,
+      "max_FALL_proba": 0.0873902291059494,
+      "v5_never_saw_this_recording": true,
+      "acc_mag_mean": 20520.49180403958,
+      "acc_mag_max": 43940.122946730524,
+      "acc_mag_range": 33265.39394256404,
+      "acc_mag_rms": 22101.201216081867,
+      "acc_mag_std": 7920.224930552909,
+      "gyro_mag_mean": 32832.19162354075,
+      "gyro_mag_max": 56167.04108089332,
+      "gyro_mag_range": 50191.63063776047,
+      "gyro_mag_rms": 36853.374151213044,
+      "jerk_mean": 2.8376703188232124,
+      "jerk_std": 2224.4589100722715,
+      "jerk_max": 7286.084671946546
+    },
+    {
+      "recording_id": "twisting_012",
+      "n_windows": 9,
+      "pct_TWISTING": 77.77777777777777,
+      "pct_NORMAL": 0.0,
+      "pct_FALL": 11.11111111111111,
+      "pct_JERK": 11.11111111111111,
+      "pct_other": 0.0,
+      "avg_TWISTING_proba": 0.7339205741882324,
+      "avg_FALL_proba": 0.0923762172460556,
+      "max_FALL_proba": 0.5683422684669495,
+      "v5_never_saw_this_recording": true,
+      "acc_mag_mean": 18943.299403793368,
+      "acc_mag_max": 33563.25573419625,
+      "acc_mag_range": 25492.5631370499,
+      "acc_mag_rms": 20143.96735791211,
+      "acc_mag_std": 6295.364331732423,
+      "gyro_mag_mean": 31047.89693069098,
+      "gyro_mag_max": 55196.35605192122,
+      "gyro_mag_range": 49950.57733610366,
+      "gyro_mag_rms": 34691.731526154676,
+      "jerk_mean": 17.15001452826127,
+      "jerk_std": 2185.0380976636507,
+      "jerk_max": 7179.371075350762
+    },
+    {
+      "recording_id": "twisting_013",
+      "n_windows": 9,
+      "pct_TWISTING": 77.77777777777777,
+      "pct_NORMAL": 0.0,
+      "pct_FALL": 0.0,
+      "pct_JERK": 0.0,
+      "pct_other": 22.22222222222222,
+      "avg_TWISTING_proba": 0.7664399743080139,
+      "avg_FALL_proba": 0.05091417580842972,
+      "max_FALL_proba": 0.1671101450920105,
+      "v5_never_saw_this_recording": true,
+      "acc_mag_mean": 19684.943761041694,
+      "acc_mag_max": 39470.56619773441,
+      "acc_mag_range": 31521.184100065457,
+      "acc_mag_rms": 20839.931249183843,
+      "acc_mag_std": 6749.520195268926,
+      "gyro_mag_mean": 36216.23226480336,
+      "gyro_mag_max": 55136.42223434799,
+      "gyro_mag_range": 50071.998961815414,
+      "gyro_mag_rms": 39153.08293230365,
+      "jerk_mean": -15.980497506080281,
+      "jerk_std": 2190.6598437561706,
+      "jerk_max": 9249.500653976831
+    },
+    {
+      "recording_id": "twisting_015",
+      "n_windows": 9,
+      "pct_TWISTING": 77.77777777777777,
+      "pct_NORMAL": 11.11111111111111,
+      "pct_FALL": 11.11111111111111,
+      "pct_JERK": 0.0,
+      "pct_other": 0.0,
+      "avg_TWISTING_proba": 0.7827531695365906,
+      "avg_FALL_proba": 0.06628870218992233,
+      "max_FALL_proba": 0.5015185475349426,
+      "v5_never_saw_this_recording": true,
+      "acc_mag_mean": 18928.021897383456,
+      "acc_mag_max": 31391.22830465199,
+      "acc_mag_range": 20742.46217453264,
+      "acc_mag_rms": 19532.775971741838,
+      "acc_mag_std": 4705.055610103912,
+      "gyro_mag_mean": 36254.667049032534,
+      "gyro_mag_max": 52204.8378141351,
+      "gyro_mag_range": 38845.82840282641,
+      "gyro_mag_rms": 38273.78787632495,
+      "jerk_mean": -1.625146612265392,
+      "jerk_std": 1215.313364635415,
+      "jerk_max": 3407.4295909424127
+    },
+    {
+      "recording_id": "twisting_009",
+      "n_windows": 18,
+      "pct_TWISTING": 100.0,
+      "pct_NORMAL": 0.0,
+      "pct_FALL": 0.0,
+      "pct_JERK": 0.0,
+      "pct_other": 0.0,
+      "avg_TWISTING_proba": 0.9968200325965881,
+      "avg_FALL_proba": 0.0023485899437218904,
+      "max_FALL_proba": 0.012832109816372395,
+      "v5_never_saw_this_recording": false,
+      "acc_mag_mean": 18749.362318846863,
+      "acc_mag_max": 30503.931737351795,
+      "acc_mag_range": 21441.14649650813,
+      "acc_mag_rms": 19450.176663004375,
+      "acc_mag_std": 5024.434718746889,
+      "gyro_mag_mean": 31257.094446220643,
+      "gyro_mag_max": 51460.301097925636,
+      "gyro_mag_range": 46568.36978081553,
+      "gyro_mag_rms": 34434.47600549735,
+      "jerk_mean": 5.364875853236605,
+      "jerk_std": 1442.0519989922254,
+      "jerk_max": 3676.3757173992763
+    },
+    {
+      "recording_id": "twisting_010",
+      "n_windows": 19,
+      "pct_TWISTING": 100.0,
+      "pct_NORMAL": 0.0,
+      "pct_FALL": 0.0,
+      "pct_JERK": 0.0,
+      "pct_other": 0.0,
+      "avg_TWISTING_proba": 0.9949160218238831,
+      "avg_FALL_proba": 0.0024286441039294004,
+      "max_FALL_proba": 0.018162252381443977,
+      "v5_never_saw_this_recording": false,
+      "acc_mag_mean": 20092.941824461523,
+      "acc_mag_max": 32123.95074932356,
+      "acc_mag_range": 22250.442714152625,
+      "acc_mag_rms": 20921.948262458434,
+      "acc_mag_std": 5692.238137348613,
+      "gyro_mag_mean": 34861.569014347326,
+      "gyro_mag_max": 51769.30315437569,
+      "gyro_mag_range": 45915.61123580993,
+      "gyro_mag_rms": 37372.125342606836,
+      "jerk_mean": 13.19450906377855,
+      "jerk_std": 1513.751619215002,
+      "jerk_max": 5201.963318752001
+    },
+    {
+      "recording_id": "twisting_007",
+      "n_windows": 19,
+      "pct_TWISTING": 100.0,
+      "pct_NORMAL": 0.0,
+      "pct_FALL": 0.0,
+      "pct_JERK": 0.0,
+      "pct_other": 0.0,
+      "avg_TWISTING_proba": 0.9986301064491272,
+      "avg_FALL_proba": 0.0006150847184471786,
+      "max_FALL_proba": 0.002698044292628765,
+      "v5_never_saw_this_recording": false,
+      "acc_mag_mean": 18714.79040774177,
+      "acc_mag_max": 28729.704773137004,
+      "acc_mag_range": 18865.048172989616,
+      "acc_mag_rms": 19363.41032261937,
+      "acc_mag_std": 4858.235714475476,
+      "gyro_mag_mean": 32652.50548371852,
+      "gyro_mag_max": 48726.45659505018,
+      "gyro_mag_range": 43002.514621862014,
+      "gyro_mag_rms": 35279.915784947814,
+      "jerk_mean": 5.567623301633804,
+      "jerk_std": 1127.4147840638025,
+      "jerk_max": 3139.7456910275214
+    },
+    {
+      "recording_id": "twisting_014",
+      "n_windows": 9,
+      "pct_TWISTING": 100.0,
+      "pct_NORMAL": 0.0,
+      "pct_FALL": 0.0,
+      "pct_JERK": 0.0,
+      "pct_other": 0.0,
+      "avg_TWISTING_proba": 0.9497948884963989,
+      "avg_FALL_proba": 0.02236907184123993,
+      "max_FALL_proba": 0.19683878123760223,
+      "v5_never_saw_this_recording": true,
+      "acc_mag_mean": 18603.544830241564,
+      "acc_mag_max": 29427.783417567196,
+      "acc_mag_range": 19990.236821101546,
+      "acc_mag_rms": 19141.139665313312,
+      "acc_mag_std": 4426.176388900505,
+      "gyro_mag_mean": 33626.11133553114,
+      "gyro_mag_max": 47087.217906265316,
+      "gyro_mag_range": 35277.25949261201,
+      "gyro_mag_rms": 35028.68492159794,
+      "jerk_mean": -6.62089156035174,
+      "jerk_std": 1594.0981492979122,
+      "jerk_max": 5155.854664716824
+    },
+    {
+      "recording_id": "twisting_006",
+      "n_windows": 19,
+      "pct_TWISTING": 100.0,
+      "pct_NORMAL": 0.0,
+      "pct_FALL": 0.0,
+      "pct_JERK": 0.0,
+      "pct_other": 0.0,
+      "avg_TWISTING_proba": 0.9964059591293335,
+      "avg_FALL_proba": 0.0017080638790503144,
+      "max_FALL_proba": 0.009839470498263836,
+      "v5_never_saw_this_recording": false,
+      "acc_mag_mean": 18353.254706594496,
+      "acc_mag_max": 28520.71776806378,
+      "acc_mag_range": 18817.185461775545,
+      "acc_mag_rms": 18957.402953854813,
+      "acc_mag_std": 4545.913498857225,
+      "gyro_mag_mean": 32308.15209318716,
+      "gyro_mag_max": 48082.01120012198,
+      "gyro_mag_range": 41823.46973913108,
+      "gyro_mag_rms": 34786.010074472026,
+      "jerk_mean": 0.1602579678114094,
+      "jerk_std": 1150.0389431677536,
+      "jerk_max": 3474.4347124435476
+    },
+    {
+      "recording_id": "twisting_005",
+      "n_windows": 19,
+      "pct_TWISTING": 100.0,
+      "pct_NORMAL": 0.0,
+      "pct_FALL": 0.0,
+      "pct_JERK": 0.0,
+      "pct_other": 0.0,
+      "avg_TWISTING_proba": 0.9942558407783508,
+      "avg_FALL_proba": 0.0016154954209923744,
+      "max_FALL_proba": 0.0050289202481508255,
+      "v5_never_saw_this_recording": false,
+      "acc_mag_mean": 18297.138776766733,
+      "acc_mag_max": 32430.92665534189,
+      "acc_mag_range": 23195.559637555685,
+      "acc_mag_rms": 18937.804747104125,
+      "acc_mag_std": 4789.516363617495,
+      "gyro_mag_mean": 31737.64402905639,
+      "gyro_mag_max": 47127.67940885321,
+      "gyro_mag_range": 43320.01099246734,
+      "gyro_mag_rms": 33573.160409213444,
+      "jerk_mean": -4.387413835111367,
+      "jerk_std": 2415.085697156481,
+      "jerk_max": 10990.565183254617
+    },
+    {
+      "recording_id": "twisting_004",
+      "n_windows": 19,
+      "pct_TWISTING": 100.0,
+      "pct_NORMAL": 0.0,
+      "pct_FALL": 0.0,
+      "pct_JERK": 0.0,
+      "pct_other": 0.0,
+      "avg_TWISTING_proba": 0.9961047172546387,
+      "avg_FALL_proba": 0.0018844626611098647,
+      "max_FALL_proba": 0.00747222825884819,
+      "v5_never_saw_this_recording": false,
+      "acc_mag_mean": 19894.42756721901,
+      "acc_mag_max": 37128.757474285805,
+      "acc_mag_range": 31041.324465445243,
+      "acc_mag_rms": 21171.792013003636,
+      "acc_mag_std": 7182.675100627888,
+      "gyro_mag_mean": 34720.94367945333,
+      "gyro_mag_max": 51036.46364745702,
+      "gyro_mag_range": 43884.746860637955,
+      "gyro_mag_rms": 36249.880837432145,
+      "jerk_mean": -0.6009878640037859,
+      "jerk_std": 2505.8497638262015,
+      "jerk_max": 8696.285978370468
+    },
+    {
+      "recording_id": "twisting_008",
+      "n_windows": 19,
+      "pct_TWISTING": 100.0,
+      "pct_NORMAL": 0.0,
+      "pct_FALL": 0.0,
+      "pct_JERK": 0.0,
+      "pct_other": 0.0,
+      "avg_TWISTING_proba": 0.9987235069274902,
+      "avg_FALL_proba": 0.00032040191581472754,
+      "max_FALL_proba": 0.0009694421896710992,
+      "v5_never_saw_this_recording": false,
+      "acc_mag_mean": 19440.80067369156,
+      "acc_mag_max": 30759.590947449447,
+      "acc_mag_range": 20585.135787690208,
+      "acc_mag_rms": 20145.563376340797,
+      "acc_mag_std": 5132.989904285691,
+      "gyro_mag_mean": 32598.99551848933,
+      "gyro_mag_max": 51905.64611615675,
+      "gyro_mag_range": 47467.530777094405,
+      "gyro_mag_rms": 35871.05312470821,
+      "jerk_mean": 1.3076299017752095,
+      "jerk_std": 1264.5235734459268,
+      "jerk_max": 3539.4548232613206
+    },
+    {
+      "recording_id": "twisting_002",
+      "n_windows": 19,
+      "pct_TWISTING": 100.0,
+      "pct_NORMAL": 0.0,
+      "pct_FALL": 0.0,
+      "pct_JERK": 0.0,
+      "pct_other": 0.0,
+      "avg_TWISTING_proba": 0.9982398152351379,
+      "avg_FALL_proba": 0.0005596711416728795,
+      "max_FALL_proba": 0.002601470798254013,
+      "v5_never_saw_this_recording": false,
+      "acc_mag_mean": 18855.82383857924,
+      "acc_mag_max": 27975.887858765138,
+      "acc_mag_range": 18475.89793432929,
+      "acc_mag_rms": 19357.05266284979,
+      "acc_mag_std": 4294.108058574925,
+      "gyro_mag_mean": 37687.9354447024,
+      "gyro_mag_max": 52957.94308935393,
+      "gyro_mag_range": 47440.01086409457,
+      "gyro_mag_rms": 40302.20920289074,
+      "jerk_mean": -2.4852820370272184,
+      "jerk_std": 1714.983262745102,
+      "jerk_max": 5762.429655332898
+    }
+  ],
+  "task4_normal_fall_twisting_resemblance": [
+    {
+      "recording_id": "normal_045",
+      "n_windows": 19,
+      "pct_correct": 0.42105263157894735,
+      "avg_FALL_proba": 0.21996119618415833,
+      "max_FALL_proba": 0.9802331924438477,
+      "dist_NORMAL": 3.5082174000251936,
+      "dist_FALL": 2.995911025641052,
+      "dist_TWISTING": 1.8607303561636361,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.237449873477472,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": true,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_059",
+      "n_windows": 19,
+      "pct_correct": 0.631578947368421,
+      "avg_FALL_proba": 0.16895250976085663,
+      "max_FALL_proba": 0.9793070554733276,
+      "dist_NORMAL": 1.987947026202629,
+      "dist_FALL": 2.048594677571203,
+      "dist_TWISTING": 2.765694447048184,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.3188792511043999,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": true,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_043",
+      "n_windows": 19,
+      "pct_correct": 0.42105263157894735,
+      "avg_FALL_proba": 0.39998772740364075,
+      "max_FALL_proba": 0.9749343395233154,
+      "dist_NORMAL": 1.8608124011004055,
+      "dist_FALL": 1.5501995985139774,
+      "dist_TWISTING": 2.815314871729836,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 0.86897374110974,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": true,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_054",
+      "n_windows": 19,
+      "pct_correct": 0.7894736842105263,
+      "avg_FALL_proba": 0.2510744333267212,
+      "max_FALL_proba": 0.973652720451355,
+      "dist_NORMAL": 1.7158353726109827,
+      "dist_FALL": 2.2727960812111196,
+      "dist_TWISTING": 5.9418763647610024,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 4.041693358212354,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": true,
+      "category": "D_unrepresented_region_model_still_confused"
+    },
+    {
+      "recording_id": "normal_050",
+      "n_windows": 19,
+      "pct_correct": 0.5789473684210527,
+      "avg_FALL_proba": 0.20857369899749756,
+      "max_FALL_proba": 0.9676721692085266,
+      "dist_NORMAL": 2.4377225400440765,
+      "dist_FALL": 2.2614862004592915,
+      "dist_TWISTING": 2.03986026717876,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 0.36511801842597436,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": true,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_051",
+      "n_windows": 19,
+      "pct_correct": 0.3684210526315789,
+      "avg_FALL_proba": 0.22982431948184967,
+      "max_FALL_proba": 0.9672223329544067,
+      "dist_NORMAL": 1.9787725461484271,
+      "dist_FALL": 1.834567810586595,
+      "dist_TWISTING": 3.1209445049398354,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.4098348692110008,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": true,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_057",
+      "n_windows": 19,
+      "pct_correct": 0.5263157894736842,
+      "avg_FALL_proba": 0.2195364087820053,
+      "max_FALL_proba": 0.9616969227790833,
+      "dist_NORMAL": 2.999713619399389,
+      "dist_FALL": 2.7023928513252415,
+      "dist_TWISTING": 1.698962158620624,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 0.84940116135347,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": true,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_056",
+      "n_windows": 19,
+      "pct_correct": 0.631578947368421,
+      "avg_FALL_proba": 0.4115866422653198,
+      "max_FALL_proba": 0.9577006101608276,
+      "dist_NORMAL": 1.1163216919168137,
+      "dist_FALL": 1.3044282672057212,
+      "dist_TWISTING": 3.8901867164267783,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 2.0606563452343587,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": true,
+      "category": "D_unrepresented_region_model_still_confused"
+    },
+    {
+      "recording_id": "normal_060",
+      "n_windows": 19,
+      "pct_correct": 0.6842105263157895,
+      "avg_FALL_proba": 0.3386228382587433,
+      "max_FALL_proba": 0.9447591304779053,
+      "dist_NORMAL": 0.9793018669721655,
+      "dist_FALL": 1.7147915729261936,
+      "dist_TWISTING": 3.697984645771053,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.9636267724848346,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": true,
+      "category": "D_unrepresented_region_model_still_confused"
+    },
+    {
+      "recording_id": "normal_047",
+      "n_windows": 19,
+      "pct_correct": 0.8947368421052632,
+      "avg_FALL_proba": 0.12292557954788208,
+      "max_FALL_proba": 0.9382261633872986,
+      "dist_NORMAL": 0.977007431851001,
+      "dist_FALL": 1.5906356801104315,
+      "dist_TWISTING": 3.7791864017195373,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.9838650181978184,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": true,
+      "category": "D_unrepresented_region_model_still_confused"
+    },
+    {
+      "recording_id": "normal_044",
+      "n_windows": 19,
+      "pct_correct": 0.7368421052631579,
+      "avg_FALL_proba": 0.21331410109996796,
+      "max_FALL_proba": 0.9293590188026428,
+      "dist_NORMAL": 1.7022155418920997,
+      "dist_FALL": 1.9525751890219578,
+      "dist_TWISTING": 2.737322883233732,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.048401238862214,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": true,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_039",
+      "n_windows": 9,
+      "pct_correct": 0.6666666666666666,
+      "avg_FALL_proba": 0.3063412606716156,
+      "max_FALL_proba": 0.7363142371177673,
+      "dist_NORMAL": 2.2803636964189264,
+      "dist_FALL": 1.7822572694249466,
+      "dist_TWISTING": 2.476334219607941,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 0.5935566443838698,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": true,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_041",
+      "n_windows": 19,
+      "pct_correct": 0.7894736842105263,
+      "avg_FALL_proba": 0.1264110803604126,
+      "max_FALL_proba": 0.6655011773109436,
+      "dist_NORMAL": 0.5597643892695179,
+      "dist_FALL": 1.5332848890867696,
+      "dist_TWISTING": 4.188692274127487,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 2.3385148881432056,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": true,
+      "category": "D_unrepresented_region_model_still_confused"
+    },
+    {
+      "recording_id": "normal_046",
+      "n_windows": 18,
+      "pct_correct": 0.7777777777777778,
+      "avg_FALL_proba": 0.1126551628112793,
+      "max_FALL_proba": 0.6647769808769226,
+      "dist_NORMAL": 1.3371373273270821,
+      "dist_FALL": 1.791322108528679,
+      "dist_TWISTING": 3.608323341275132,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.8601308033207105,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": true,
+      "category": "D_unrepresented_region_model_still_confused"
+    },
+    {
+      "recording_id": "normal_053",
+      "n_windows": 19,
+      "pct_correct": 0.631578947368421,
+      "avg_FALL_proba": 0.11207067221403122,
+      "max_FALL_proba": 0.6387004256248474,
+      "dist_NORMAL": 1.9931952400618937,
+      "dist_FALL": 2.0059062482142025,
+      "dist_TWISTING": 3.1885246904120867,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.6463909149434632,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": true,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_058",
+      "n_windows": 19,
+      "pct_correct": 0.21052631578947367,
+      "avg_FALL_proba": 0.26554930210113525,
+      "max_FALL_proba": 0.5649169087409973,
+      "dist_NORMAL": 3.882268261533334,
+      "dist_FALL": 3.5385260712343825,
+      "dist_TWISTING": 1.6877984555081755,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.6112438619697749,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": true,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_049",
+      "n_windows": 19,
+      "pct_correct": 0.42105263157894735,
+      "avg_FALL_proba": 0.07945791631937027,
+      "max_FALL_proba": 0.4975188672542572,
+      "dist_NORMAL": 2.0620886110115633,
+      "dist_FALL": 1.9940620190880847,
+      "dist_TWISTING": 2.7975991097904824,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.052281329325616,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": true,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_052",
+      "n_windows": 19,
+      "pct_correct": 0.8421052631578947,
+      "avg_FALL_proba": 0.11590080708265305,
+      "max_FALL_proba": 0.47929665446281433,
+      "dist_NORMAL": 1.7168593794821303,
+      "dist_FALL": 1.7426054362567884,
+      "dist_TWISTING": 3.7817770678603417,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.9378477673888994,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": true,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_048",
+      "n_windows": 19,
+      "pct_correct": 0.631578947368421,
+      "avg_FALL_proba": 0.11878965049982071,
+      "max_FALL_proba": 0.4597233235836029,
+      "dist_NORMAL": 1.6829733439774326,
+      "dist_FALL": 1.9639788816287176,
+      "dist_TWISTING": 3.1200004728721633,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.4427407036411395,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": true,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_055",
+      "n_windows": 19,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.06978601217269897,
+      "max_FALL_proba": 0.39329054951667786,
+      "dist_NORMAL": 3.491752587305409,
+      "dist_FALL": 4.292359766414798,
+      "dist_TWISTING": 7.771271251693268,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 5.96079843147772,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": true,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_042",
+      "n_windows": 19,
+      "pct_correct": 0.5263157894736842,
+      "avg_FALL_proba": 0.053757697343826294,
+      "max_FALL_proba": 0.3317166864871979,
+      "dist_NORMAL": 1.809393632489152,
+      "dist_FALL": 1.9943737302445501,
+      "dist_TWISTING": 3.2094111675358676,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.5919107993990826,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": true,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_037",
+      "n_windows": 9,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.03999300301074982,
+      "max_FALL_proba": 0.21452990174293518,
+      "dist_NORMAL": 2.3600301589484203,
+      "dist_FALL": 3.3238401152956434,
+      "dist_TWISTING": 6.576770598314881,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 4.822518479484524,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": true,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_036",
+      "n_windows": 9,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.024377617985010147,
+      "max_FALL_proba": 0.09397546947002411,
+      "dist_NORMAL": 1.2698330672050957,
+      "dist_FALL": 2.267279293122761,
+      "dist_TWISTING": 5.443296510523243,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 3.6598693286980586,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": true,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_038",
+      "n_windows": 9,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.020925117656588554,
+      "max_FALL_proba": 0.06551265716552734,
+      "dist_NORMAL": 1.589655249825964,
+      "dist_FALL": 2.342022377367201,
+      "dist_TWISTING": 3.2120802704225406,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.9382566779647827,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": true,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_040",
+      "n_windows": 9,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.010707267560064793,
+      "max_FALL_proba": 0.047109443694353104,
+      "dist_NORMAL": 0.7820799490998726,
+      "dist_FALL": 1.837446747163098,
+      "dist_TWISTING": 4.980981589064565,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 3.177986362797394,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": true,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_017",
+      "n_windows": 38,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.007321169599890709,
+      "max_FALL_proba": 0.028036950156092644,
+      "dist_NORMAL": 1.0452112402949179,
+      "dist_FALL": 2.287059470179823,
+      "dist_TWISTING": 5.029726070387843,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 3.3490947256675128,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_034",
+      "n_windows": 8,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.00367005099542439,
+      "max_FALL_proba": 0.01974097080528736,
+      "dist_NORMAL": 1.8572302651579835,
+      "dist_FALL": 1.0320026758480882,
+      "dist_TWISTING": 3.369789171073998,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.3390929446575917,
+      "nearest_region": "FALL",
+      "v5_never_saw_this_recording": false,
+      "category": "A_resembles_FALL_training"
+    },
+    {
+      "recording_id": "normal_035",
+      "n_windows": 19,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0033401960972696543,
+      "max_FALL_proba": 0.018519019708037376,
+      "dist_NORMAL": 2.3045799705367114,
+      "dist_FALL": 1.7207872951057503,
+      "dist_TWISTING": 2.575661818582869,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 0.6644140895429238,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": false,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_008",
+      "n_windows": 18,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0031049130484461784,
+      "max_FALL_proba": 0.017628265544772148,
+      "dist_NORMAL": 2.034159047303088,
+      "dist_FALL": 2.965659911172945,
+      "dist_TWISTING": 6.303984380655295,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 4.500172180499245,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_015",
+      "n_windows": 39,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.003264892613515258,
+      "max_FALL_proba": 0.0175417959690094,
+      "dist_NORMAL": 1.6600541307049606,
+      "dist_FALL": 2.3808781916260373,
+      "dist_TWISTING": 5.971228218292224,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 4.087191929347725,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_011",
+      "n_windows": 39,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0013082838850095868,
+      "max_FALL_proba": 0.016477622091770172,
+      "dist_NORMAL": 3.3805709741184287,
+      "dist_FALL": 4.110320559199153,
+      "dist_TWISTING": 7.66955785277578,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 5.836161942523916,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_010",
+      "n_windows": 19,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0027120255399495363,
+      "max_FALL_proba": 0.015581698156893253,
+      "dist_NORMAL": 2.9718346596297764,
+      "dist_FALL": 3.7955293512555253,
+      "dist_TWISTING": 7.248189246991922,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 5.441698173374722,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_003",
+      "n_windows": 19,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0010355354752391577,
+      "max_FALL_proba": 0.015418138355016708,
+      "dist_NORMAL": 2.434824207479471,
+      "dist_FALL": 3.344291242900072,
+      "dist_TWISTING": 6.68054440794104,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 4.895734652158142,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_024",
+      "n_windows": 9,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.006249815225601196,
+      "max_FALL_proba": 0.014529814943671227,
+      "dist_NORMAL": 2.0151971615774054,
+      "dist_FALL": 1.407050117036703,
+      "dist_TWISTING": 3.112273654859983,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.2747995069171134,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": false,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_026",
+      "n_windows": 9,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.004533042199909687,
+      "max_FALL_proba": 0.012784604914486408,
+      "dist_NORMAL": 1.125457226957853,
+      "dist_FALL": 1.5462468238694016,
+      "dist_TWISTING": 5.24435475972128,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 3.3168350617090505,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_031",
+      "n_windows": 19,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0021296730265021324,
+      "max_FALL_proba": 0.012031437829136848,
+      "dist_NORMAL": 2.252964499093306,
+      "dist_FALL": 1.6114311804309902,
+      "dist_TWISTING": 2.7423857494072243,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 0.8657316614356282,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": false,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_018",
+      "n_windows": 38,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.002563889604061842,
+      "max_FALL_proba": 0.011732911691069603,
+      "dist_NORMAL": 0.9185836319566992,
+      "dist_FALL": 2.0013483813713004,
+      "dist_TWISTING": 5.132454678809272,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 3.338084640022541,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_007",
+      "n_windows": 19,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0026567047461867332,
+      "max_FALL_proba": 0.011216682381927967,
+      "dist_NORMAL": 1.750955271910911,
+      "dist_FALL": 2.7205482982220746,
+      "dist_TWISTING": 6.011863913336986,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 4.205784753407493,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_001",
+      "n_windows": 19,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0008019788656383753,
+      "max_FALL_proba": 0.01054671686142683,
+      "dist_NORMAL": 2.1143361379612133,
+      "dist_FALL": 2.9866478166891843,
+      "dist_TWISTING": 6.385848322532386,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 4.570764182783806,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_006",
+      "n_windows": 18,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0017632030649110675,
+      "max_FALL_proba": 0.010501365177333355,
+      "dist_NORMAL": 1.8153859064643614,
+      "dist_FALL": 2.536416004994204,
+      "dist_TWISTING": 6.097152871074185,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 4.217294199664196,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_029",
+      "n_windows": 9,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.004588890355080366,
+      "max_FALL_proba": 0.010151764377951622,
+      "dist_NORMAL": 2.020491207913506,
+      "dist_FALL": 2.3429486887283555,
+      "dist_TWISTING": 2.528844502846892,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.3065718109470614,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": false,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_005",
+      "n_windows": 18,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.002852602396160364,
+      "max_FALL_proba": 0.010095549747347832,
+      "dist_NORMAL": 2.504992623435941,
+      "dist_FALL": 3.454775789423581,
+      "dist_TWISTING": 6.738604626284092,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 4.970415457803816,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_023",
+      "n_windows": 8,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0021707769483327866,
+      "max_FALL_proba": 0.008810137398540974,
+      "dist_NORMAL": 1.7914419972462696,
+      "dist_FALL": 0.8049102536295316,
+      "dist_TWISTING": 3.6641106908897365,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.6450683527678724,
+      "nearest_region": "FALL",
+      "v5_never_saw_this_recording": false,
+      "category": "A_resembles_FALL_training"
+    },
+    {
+      "recording_id": "normal_012",
+      "n_windows": 39,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.000518369022756815,
+      "max_FALL_proba": 0.008016012609004974,
+      "dist_NORMAL": 3.4571783390986344,
+      "dist_FALL": 4.236302037734466,
+      "dist_TWISTING": 7.739471575113626,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 5.9223983980462185,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_019",
+      "n_windows": 39,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0012762208934873343,
+      "max_FALL_proba": 0.0072861784137785435,
+      "dist_NORMAL": 1.8372333767075364,
+      "dist_FALL": 2.85239939024266,
+      "dist_TWISTING": 6.0844652076168995,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 4.304269619348036,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_021",
+      "n_windows": 9,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0016085817478597164,
+      "max_FALL_proba": 0.006304471753537655,
+      "dist_NORMAL": 1.4493547407075487,
+      "dist_FALL": 2.347381351697569,
+      "dist_TWISTING": 5.717008174574089,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 3.8885962927883155,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_032",
+      "n_windows": 19,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0013190958416089416,
+      "max_FALL_proba": 0.004908083006739616,
+      "dist_NORMAL": 2.494315050435987,
+      "dist_FALL": 2.29001412980214,
+      "dist_TWISTING": 1.9921291952693458,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 0.4056099696923998,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": false,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_033",
+      "n_windows": 19,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0005333811277523637,
+      "max_FALL_proba": 0.004813967738300562,
+      "dist_NORMAL": 0.8622568946447328,
+      "dist_FALL": 1.537870198446933,
+      "dist_TWISTING": 3.6129362495284627,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.8557088261295898,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_004",
+      "n_windows": 19,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0007468370604328811,
+      "max_FALL_proba": 0.0047722626477479935,
+      "dist_NORMAL": 2.486054697663196,
+      "dist_FALL": 3.3867954677416647,
+      "dist_TWISTING": 6.754450515909455,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 4.957168623346655,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_009",
+      "n_windows": 19,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0012413539225235581,
+      "max_FALL_proba": 0.004731246270239353,
+      "dist_NORMAL": 2.1756641761291866,
+      "dist_FALL": 3.075606327190686,
+      "dist_TWISTING": 6.450444012394458,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 4.644080389623504,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_002",
+      "n_windows": 19,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0008502095006406307,
+      "max_FALL_proba": 0.004719899967312813,
+      "dist_NORMAL": 2.123655587710271,
+      "dist_FALL": 3.0479727431635095,
+      "dist_TWISTING": 6.362370869294259,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 4.585846733004322,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    },
+    {
+      "recording_id": "normal_028",
+      "n_windows": 9,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.001623168122023344,
+      "max_FALL_proba": 0.0035943384282290936,
+      "dist_NORMAL": 2.793964513648716,
+      "dist_FALL": 2.9100500285989375,
+      "dist_TWISTING": 1.8823598113462625,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 1.2949660153783882,
+      "nearest_region": "DIFFICULT_NORMAL_CLUSTER",
+      "v5_never_saw_this_recording": false,
+      "category": "C_resembles_existing_difficult_NORMAL"
+    },
+    {
+      "recording_id": "normal_013",
+      "n_windows": 39,
+      "pct_correct": 1.0,
+      "avg_FALL_proba": 0.0001976933708647266,
+      "max_FALL_proba": 0.0007674655062146485,
+      "dist_NORMAL": 3.865040725378195,
+      "dist_FALL": 4.662285034368452,
+      "dist_TWISTING": 8.132613145717647,
+      "dist_DIFFICULT_NORMAL_CLUSTER": 6.329358073391785,
+      "nearest_region": "NORMAL",
+      "v5_never_saw_this_recording": false,
+      "category": "NO_ISSUE"
+    }
+  ],
+  "task4_category_counts": {
+    "NO_ISSUE": 26,
+    "C_resembles_existing_difficult_NORMAL": 19,
+    "D_unrepresented_region_model_still_confused": 6,
+    "A_resembles_FALL_training": 2
+  },
+  "task5_new_vs_old_note": "See printed output; NORMAL and TWISTING flag-rate comparison old vs new computed above.",
+  "known_difficult_normal_reference_list": [
+    "normal_039",
+    "normal_043",
+    "normal_045",
+    "normal_050",
+    "normal_051",
+    "normal_057",
+    "normal_058",
+    "normal_059"
+  ]
+}
