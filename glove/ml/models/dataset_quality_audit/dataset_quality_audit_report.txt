@@ -1,0 +1,48 @@
+SAFEHER TRAINING DATA QUALITY AUDIT
+======================================================================
+
+Total recordings scanned: 220
+Quality status: {'OK': 216, 'WARN': 4}
+
+STEP 5 CLASSIFICATION COUNTS (NORMAL recordings only):
+  NO_PROBLEM_FOUND: 40
+  DIFFICULT_BUT_VALID_DATA: 12
+  POSSIBLE_MISLABEL: 8
+
+TOP 15 MOST SUSPICIOUS NORMAL RECORDINGS:
+----------------------------------------------------------------------
+normal_043: 42.1% FALL, 10.5% TWISTING, max_FALL_proba=0.975, classification=POSSIBLE_MISLABEL
+    statistical outliers: nan
+normal_045: 21.1% FALL, 31.6% TWISTING, max_FALL_proba=0.980, classification=POSSIBLE_MISLABEL
+    raw quality problems: SUSTAINED_SATURATION_IN_CALM_CLASS:31consecutive_samples
+    statistical outliers: acc_mag_max(z=2.54)
+normal_059: 15.8% FALL, 21.1% TWISTING, max_FALL_proba=0.979, classification=POSSIBLE_MISLABEL
+    raw quality problems: SUSTAINED_SATURATION_IN_CALM_CLASS:60consecutive_samples
+    statistical outliers: nan
+normal_051: 26.3% FALL, 10.5% TWISTING, max_FALL_proba=0.967, classification=POSSIBLE_MISLABEL
+    statistical outliers: nan
+normal_057: 21.1% FALL, 15.8% TWISTING, max_FALL_proba=0.962, classification=POSSIBLE_MISLABEL
+    statistical outliers: nan
+normal_058: 36.8% FALL, 21.1% TWISTING, max_FALL_proba=0.565, classification=POSSIBLE_MISLABEL
+    statistical outliers: nan
+normal_050: 15.8% FALL, 21.1% TWISTING, max_FALL_proba=0.968, classification=POSSIBLE_MISLABEL
+    statistical outliers: nan
+normal_030: 37.5% FALL, 12.5% TWISTING, max_FALL_proba=0.622, classification=DIFFICULT_BUT_VALID_DATA
+    statistical outliers: jerk_max(z=3.47)
+normal_056: 36.8% FALL, 0.0% TWISTING, max_FALL_proba=0.958, classification=DIFFICULT_BUT_VALID_DATA
+    statistical outliers: nan
+normal_060: 31.6% FALL, 0.0% TWISTING, max_FALL_proba=0.945, classification=DIFFICULT_BUT_VALID_DATA
+    statistical outliers: nan
+normal_039: 33.3% FALL, 0.0% TWISTING, max_FALL_proba=0.736, classification=POSSIBLE_MISLABEL
+    statistical outliers: nan
+normal_044: 21.1% FALL, 0.0% TWISTING, max_FALL_proba=0.929, classification=DIFFICULT_BUT_VALID_DATA
+    statistical outliers: nan
+normal_020: 23.7% FALL, 0.0% TWISTING, max_FALL_proba=0.987, classification=DIFFICULT_BUT_VALID_DATA
+    statistical outliers: nan
+normal_054: 21.1% FALL, 0.0% TWISTING, max_FALL_proba=0.974, classification=DIFFICULT_BUT_VALID_DATA
+    statistical outliers: nan
+normal_046: 11.1% FALL, 5.6% TWISTING, max_FALL_proba=0.665, classification=DIFFICULT_BUT_VALID_DATA
+    statistical outliers: jerk_mean(z=-2.66)
+
+STEP 6: NEW PUSH/PULL recordings raw quality problems found:
+  pull_011: ['ABNORMAL_SAMPLING_INTERVALS:1']

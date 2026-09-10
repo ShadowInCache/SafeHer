@@ -1,0 +1,53 @@
+SAFEHER FALSE-FALL TEMPORAL SIMULATION (READ-ONLY)
+======================================================================
+
+Development recordings: 198 / windows: 3395
+Locked test set: EXCLUDED, NOT USED FOR ANY DECISION
+
+TASK 1 - HIT-COUNT SIMULATION
+----------------------------------------------------------------------
+2-hit: NORMAL_recs_with_HIGH_RISK=6 false_FALL_windows_NORMAL=41 HIGH_RISK_events=76 FALL_detected=35 FALL_missed=0
+3-hit: NORMAL_recs_with_HIGH_RISK=2 false_FALL_windows_NORMAL=41 HIGH_RISK_events=41 FALL_detected=32 FALL_missed=3
+4-hit: NORMAL_recs_with_HIGH_RISK=2 false_FALL_windows_NORMAL=41 HIGH_RISK_events=37 FALL_detected=30 FALL_missed=5
+
+TASK 2 - SMOOTHING SIMULATION
+----------------------------------------------------------------------
+window=1: NORMAL_recs_with_HIGH_RISK=6 false_FALL_windows_NORMAL=41 HIGH_RISK_events=76 FALL_detected=35 FALL_missed=0
+window=3: NORMAL_recs_with_HIGH_RISK=5 false_FALL_windows_NORMAL=21 HIGH_RISK_events=55 FALL_detected=34 FALL_missed=1
+window=5: NORMAL_recs_with_HIGH_RISK=3 false_FALL_windows_NORMAL=16 HIGH_RISK_events=45 FALL_detected=34 FALL_missed=1
+
+BURST LENGTH DISTRIBUTION (NORMAL): {1: 18, 2: 5, 5: 1, 8: 1}
+BURST LENGTH DISTRIBUTION (FALL): {1: 17, 2: 17, 3: 3, 4: 4, 5: 1, 6: 3, 7: 2, 8: 1, 9: 12, 19: 8}
+
+
+TASK 3 - TWISTING ERROR ANALYSIS
+----------------------------------------------------------------------
+twisting_016: pct_TWISTING=21.1% pct_NORMAL=36.8% pct_FALL=31.6% max_FALL_proba=0.961 new=True
+twisting_018: pct_TWISTING=31.6% pct_NORMAL=47.4% pct_FALL=21.1% max_FALL_proba=0.876 new=True
+twisting_020: pct_TWISTING=36.8% pct_NORMAL=52.6% pct_FALL=5.3% max_FALL_proba=0.950 new=True
+twisting_017: pct_TWISTING=42.1% pct_NORMAL=31.6% pct_FALL=21.1% max_FALL_proba=0.900 new=True
+twisting_019: pct_TWISTING=42.1% pct_NORMAL=36.8% pct_FALL=10.5% max_FALL_proba=0.484 new=True
+twisting_011: pct_TWISTING=66.7% pct_NORMAL=0.0% pct_FALL=0.0% max_FALL_proba=0.087 new=True
+twisting_012: pct_TWISTING=77.8% pct_NORMAL=0.0% pct_FALL=11.1% max_FALL_proba=0.568 new=True
+twisting_013: pct_TWISTING=77.8% pct_NORMAL=0.0% pct_FALL=0.0% max_FALL_proba=0.167 new=True
+twisting_015: pct_TWISTING=77.8% pct_NORMAL=11.1% pct_FALL=11.1% max_FALL_proba=0.502 new=True
+twisting_009: pct_TWISTING=100.0% pct_NORMAL=0.0% pct_FALL=0.0% max_FALL_proba=0.013 new=False
+
+TASK 4 - NORMAL RESEMBLANCE CATEGORIES
+----------------------------------------------------------------------
+{'NO_ISSUE': 26, 'C_resembles_existing_difficult_NORMAL': 19, 'D_unrepresented_region_model_still_confused': 6, 'A_resembles_FALL_training': 2}
+normal_045: max_FALL_proba=0.980 category=C_resembles_existing_difficult_NORMAL nearest=DIFFICULT_NORMAL_CLUSTER new=True
+normal_059: max_FALL_proba=0.979 category=C_resembles_existing_difficult_NORMAL nearest=DIFFICULT_NORMAL_CLUSTER new=True
+normal_043: max_FALL_proba=0.975 category=C_resembles_existing_difficult_NORMAL nearest=DIFFICULT_NORMAL_CLUSTER new=True
+normal_054: max_FALL_proba=0.974 category=D_unrepresented_region_model_still_confused nearest=NORMAL new=True
+normal_050: max_FALL_proba=0.968 category=C_resembles_existing_difficult_NORMAL nearest=DIFFICULT_NORMAL_CLUSTER new=True
+normal_051: max_FALL_proba=0.967 category=C_resembles_existing_difficult_NORMAL nearest=DIFFICULT_NORMAL_CLUSTER new=True
+normal_057: max_FALL_proba=0.962 category=C_resembles_existing_difficult_NORMAL nearest=DIFFICULT_NORMAL_CLUSTER new=True
+normal_056: max_FALL_proba=0.958 category=D_unrepresented_region_model_still_confused nearest=NORMAL new=True
+normal_060: max_FALL_proba=0.945 category=D_unrepresented_region_model_still_confused nearest=NORMAL new=True
+normal_047: max_FALL_proba=0.938 category=D_unrepresented_region_model_still_confused nearest=NORMAL new=True
+normal_044: max_FALL_proba=0.929 category=C_resembles_existing_difficult_NORMAL nearest=DIFFICULT_NORMAL_CLUSTER new=True
+normal_039: max_FALL_proba=0.736 category=C_resembles_existing_difficult_NORMAL nearest=DIFFICULT_NORMAL_CLUSTER new=True
+normal_041: max_FALL_proba=0.666 category=D_unrepresented_region_model_still_confused nearest=NORMAL new=True
+normal_046: max_FALL_proba=0.665 category=D_unrepresented_region_model_still_confused nearest=NORMAL new=True
+normal_053: max_FALL_proba=0.639 category=C_resembles_existing_difficult_NORMAL nearest=DIFFICULT_NORMAL_CLUSTER new=True

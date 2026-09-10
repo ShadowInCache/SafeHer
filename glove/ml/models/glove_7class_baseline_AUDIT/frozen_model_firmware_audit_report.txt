@@ -1,0 +1,11 @@
+SAFEHER FROZEN MODEL / FIRMWARE CONSISTENCY AUDIT
+======================================================================
+
+FINAL STATUS: DO_NOT_DEPLOY_MODEL_FIRMWARE_MISMATCH
+
+Reasons:
+  - The 'frozen baseline' model file described in this audit request (path and SHA-256) does not exist anywhere in the repository.
+  - The only production XGBoost model found (safeher_glove_7class_v5_xgboost.json) has 4200 trees, not the 1,253 trees described for the frozen baseline.
+  - The only production XGBoost model's SHA-256 does not match the SHA-256 provided for the frozen baseline.
+
+Full machine-readable detail: A:\Capstone\SafeHer\glove\ml\models\glove_7class_baseline_AUDIT\frozen_model_firmware_audit.json
