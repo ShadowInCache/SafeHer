@@ -23,6 +23,8 @@ import '../../../shared/components/overlays/sa_toast.dart';
 import '../../dashboard/data/dashboard_providers.dart';
 import '../../dashboard/domain/models/dashboard_summary.dart';
 import '../../devices/data/device_providers.dart';
+import '../../devices/domain/glove_protocol.dart';
+import '../../devices/data/glove_link_providers.dart';
 import '../../devices/domain/models/device_detail.dart';
 import '../../monitoring/data/monitoring_providers.dart';
 import '../../monitoring/domain/models/realtime_alert_event.dart';
@@ -622,21 +624,31 @@ class _DeviceStatusRow extends StatelessWidget {
   }
 }
 
-class _LiveMonitoringSummaryCard extends StatelessWidget {
+class _LiveMonitoringSummaryCard extends ConsumerWidget {
   const _LiveMonitoringSummaryCard({required this.monitoring, required this.onTap});
 
   final LiveMonitoringState monitoring;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final onSurface = Theme.of(context).colorScheme.onSurface;
+
+    // The glove is the source of truth for live detection, not the backend
+    // socket. Detection runs on the ESP32 and reaches the phone over BLE
+    // without the server involved at all, so when a glove is connected this
+    // section reports what it is actually saying. The socket remains the
+    // fallback for everything else the backend may push.
+    final glove = ref.watch(gloveLinkProvider);
     final latest = monitoring.events.isNotEmpty ? monitoring.events.first : null;
-    final (statusLabel, statusColor) = switch (monitoring.status) {
-      MonitoringConnectionStatus.connected => ('Live', AppColors.success500),
-      MonitoringConnectionStatus.connecting => ('Connecting', AppColors.warning500),
-      MonitoringConnectionStatus.disconnected => ('Offline', AppColors.neutral400),
-    };
+
+    final (statusLabel, statusColor) = glove.isListening
+        ? ('Glove live', AppColors.success500)
+        : switch (monitoring.status) {
+            MonitoringConnectionStatus.connected => ('Live', AppColors.success500),
+            MonitoringConnectionStatus.connecting => ('Connecting', AppColors.warning500),
+            MonitoringConnectionStatus.disconnected => ('Offline', AppColors.neutral400),
+          };
 
     // A section, not a floating card. This sat between the device register
     // and the quick-action grid as the one block with no section rule, so the
@@ -664,7 +676,20 @@ class _LiveMonitoringSummaryCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.space3),
-          if (latest == null)
+          if (glove.isListening) ...[
+            Text(
+              glove.classification == null
+                  ? 'Glove connected — waiting for its first reading.'
+                  : '${glove.classification!.displayLabel} · '
+                      '${(glove.classification!.confidence * 100).round()}% confident',
+              style: AppTypography.bodyM.copyWith(color: onSurface),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              _describeGloveTelemetry(glove.telemetry, glove.telemetryUnsupported),
+              style: AppTypography.labelM.copyWith(color: onSurface.withValues(alpha: 0.5)),
+            ),
+          ] else if (latest == null)
             Text(
               monitoring.status == MonitoringConnectionStatus.disconnected
                   ? 'No live device data available.'
@@ -689,6 +714,18 @@ class _LiveMonitoringSummaryCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// One line of glove telemetry, or an honest reason there is none.
+String _describeGloveTelemetry(GloveTelemetry? telemetry, bool unsupported) {
+  if (unsupported) return 'This glove reports classifications only.';
+  if (telemetry == null) return 'No sensor readings yet.';
+  final parts = <String>[
+    if (telemetry.accelG != null) '${telemetry.accelG!.toStringAsFixed(2)}g',
+    if (telemetry.gyroDps != null) '${telemetry.gyroDps!.toStringAsFixed(1)}°/s',
+    if (telemetry.heartRateBpm != null) '${telemetry.heartRateBpm!.round()} bpm',
+  ];
+  return parts.isEmpty ? 'No sensor readings yet.' : parts.join(' · ');
 }
 
 class _EventBreakdownChart extends StatelessWidget {

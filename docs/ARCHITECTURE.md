@@ -9,8 +9,9 @@ nothing imported it; it remains in git history if it is ever needed.
 
 ```mermaid
 flowchart TB
-    subgraph Devices["Physical devices (hardware/)"]
-        Glove["ESP32 Smart Glove\nMPU6050 motion + panic button"]
+    subgraph Devices["Physical devices"]
+        Glove["ESP32 Smart Glove (glove/)\non-device XGBoost"]
+        GloveOld["ESP32 glove (hardware/)\nraw telemetry"]
         Glasses["ESP32-CAM Smart Glasses\nframe streaming"]
     end
 
@@ -33,7 +34,8 @@ flowchart TB
 
     Mobile["mobile/ (Flutter)\nRiverpod + GoRouter"]
 
-    Glove -- "MQTT / TLS" --> MQTTIn
+    Glove -- "BLE notify, no server" --> Mobile
+    GloveOld -- "MQTT / TLS" --> MQTTIn
     Glasses -- "MQTT frames" --> MQTTIn
     MQTTIn --> Motion & Voice & Weapon
     Motion & Voice & Weapon --> Fusion
@@ -74,6 +76,134 @@ sequenceDiagram
     Mobile->>API: POST /api/v1/incidents/ (user-initiated SOS, same path)
 ```
 
+## The other alert path: a glove, and no server at all
+
+The sequence above is the designed path, and every model it depends on is
+untrained, so in practice it never starts. The path that does work today shares
+none of it.
+
+```mermaid
+sequenceDiagram
+    participant Glove as ESP32 Smart Glove (glove/)
+    participant Link as GloveLink (BLE subscription)
+    participant Vote as GloveAutoTrigger
+    participant FGS as Foreground service
+    participant UI as Emergency countdown
+    participant API as fastapi_app routers/incidents.py
+
+    Glove->>Glove: 100 Hz sampling, 51 features, XGBoost on device
+    Glove->>Link: BLE notify "FALL,0.93" (every ~0.5 s)
+    Link->>Vote: classification
+    Vote->>Vote: 2 qualifying FALLs inside 5 s?
+    Note over FGS: keeps the process alive so the<br/>notifications above still arrive off screen
+    Vote->>UI: alarm request
+    UI->>UI: cancellable countdown (5/10/15 s)
+    UI->>API: POST /api/v1/incidents/ — the same route a manual SOS uses
+```
+
+Four properties of this path are deliberate and worth not undoing.
+
+**No server is in the loop before the alarm.** Inference runs on the ESP32 and
+reaches the phone over BLE. A dead backend, no signal, and an untrained
+server-side model all leave this working.
+
+**The vote does not live in a widget.** Flutter stops pumping frames when the
+app leaves the screen, so anything decided inside a `build()` method silently
+stops running when the phone is pocketed — which is the exact case the glove
+exists for. It runs in a `keepAlive` Riverpod provider driven by `ref.listen`
+(`mobile/lib/features/safety/data/glove_auto_trigger.dart`), and its tests run
+against a bare `ProviderContainer` with no widget tree at all.
+
+**A foreground service holds the process open.** Android freezes a backgrounded
+app and stops delivering BLE callbacks. The service
+(`mobile/lib/core/background/safety_foreground_service.dart`) is declared
+`connectedDevice|location`, runs only while a glove is actually connected, and
+reports whether it is *genuinely* running — notification permission can be
+denied and OEMs kill background work. The UI only tells a user she can pocket
+her phone when the platform confirms the service started.
+
+**It opens a countdown; it never dispatches.** An automatic trigger must not be
+faster, quieter, or harder to stop than one the user asked for, so it lands on
+the same screen a manual SOS does. When the app is backgrounded the countdown
+is routed to first and the screen woken second — the widget tree is alive
+though not drawing, so the countdown is already up when the activity arrives
+rather than racing it.
+
+The BLE wire format is a contract between two codebases that cannot import each
+other, duplicated in `glove/firmware/SafeHer_Glove_V5_OnDevice/` and
+`mobile/lib/features/devices/domain/glove_protocol.dart`. The Dart half is
+pinned by tests carrying the firmware's literal payloads; nothing can check the
+firmware half automatically. See [glove/README.md](../glove/README.md).
+
+## Threat fusion: three signals, and everything else
+
+One engine decides whether SafeHer raises an alarm by itself:
+`fastapi_app/services/threat_fusion.py`. There is no second scorer — not in
+the app, not in a cloud function. The frontend displays what the engine
+returns and never recomputes it.
+
+```mermaid
+flowchart TB
+    subgraph Primary["Primary signals -- these and only these decide the score"]
+        G["Smart Glove\nXGBoost"] --> GS["glove score"]
+        C["Glasses camera\nYOLOv8-nano"] --> WS["weapon score"]
+        M["Glasses mic\nCNN + LSTM"] --> AS["audio score"]
+    end
+
+    GS & WS & AS --> F["Threat Fusion Engine\nweighted + solo floor + corroboration"]
+    F --> SM["EMA smoothing"] --> L["Threat level\nSAFE / ELEVATED / HIGH / CRITICAL"]
+    L --> D["Emergency decision"]
+
+    subgraph Support["Supporting evidence -- recorded, never scored"]
+        GPS["GPS"]
+        FE["Facial expression"]
+        HR["Heart rate"]
+        NT["Time of day"]
+        VID["Video / audio recording"]
+    end
+
+    Support -.->|"incident record, summary, dashboard"| INC["Incident"]
+    D --> INC
+```
+
+The dotted line is the whole point: supporting evidence reaches the incident
+and never the score.
+
+**Why the separation is structural.** `ThreatSignals` has three fields and
+`fuse()` accepts nothing else, so there is nowhere to pass a latitude. Someone
+will one day notice that fear was on the user's face and reach for a `+0.05`;
+it would look like care, and it would mean alarms during ordinary life. Adding
+a fourth input requires editing the engine, which is a deliberate act with a
+reviewer attached. `tests/test_fusion_architecture.py` fails if the shape
+changes.
+
+**A lone strong signal is not averaged away.** A weighted mean asks how
+alarming the situation is on average, which is the wrong question when one
+sensor is certain and the others have nothing to say. The score never falls
+below half the strongest single reading.
+
+**Two agreeing signals score above their mean.** Sensors on different limbs
+watching different things, both alarmed, is stronger evidence than one
+shouting — capped so corroboration alone can never trigger.
+
+**What actually produces these scores today: one of the three.**
+
+- **Glove** — trained and live. Classifies on the ESP32, reaches the app over
+  BLE, and raises the alarm.
+- **Weapon** — *trained but not connected*, as of 2026-08-31. YOLOv8n at
+  mAP@0.5 0.907 (knife AP 0.884) on a held-out split, quantised to 3.36 MB and
+  bundled at `mobile/assets/models/`. There is no ONNX runtime dependency and
+  no inference code, so `weapon_score` has no producer. It runs on the phone
+  rather than the glasses — an ESP32 is two orders of magnitude short, and
+  `docs/WEAPON_INFERENCE_PLACEMENT.md` has the arithmetic.
+- **Audio** — does not exist. `ml_training/voice_detection/` holds a script
+  that extracts scalar summary features and is not the CNN+LSTM the
+  architecture calls for.
+
+`threat_models.py` reports which modalities are genuinely live rather than
+letting the UI imply three, and `fuse()` renormalises over whatever reported so
+a missing sensor cannot quietly hold the score down.
+
 ## Auth flow
 
 Two entry points converge on the same JWT session:
@@ -99,6 +229,7 @@ deletion. Full detail: [API.md](API.md#authentication), [SECURITY.md](SECURITY.m
 | Redis | Real-time pub/sub for the event-processing pipeline (`deployment/docker/docker-compose.yml`) | `deployment/docker/safeher_event_processor.py` |
 | Hive (mobile, on-device) | Auth/session state, onboarding flags, offline action queue | `mobile/lib/core/local/`, `mobile/lib/core/offline/` |
 | Mosquitto (MQTT broker) | Transport only, no persistence | Devices publish, `fastapi_app/mqtt_service.py` subscribes |
+| BLE (phone ↔ glove) | Transport only, nothing stored on either side. Classifications are consumed by the vote and discarded; only a resulting incident is persisted | Glove notifies, `mobile/lib/features/devices/data/glove_link_providers.dart` subscribes |
 
 ## Folder responsibilities
 
@@ -113,9 +244,15 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full tree. In one line 
   `motion_training_results.json`) that `cloud_functions/motion_detection/` loads.
   Training is not reproducible from a fresh clone — the raw dataset directory
   `scripts/validate_dataset.py` expects isn't committed.
-- **`hardware/`** — firmware for the two devices that actually have code: the smart
-  glove and the smart glasses. No firmware exists for a "smart ring" or "pendant"
-  despite both appearing in the mobile UI (see Known Gaps below).
+- **`glove/`** — the smart glove that the app actually pairs with: firmware that
+  runs XGBoost on the ESP32, the labelled dataset, and the collect → train →
+  convert pipeline that produces the C arrays compiled into it. The only
+  detector in the system producing real scores today.
+- **`hardware/`** — an earlier generation: `esp32_glove/` publishes raw telemetry
+  over MQTT and does no inference, and `smart_glasses/` streams camera frames.
+  Kept because the MQTT ingestion path still exists in the backend. No firmware
+  exists for a "smart ring" or "pendant" despite both appearing in the mobile UI
+  (see Known Gaps below).
 - **`cloud_functions/`** — the ML inference layer, deployable independently of the
   main backend. `threat_fusion` is what `fastapi_app/routers/alerts.py` ultimately
   calls through `services/processor_client.py`.
@@ -158,14 +295,26 @@ packages, so copying was never an option even where licensing allowed it.
 ## Known gaps
 
 Carried forward from the pre-audit documentation (`docs/archive/PROJECT_STATUS.md`,
-`TECHNICAL_INVENTORY.md`) and reconfirmed during the 2026-08-08 audit:
+`TECHNICAL_INVENTORY.md`), reconfirmed during the 2026-08-08 audit, and revised
+on 2026-08-29 when the glove landed:
 
 - Weapon detection and voice analysis in `cloud_functions/` fall back to
   `_create_synthetic_model()` in places — real trained models for those two modalities
   were not fully wired in as of this audit.
 - No firmware exists for the "smart ring" or "pendant" device concepts shown in the
   mobile UI — only the glove and glasses are real.
-- BLE pairing is real (`flutter_blue_plus` scanning/connect/registration) but unverified
-  against physical hardware — no Bluetooth radio in this dev environment.
+- **No physical glove has ever been paired.** BLE scanning and connection were
+  verified against other hardware on 2026-08-17, but the whole glove path —
+  firmware inference, the classification notify, the vote, the foreground
+  service, the woken screen — has only ever run against `FakeBleService`. This
+  is the largest untested surface in the project and the one with the least
+  excuse, since the hardware exists.
+- The foreground service is built and present in the merged manifest, but no
+  one has put a phone in a pocket and confirmed an alarm still gets out. The UI
+  is written so that an unstarted service reads as a stated limitation rather
+  than a silent one.
+- Heart rate and battery are not implemented in the glove firmware. The
+  telemetry characteristic sends zeros for both; the app reads a zero heart
+  rate as "no sensor" rather than as a measurement.
 - The ML training pipeline (`ml_training/`) cannot be re-run from a clean clone — the
   raw dataset it expects at `dataset/raw/*.csv` is not committed.

@@ -44,6 +44,15 @@ class Settings(BaseSettings):
     # SRS FR-AUTH-04: 15-minute access token, 30-day refresh token.
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
+    # Long enough to survive a slow handshake on a bad connection, short
+    # enough that a ticket captured from a log is already dead. It only
+    # opens the alert feed; it is not accepted anywhere else.
+    ws_ticket_expire_seconds: int = 30
+    # Accept the old `?token=<access jwt>` handshake. Off by default: that
+    # pattern puts a 15-minute credential into every proxy log between the
+    # phone and the app. Turn it on only while clients predating the ticket
+    # endpoint are still installed, and turn it off again after.
+    ws_allow_legacy_token_query: bool = False
     # SRS FR-AUTH-07: 5 failed logins -> 15-minute lockout.
     max_failed_logins: int = 5
     login_lockout_minutes: int = 15

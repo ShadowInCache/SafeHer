@@ -82,11 +82,12 @@ not audited in depth here; check it directly if modifying `deployment/docker/`.
 | `firebase_core`, `firebase_auth`, `firebase_messaging`, `cloud_firestore` | Firebase integration |
 | `flutter_animate`, `rive`, `lottie`, `animations` | Motion design system |
 | `model_viewer_plus` | 3D device model rendering — added outside the original locked dependency list, on explicit request, for the device-management screen's 3D visual. Currently points at Google's public sample `.glb` models as placeholders (`SaSampleModels`) until real SafeHer-branded models exist |
-| `google_fonts` | Inter + JetBrains Mono (design system typography) |
+| `google_fonts` | Archivo + JetBrains Mono (design system typography). Inter is the default face of nearly every generated app, so the interface had no voice before a word was read |
 | `google_maps_flutter`, `geolocator` | Location sharing |
 | `camera`, `record`, `chewie` | Evidence capture / playback |
 | `fl_chart` | Dashboard data visualization |
-| `flutter_blue_plus` | BLE device pairing |
+| `flutter_blue_plus` | BLE device pairing and the glove's classification feed |
+| `flutter_foreground_task` | Keeps the process alive so a connected glove still detects with the phone in a pocket. Added 2026-08-29 over a hand-written native service: Android 14 enforces foreground-service types strictly, and the plugin already handles the type declaration, the notification channel and the battery-optimisation prompt |
 | `intl` | Formatting |
 | `freezed_annotation`, `json_annotation` (+`freezed`, `json_serializable`, dev) | Immutable models + serialization |
 | `connectivity_plus` | Offline-queue connectivity awareness |
@@ -95,6 +96,24 @@ not audited in depth here; check it directly if modifying `deployment/docker/`.
 
 No unused mobile dependencies were identified — every package above has a
 corresponding import in `mobile/lib/`.
+
+## Smart glove (`glove/requirements.txt`) — only needed to retrain the model
+
+| Package | Why |
+|---|---|
+| `numpy`, `pandas`, `scipy` | Feature extraction over the raw IMU recordings |
+| `scikit-learn`, `joblib` | Metrics, the train/test split, serialization |
+| `xgboost` | The 7-class model that runs on the ESP32 |
+| `matplotlib`, `seaborn` | Evaluation plots |
+
+**`pyserial` is missing from this file and is required.**
+`glove/ml/scripts/collect_glove_dataset.py` imports `serial` to read the
+ESP32's stream, so a fresh environment installed from `requirements.txt` alone
+fails at the first recording with an `ImportError`. Install it explicitly until
+the file is corrected.
+
+This group is entirely separate from `ml_training/` above, which trains the
+server-side models. Nothing in `fastapi_app/` or `mobile/` imports either.
 
 ## Alternatives considered (for future reference, not acted on)
 

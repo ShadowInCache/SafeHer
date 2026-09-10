@@ -112,6 +112,7 @@ dependencies:
 
   # Misc used by connectivity-aware offline queue
   connectivity_plus: ^6.1.4
+  flutter_foreground_task: ^10.0.0
 
 dev_dependencies:
   flutter_launcher_icons: ^0.14.1
@@ -138,6 +139,11 @@ flutter:
     - assets/animations/
     - assets/sounds/
     - assets/rive/
+    # The weapon detector, INT8-quantised to 3.36 MB. Bundled rather than
+    # downloaded: it is a safety input, and a model fetched on first launch is
+    # one a woman does not have when she is offline. Nothing loads it yet --
+    # see assets/models/README.md and docs/WEAPON_INFERENCE_PLACEMENT.md.
+    - assets/models/
     # Archivo / Archivo Narrow / JetBrains Mono, bundled rather than fetched.
     #
     # `google_fonts` downloads a family the first time it is asked for and

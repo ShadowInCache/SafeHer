@@ -342,10 +342,6 @@ async def firebase_exchange(
     settings: Settings = Depends(get_settings),
     session: AsyncSession = Depends(get_session),
 ):
-    requested_role = (payload.role or "user").lower()
-    if requested_role not in {"user", "guardian"}:
-        requested_role = "user"
-
     identity = verify_firebase_id_token(
         id_token=payload.id_token,
         project_id=settings.firebase_project_id,
@@ -360,7 +356,9 @@ async def firebase_exchange(
                 email=identity.email,
                 password_hash=get_password_hash(random_password),
                 full_name=payload.full_name or identity.name,
-                role=requested_role,
+                # Server-assigned, never taken from the request. Elevating an
+                # account is an operator action, not a sign-up option.
+                role="user",
                 phone=payload.phone,
             )
             # Google has already confirmed this address, which is exactly what

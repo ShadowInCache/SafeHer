@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:golden_toolkit/golden_toolkit.dart';
 import 'package:go_router/go_router.dart';
 import 'package:safeher_app/core/location/location_providers.dart';
 import 'package:safeher_app/core/location/location_result.dart';
@@ -200,5 +201,54 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(tester.takeException(), isNull);
     });
+
+    testGoldens('golden - light', (tester) async {
+      await tester.pumpWidgetBuilder(
+        _harness(repository: _goldenRepo(), brightness: Brightness.light),
+        surfaceSize: const Size(390, 844),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await screenMatchesGolden(tester, 'nearby_safety_screen_light');
+    });
+
+    testGoldens('golden - dark', (tester) async {
+      await tester.pumpWidgetBuilder(
+        _harness(repository: _goldenRepo()),
+        surfaceSize: const Size(390, 844),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await screenMatchesGolden(tester, 'nearby_safety_screen_dark');
+    });
   });
 }
+
+/// A fixed set of nearby places so the golden shows populated content -- the
+/// state worth catching a regression in -- rather than an empty list.
+FakeSafetyRepository _goldenRepo() => FakeSafetyRepository(
+      places: const [
+        NearbyPlace(
+          id: 'node/1',
+          name: 'Ashok Nagar Police Station',
+          category: NearbyPlaceCategory.police,
+          latitude: 12.9705,
+          longitude: 77.6010,
+          distanceMetres: 320,
+        ),
+        NearbyPlace(
+          id: 'node/2',
+          name: 'City General Hospital',
+          category: NearbyPlaceCategory.hospital,
+          latitude: 12.9720,
+          longitude: 77.5950,
+          distanceMetres: 850,
+        ),
+        NearbyPlace(
+          id: 'node/3',
+          name: 'MG Road Pharmacy',
+          category: NearbyPlaceCategory.pharmacy,
+          latitude: 12.9750,
+          longitude: 77.6060,
+          distanceMetres: 1200,
+        ),
+      ],
+    );
