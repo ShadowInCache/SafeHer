@@ -18,20 +18,30 @@ const kBleConnectTimeout = Duration(seconds: 20);
 /// connecting to one, and running GATT service discovery to prove the
 /// connection is real.
 ///
-/// It is *not* a SafeHer sensor-telemetry pipe, and nothing built on it
-/// should pretend otherwise. Per `ARCHITECTURE.md` and the ESP32 firmware
-/// in `hardware/`, the real glove and glasses publish their sensor data to
-/// the backend over **WiFi + MQTT directly** (`fastapi_app/mqtt_service.py`
-/// subscribes to those topics). The phone is not a BLE bridge in that
-/// path, and consequently **no SafeHer-specific GATT service or
-/// characteristic UUID exists anywhere in this repo** — so there is
-/// nothing to filter a scan by and no characteristic worth subscribing to.
-/// What a successful pairing here buys you is a verified physical device
-/// plus a backend registration record, not a live sensor stream.
+/// It is *not* a general SafeHer sensor-telemetry pipe, and nothing built
+/// on it should pretend otherwise. Per `ARCHITECTURE.md` and the ESP32
+/// firmware in `hardware/esp32_glove/`, that device publishes its sensor
+/// data to the backend over **WiFi + MQTT directly**
+/// (`fastapi_app/mqtt_service.py` subscribes to those topics) — the phone
+/// is not a BLE bridge in that path, and no GATT service/characteristic
+/// UUID exists for it. A successful pairing against *that* firmware buys
+/// you a verified physical device plus a backend registration record, not
+/// a live sensor stream — so scans stay unfiltered.
+///
+/// The separate `glove/firmware/SafeHer_Glove_Final/` ESP32-C3 firmware is
+/// different: it runs the on-device V5 motion classifier and **does**
+/// advertise a real GATT service (`4fafc201-1fb5-459e-8fcc-c5c9c331914b`)
+/// with a result characteristic
+/// (`beb5483e-36e1-4688-b7f5-ea07361b26a8`) that notifies
+/// `CLASS=<name>,CONFIDENCE=<0.0-1.0>` once per inference window. Consuming
+/// that is what [characteristicNotifications] and
+/// `features/devices/data/motion_data_providers.dart` are for — see
+/// `firmware/SafeHer_Glove_Final/SafeHer_Glove_Final.ino` for the source of
+/// truth on that payload format.
 ///
 /// Implementations must never fabricate a result: no invented devices, no
 /// synthesised RSSI, no connection that reports success without the
-/// platform confirming it.
+/// platform confirming it, and no invented characteristic values either.
 abstract class BleService {
   /// Whether this hardware supports BLE at all.
   Future<bool> isSupported();
@@ -78,4 +88,20 @@ abstract class BleService {
   /// Our app's live connection state for [deviceId] — the stream that
   /// tells us the peripheral walked out of range or powered off.
   Stream<BleConnectionStatus> connectionState(String deviceId);
+
+  /// Live values notified by [characteristicUuid] on [deviceId]'s
+  /// [serviceUuid], as UTF-8-decoded strings.
+  ///
+  /// [deviceId] must already be connected (see [connect]) — this method
+  /// does not connect, reconnect, or otherwise manage connection lifecycle;
+  /// that remains the caller's responsibility, same as [connectionState].
+  /// Added for the SafeHer glove's motion-classification characteristic
+  /// (see `features/devices/data/motion_data_providers.dart`), but takes
+  /// the service/characteristic UUIDs as parameters rather than hardcoding
+  /// them, so it stays usable for any future characteristic too.
+  Stream<String> characteristicNotifications(
+    String deviceId, {
+    required String serviceUuid,
+    required String characteristicUuid,
+  });
 }

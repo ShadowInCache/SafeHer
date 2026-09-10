@@ -16,6 +16,9 @@ import '../../../../shared/components/feedback/sa_status_dot.dart';
 import '../../../../shared/components/icons/sa_icon.dart';
 import '../../../../shared/components/media/sa_3d_model_viewer.dart';
 import '../../../../shared/components/overlays/sa_toast.dart';
+import '../../data/ble_providers.dart';
+import '../../data/motion_data_providers.dart';
+import '../../domain/models/ble_models.dart';
 import '../../domain/models/device_detail.dart';
 
 SaIconGlyph _glyphFor(DeviceType type) => switch (type) {
@@ -56,10 +59,24 @@ class DeviceExpandableCardState extends ConsumerState<DeviceExpandableCard> {
     final device = widget.device;
     final onSurface = Theme.of(context).colorScheme.onSurface;
 
+    // For a glove this app has connected to live over BLE this session,
+    // the real connection state is a truer "online" than the backend's
+    // heartbeat-based `device.isOnline` — this firmware sends motion over
+    // BLE directly and never calls the heartbeat endpoint, so
+    // `device.isOnline` would otherwise show offline even while connected.
+    final connectedGloveId = ref.watch(connectedGloveIdProvider);
+    final bool isOnline;
+    if (device.type == DeviceType.glove && connectedGloveId != null) {
+      isOnline =
+          ref.watch(gloveConnectionStateProvider(connectedGloveId)).valueOrNull == BleConnectionStatus.connected;
+    } else {
+      isOnline = device.isOnline;
+    }
+
     return SaCard(
       onTap: () => setState(() => _expanded = !_expanded),
       semanticsLabel:
-          '${device.name}, ${device.isOnline ? "online" : "offline"}, ${_expanded ? "expanded" : "collapsed"}, double tap to ${_expanded ? "collapse" : "expand"}',
+          '${device.name}, ${isOnline ? "online" : "offline"}, ${_expanded ? "expanded" : "collapsed"}, double tap to ${_expanded ? "collapse" : "expand"}',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -81,11 +98,9 @@ class DeviceExpandableCardState extends ConsumerState<DeviceExpandableCard> {
                     ),
                   ),
                   SaStatusDot(
-                    color: device.isOnline
-                        ? AppColors.success500
-                        : AppColors.neutral500,
-                    live: device.isOnline,
-                    semanticsLabel: device.isOnline ? 'Online' : 'Offline',
+                    color: isOnline ? AppColors.success500 : AppColors.neutral500,
+                    live: isOnline,
+                    semanticsLabel: isOnline ? 'Online' : 'Offline',
                   ),
                 ],
               ),
@@ -167,30 +182,34 @@ class DeviceExpandableCardState extends ConsumerState<DeviceExpandableCard> {
         children: [
           const Divider(),
           const SizedBox(height: AppSpacing.space3),
-          _Device3DVisual(type: device.type),
-          const SizedBox(height: AppSpacing.space4),
-          Row(
-            children: [
-              Expanded(
-                child: _SensorReadout(
-                  label: 'Accel',
-                  value: '${device.sensors.accelG.toStringAsFixed(2)}g',
+          if (device.type == DeviceType.glove) ...[
+            const _MotionRiskDisplay(),
+          ] else ...[
+            _Device3DVisual(type: device.type),
+            const SizedBox(height: AppSpacing.space4),
+            Row(
+              children: [
+                Expanded(
+                  child: _SensorReadout(
+                    label: 'Accel',
+                    value: '${device.sensors.accelG.toStringAsFixed(2)}g',
+                  ),
                 ),
-              ),
-              Expanded(
-                child: _SensorReadout(
-                  label: 'Gyro',
-                  value: '${device.sensors.gyroDps.toStringAsFixed(1)}°/s',
+                Expanded(
+                  child: _SensorReadout(
+                    label: 'Gyro',
+                    value: '${device.sensors.gyroDps.toStringAsFixed(1)}°/s',
+                  ),
                 ),
-              ),
-              Expanded(
-                child: _SensorReadout(
-                  label: 'Flex',
-                  value: '${device.sensors.flexPercent.round()}%',
+                Expanded(
+                  child: _SensorReadout(
+                    label: 'Flex',
+                    value: '${device.sensors.flexPercent.round()}%',
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
           const SizedBox(height: AppSpacing.space4),
           SaButton(
             label: 'Calibrate',
@@ -284,6 +303,113 @@ class _Device3DVisualState extends State<_Device3DVisual> {
       src: _modelFor(widget.type),
       alt: '3D model of device',
       height: 200,
+    );
+  }
+}
+
+/// Replaces the 3D visual + Accel/Gyro/Flex row for a glove: the live
+/// Motion Risk Score derived from the glove's own BLE motion
+/// classification, via [motionRiskScoreProvider] — same underlying
+/// [motionDataProvider] stream the pairing screen reads, no second BLE
+/// connection or listener. Distinct from, and not fed into, the app's
+/// overall Threat Score.
+///
+/// Gates on the real BLE connection state ([gloveConnectionStateProvider]),
+/// not just on whether a packet has arrived recently — see
+/// [LiveMotionDataNotifier]'s doc comment for why the two are not the same
+/// thing. A glove that has gone offline (power cut, out of range) shows
+/// `-- / 100`, never its last live reading frozen in place.
+class _MotionRiskDisplay extends ConsumerWidget {
+  const _MotionRiskDisplay();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final deviceId = ref.watch(connectedGloveIdProvider);
+
+    final double? score;
+    final String? classification;
+    final bool? connected;
+    if (deviceId == null) {
+      // No live BLE session this app session at all — distinct from a
+      // session that connected and then went offline.
+      score = null;
+      classification = null;
+      connected = null;
+    } else {
+      score = ref.watch(motionRiskScoreProvider(deviceId));
+      classification = ref.watch(liveMotionDataProvider(deviceId))?.classification;
+      connected = ref.watch(gloveConnectionStateProvider(deviceId)).valueOrNull == BleConnectionStatus.connected;
+    }
+
+    final Color scoreColor;
+    if (score == null) {
+      scoreColor = onSurface.withValues(alpha: 0.4);
+    } else if (score == 0) {
+      scoreColor = AppColors.success500;
+    } else if (classification == 'FALL') {
+      scoreColor = AppColors.coral500;
+    } else {
+      scoreColor = AppColors.warning500;
+    }
+
+    final statusLabel = connected == null ? null : (connected ? 'CONNECTED' : 'OFFLINE');
+    final statusColor = connected == true ? AppColors.success500 : AppColors.neutral500;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.space5),
+      decoration: BoxDecoration(
+        color: scoreColor.withValues(alpha: 0.08),
+        borderRadius: AppRadius.lgRadius,
+      ),
+      child: Semantics(
+        liveRegion: true,
+        label:
+            '${statusLabel ?? ''} '
+            '${score == null ? 'Motion Risk Score: no data' : 'Motion Risk Score: ${score.toStringAsFixed(1)} of 100, ${classification ?? ''}'}'
+                .trim(),
+        child: ExcludeSemantics(
+          child: Column(
+            children: [
+              if (statusLabel != null) ...[
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SaStatusDot(color: statusColor, live: connected == true),
+                    const SizedBox(width: AppSpacing.space2),
+                    Text(
+                      statusLabel,
+                      style: AppTypography.labelM.copyWith(color: statusColor),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.space3),
+              ],
+              Text(
+                'MOTION RISK SCORE',
+                style: AppTypography.eyebrow.copyWith(color: onSurface.withValues(alpha: 0.5)),
+              ),
+              const SizedBox(height: AppSpacing.space2),
+              Text(
+                score == null ? '--' : score.toStringAsFixed(1),
+                style: AppTypography.displayM.copyWith(color: scoreColor),
+              ),
+              Text(
+                '/ 100',
+                style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.5)),
+              ),
+              if (classification != null) ...[
+                const SizedBox(height: AppSpacing.space2),
+                Text(
+                  classification,
+                  style: AppTypography.headingS.copyWith(color: onSurface),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

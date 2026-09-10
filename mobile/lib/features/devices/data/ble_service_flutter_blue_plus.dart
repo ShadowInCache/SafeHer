@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -164,6 +167,69 @@ class FlutterBluePlusBleService implements BleService {
           ? BleConnectionStatus.connected
           : BleConnectionStatus.disconnected,
     );
+  }
+
+  /// Looks up [serviceUuid]/[characteristicUuid] on an already-connected
+  /// [deviceId], enables notifications, and forwards each value as a
+  /// UTF-8-decoded string. `allowMalformed: true` on the decode because a
+  /// bad byte belongs to [MotionData]'s parser to reject, not something
+  /// that should crash this stream — see `domain/models/motion_data.dart`.
+  ///
+  /// Lazy: does nothing until the returned stream gets its first listener,
+  /// and tears the subscription + notification flag down again when the
+  /// last listener cancels, so an unwatched provider does not keep the
+  /// peripheral's notify flag on forever.
+  @override
+  Stream<String> characteristicNotifications(
+    String deviceId, {
+    required String serviceUuid,
+    required String characteristicUuid,
+  }) {
+    final device = BluetoothDevice.fromId(deviceId);
+    late final StreamController<String> controller;
+    StreamSubscription<List<int>>? valueSub;
+    BluetoothCharacteristic? characteristic;
+
+    Future<void> start() async {
+      try {
+        final services = await device.discoverServices();
+        final service = services.firstWhere(
+          (candidate) => candidate.uuid.str.toLowerCase() == serviceUuid.toLowerCase(),
+          orElse: () => throw BleFailure('Service $serviceUuid not found on $deviceId.'),
+        );
+        characteristic = service.characteristics.firstWhere(
+          (candidate) => candidate.uuid.str.toLowerCase() == characteristicUuid.toLowerCase(),
+          orElse: () => throw BleFailure('Characteristic $characteristicUuid not found on $deviceId.'),
+        );
+        await characteristic!.setNotifyValue(true);
+        valueSub = characteristic!.lastValueStream.listen(
+          (bytes) {
+            if (bytes.isEmpty) return;
+            controller.add(utf8.decode(bytes, allowMalformed: true));
+          },
+          onError: controller.addError,
+        );
+      } on FlutterBluePlusException catch (error) {
+        controller.addError(_mapException(error, fallback: "Couldn't subscribe to $characteristicUuid."));
+      } on BleFailure catch (error) {
+        controller.addError(error);
+      }
+    }
+
+    controller = StreamController<String>.broadcast(
+      onListen: () => unawaited(start()),
+      onCancel: () async {
+        await valueSub?.cancel();
+        valueSub = null;
+        try {
+          await characteristic?.setNotifyValue(false);
+        } on Exception {
+          // Best-effort - the link may already be gone, which is fine: the
+          // peripheral drops its subscriber list on disconnect anyway.
+        }
+      },
+    );
+    return controller.stream;
   }
 
   BleDiscoveredDevice _mapScanResult(ScanResult result) {

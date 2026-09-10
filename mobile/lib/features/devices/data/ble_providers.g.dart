@@ -47,8 +47,50 @@ final deviceRegistrationRepositoryProvider =
 // ignore: unused_element
 typedef DeviceRegistrationRepositoryRef =
     ProviderRef<DeviceRegistrationRepository>;
+String _$gloveConnectionManagerHash() =>
+    r'dd84df5070e35c258944c90b746787c6aaaf9bfe';
+
+/// Keeps retrying [BleService.connect] for the glove at
+/// [connectedGloveIdProvider] whenever [gloveConnectionStateProvider]
+/// reports it disconnected — e.g. the ESP32's power was cut and later
+/// restored — so the user is never required to open the pairing sheet and
+/// register it again to pick the same physical device back up.
+///
+/// [BlePairingController] already has bounded auto-reconnect, but it is
+/// `autoDispose` and tied to the pairing sheet: closing the sheet after a
+/// successful registration (the normal flow) disposes it, cancelling that
+/// reconnect logic entirely, even though the GATT link itself is left
+/// running (see that controller's own doc comment on this gap — "a
+/// device-connection manager, which does not exist yet"). This is that
+/// manager: `keepAlive`, so once started it outlives any one screen, and
+/// unbounded, because unlike a mid-session drop (a real failure worth
+/// giving up on after a few tries) a power cycle ends whenever the user
+/// flips the glove back on, which this app has no way to predict.
+///
+/// Reconnecting only calls [BleService.connect] again — it does not touch
+/// [motionDataProvider] or open a second notification subscription.
+/// [LiveMotionDataNotifier] already reacts to
+/// [gloveConnectionStateProvider]'s real connected/disconnected edges
+/// (regardless of what triggered them) to invalidate and cleanly
+/// re-subscribe exactly once; this provider only needs to make that edge
+/// happen again.
+///
+/// Copied from [GloveConnectionManager].
+@ProviderFor(GloveConnectionManager)
+final gloveConnectionManagerProvider =
+    NotifierProvider<GloveConnectionManager, void>.internal(
+      GloveConnectionManager.new,
+      name: r'gloveConnectionManagerProvider',
+      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+          ? null
+          : _$gloveConnectionManagerHash,
+      dependencies: null,
+      allTransitiveDependencies: null,
+    );
+
+typedef _$GloveConnectionManager = Notifier<void>;
 String _$blePairingControllerHash() =>
-    r'9fd055c402319a478f45254937ef20d99a14152b';
+    r'3eb71e7872f1f662df3ac30bc3bf54a382e1214a';
 
 /// Drives the BLE pairing sheet: permissions → adapter state → live scan →
 /// connect + service discovery → backend registration, plus bounded
