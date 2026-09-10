@@ -1,7 +1,8 @@
 # SafeHer dependencies. Mixes three concerns in one file — see DEPENDENCIES.md for
 # which packages belong to the current backend (fastapi_app/), the archived legacy
 # gateway (legacy_flask_gateway/, flask/flask-cors/flask-sock/paho-mqtt only), and the
-# ML training pipeline (ml_training/, everything from numpy down to soundfile).
+# ML training dependencies (everything from numpy down to soundfile). The
+# training pipelines themselves live outside this repository.
 
 # Web Framework
 flask==3.0.0
@@ -38,6 +39,9 @@ torchvision>=0.16.0
 torchaudio>=2.1.0
 xgboost>=2.0.0
 ultralytics>=8.0.0
+
+# Inference runtime for the server-side weapon fallback (web clients only)
+onnxruntime==1.29.0
 
 # Image Processing (for weapon detection)
 opencv-python==4.8.0.76

@@ -79,6 +79,12 @@ class _FakeKeyValueStore implements LocalKeyValueStore {
 
   @override
   Future<void> setInt(String key, int value) async {}
+
+  @override
+  String getString(String key, {String defaultValue = ''}) => defaultValue;
+
+  @override
+  Future<void> setString(String key, String value) async {}
 }
 
 GoRouter _buildTestRouter() {

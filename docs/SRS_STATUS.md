@@ -31,7 +31,7 @@ All four gates pass. Measured 2026-09-01 unless the row says otherwise.
 |------|-------------|---------------|--------|
 | `flutter analyze` | 0 issues | 0 issues | ✅ |
 | `flutter test --coverage` | > 70% line coverage | **75.2%** (6,024 / 8,009 lines), measured 2026-08-22 and not re-run since | ✅ |
-| `flutter build apk --release` | 0 errors | 73.7 MB APK, exit 0 | ✅ |
+| `flutter build apk --release` | 0 errors | 77.2 MB APK, exit 0 | ✅ |
 | `dart run build_runner build` | 0 conflicts | 50 outputs, 0 conflicts | ✅ |
 
 Beyond the SRS's four, the repo also runs:
@@ -1685,9 +1685,9 @@ evidence on a transport with no delivery guarantee.
 
 §6.1 specified the Motion Classifier as **BiLSTM(128)+Attention** over a
 250×11 tensor including five flex channels, output over five classes.
-`ml_training/motion_detection/train_motion_model.py` trains **XGBoost** over
-seven features — accel x/y/z, gyro x/y/z, magnitude — with flex readings not
-entering the model at all, and the owner confirms XGBoost is the intent.
+`glove/ml/scripts/train_glove_7class_xgboost_v5.py` trains **XGBoost** over 51
+features derived from the accelerometer and gyroscope axes, with flex readings
+not entering the model at all, and the owner confirms XGBoost is the intent.
 
 The spec was corrected to the design rather than the design bent to a spec
 nobody implemented. Flex sensors stay in the §9.1 BOM for gesture recognition,

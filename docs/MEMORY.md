@@ -135,7 +135,7 @@ connect and [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full folder tou
 - 2026-08-08: `audit_system.py` — audited the legacy Flask gateway specifically
   (imported `src.core.api_gateway`, etc.), referenced by nothing else in the repo.
 - 2026-08-08: `hardware/esp32_cam/smart_glasses.ino` — byte-identical duplicate of
-  `hardware/smart_glasses/smart_glasses.ino`; kept the latter.
+  `glasses/firmware/legacy_esp32cam/smart_glasses.ino`; kept the latter.
 - 2026-08-08: `deployment/docker/dy` — a stray cached HTTP 400 error response
   accidentally committed, not source code.
 - 2026-08-08: Untracked (not deleted from disk) — `deployment/docker/.env` (leaked

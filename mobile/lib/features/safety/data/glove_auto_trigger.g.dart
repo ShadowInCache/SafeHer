@@ -60,7 +60,7 @@ final gloveAutoTriggerProvider =
     );
 
 typedef _$GloveAutoTrigger = Notifier<GloveAlarmRequest?>;
-String _$gloveWatchServiceHash() => r'bd305bb55554d7ecf7c9438684227cc5269ae4a5';
+String _$gloveWatchServiceHash() => r'04ba217775f699553e0705f31474a229eac87e0b';
 
 /// Runs the foreground service for exactly as long as a glove is being
 /// listened to.
