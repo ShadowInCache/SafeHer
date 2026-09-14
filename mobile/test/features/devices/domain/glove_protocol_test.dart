@@ -68,16 +68,15 @@ void main() {
       expect(GloveClassification.tryParse('FALL,0.9')!.threatLevel, ThreatLevel.danger);
     });
 
-    test('PUSH and PULL are elevated: force applied by someone else', () {
-      expect(GloveClassification.tryParse('PUSH,0.9')!.threatLevel, ThreatLevel.elevated);
-      expect(GloveClassification.tryParse('PULL,0.9')!.threatLevel, ThreatLevel.elevated);
+    test('SUDDEN_MOVEMENT is elevated: force applied by someone else', () {
+      expect(GloveClassification.tryParse('SUDDEN_MOVEMENT,0.9')!.threatLevel, ThreatLevel.elevated);
     });
 
     test('everyday motions stay at caution', () {
       // A bag lifted, a hand dried, a jar opened. Escalating these is how
       // people learn to switch the feature off, and a disabled feature
       // protects nobody.
-      for (final label in ['JERK', 'SHAKING', 'TWISTING']) {
+      for (final label in ['SHAKING', 'TWISTING']) {
         expect(
           GloveClassification.tryParse('$label,0.95')!.threatLevel,
           ThreatLevel.caution,
@@ -220,9 +219,7 @@ void main() {
       // some other word without anything failing.
       expect(GloveClassification.knownLabels, [
         'NORMAL',
-        'JERK',
-        'PUSH',
-        'PULL',
+        'SUDDEN_MOVEMENT',
         'SHAKING',
         'TWISTING',
         'FALL',

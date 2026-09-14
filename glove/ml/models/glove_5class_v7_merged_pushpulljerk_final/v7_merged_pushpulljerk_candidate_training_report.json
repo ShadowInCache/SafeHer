@@ -1,0 +1,30 @@
+{
+  "experiment": "v7_merged_pushpulljerk_candidate_final",
+  "description": "5-class candidate: PUSH+PULL+JERK merged into SUDDEN_MOVEMENT. NORMAL, SHAKING, TWISTING, FALL unchanged. Config A hyperparameters (V5 config + min_child_weight=30) for ESP32-C3 flash fit.",
+  "class_order": [
+    "NORMAL",
+    "SUDDEN_MOVEMENT",
+    "SHAKING",
+    "TWISTING",
+    "FALL"
+  ],
+  "xgboost_params": {
+    "n_estimators": 600,
+    "max_depth": 6,
+    "min_child_weight": 30,
+    "gamma": 0.0,
+    "learning_rate": 0.05,
+    "subsample": 0.9,
+    "colsample_bytree": 0.9,
+    "random_state": 42,
+    "objective": "multi:softprob",
+    "num_class": 5,
+    "eval_metric": "mlogloss",
+    "n_jobs": 1
+  },
+  "node_count": 37176,
+  "model_sha256": "5f649215fb15143a4941d4c0b7daa5c93146257f4e381bb15e64285cb6025cfb",
+  "training_duration_seconds": 8.830289125442505,
+  "train_recordings": 208,
+  "train_windows": 3585
+}

@@ -57,11 +57,11 @@ class GloveThreatDetector {
   /// Only this level auto-triggers.
   ///
   /// `FALL` is the one class in the trained set that describes something that
-  /// has already gone wrong. `PUSH` and `PULL` map to elevated and are left
-  /// out on purpose: they are the classes most likely to be produced by
-  /// ordinary handling, and the cost of being wrong is a false alarm sent to
-  /// someone's emergency contacts. Raising them to auto-dispatch is a product
-  /// decision that should be made with data, not assumed here.
+  /// has already gone wrong. `SUDDEN_MOVEMENT` maps to elevated and is left
+  /// out on purpose: it is the class most likely to be produced by ordinary
+  /// handling, and the cost of being wrong is a false alarm sent to someone's
+  /// emergency contacts. Raising it to auto-dispatch is a product decision
+  /// that should be made with data, not assumed here.
   static const triggeringLevel = ThreatLevel.danger;
 
   /// Feeds one classification in and reports whether an alarm should start.

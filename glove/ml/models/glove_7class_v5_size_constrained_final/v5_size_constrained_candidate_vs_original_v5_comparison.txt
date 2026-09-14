@@ -1,0 +1,17 @@
+V5 SIZE-CONSTRAINED CANDIDATE vs ORIGINAL V5 - LOCKED TEST EVALUATION (22 recordings)
+======================================================================
+
+Original V5 SHA-256:   69fb6a417af1135bda5f62629691579e2e574bcda1cc3183d9b703ccc83779ea
+Candidate SHA-256:     0d54e4167d07e6d8fa599b5ef0335f96eed3c3562f976431f72d79bab2c417b2
+Candidate node count:  50,176
+
+Metric                   Original V5       Candidate      Delta
+Accuracy                      0.8492          0.8492    +0.0000
+Macro F1                      0.8410          0.8373    -0.0038
+Weighted F1                   0.8499          0.8495    -0.0003
+FALL precision                0.8068          0.8636    +0.0568
+FALL recall                   0.7474          0.8000    +0.0526
+NORMAL recall                 0.8851          0.8851    +0.0000
+
+FALL->NORMAL: original=8 candidate=13
+NORMAL->FALL: original=16 candidate=11

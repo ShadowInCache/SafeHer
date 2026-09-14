@@ -1,0 +1,58 @@
+SAFEHER V5-CONFIGURATION 5-FOLD CV ON COMPLETE 220-RECORDING DATASET
+======================================================================
+
+Locked test set: EXCLUDED, NEVER EVALUATED IN THIS EXPERIMENT.
+Development: 198 recordings / 3395 windows.
+
+XGBoost config (exact V5 script values):
+{
+  "n_estimators": 600,
+  "max_depth": 6,
+  "learning_rate": 0.05,
+  "subsample": 0.9,
+  "colsample_bytree": 0.9,
+  "random_state": 42,
+  "objective": "multi:softprob",
+  "num_class": 7,
+  "eval_metric": "mlogloss",
+  "n_jobs": 1
+}
+
+PER-FOLD RESULTS:
+----------------------------------------------------------------------
+Fold 1: acc=0.7474 macroF1=0.7581 weightedF1=0.7436
+  PUSH R=0.6947 PULL R=0.5106 FALL R=0.6518
+Fold 2: acc=0.7201 macroF1=0.7282 weightedF1=0.7182
+  PUSH R=0.6526 PULL R=0.6809 FALL R=0.5357
+Fold 3: acc=0.7386 macroF1=0.7122 weightedF1=0.7301
+  PUSH R=0.7379 PULL R=0.3404 FALL R=0.8462
+Fold 4: acc=0.7267 macroF1=0.7460 weightedF1=0.7266
+  PUSH R=0.6277 PULL R=0.7553 FALL R=0.8125
+Fold 5: acc=0.7301 macroF1=0.7425 weightedF1=0.7294
+  PUSH R=0.5579 PULL R=0.6602 FALL R=0.7019
+
+MEAN +- STD ACROSS 5 FOLDS:
+----------------------------------------------------------------------
+accuracy: 0.7326 +- 0.0106
+macro_f1: 0.7374 +- 0.0177
+weighted_f1: 0.7296 +- 0.0092
+NORMAL recall: 0.7830 +- 0.0945
+JERK recall: 0.7127 +- 0.0967
+PUSH recall: 0.6542 +- 0.0682
+PULL recall: 0.5895 +- 0.1651
+SHAKING recall: 0.8808 +- 0.0489
+TWISTING recall: 0.8311 +- 0.0901
+FALL recall: 0.7096 +- 0.1254
+
+COMPARISON (previous 20/20 CV / previous 30/30 CV / this run):
+Accuracy:  0.7407 / 0.7458 / 0.7326
+Macro F1:  0.7138 / 0.7455 / 0.7374
+FALL recall: 0.6857 / 0.7227 / 0.7096
+PUSH recall: 0.5665 / 0.6290 / 0.6542
+PULL recall: 0.4524 / 0.6080 / 0.5895
+
+Historical documented V5 result (DIFFERENT test set, NOT directly comparable):
+  85.54% accuracy on its own 401-window test set (source: glove/docs/DEPLOYMENT_STATUS_V5.md)
+
+locked_test_set_used: False
+final_candidate_trained: False

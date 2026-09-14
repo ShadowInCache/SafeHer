@@ -172,6 +172,15 @@ def parse_trees_from_xgboost(model_json: Dict[str, Any]) -> Tuple[List[DecisionT
     print(f"✓ Total nodes: {total_nodes}")
     print(f"✓ Total leaves: {total_leaves}")
     
+    base_score_raw = learner_param.get("base_score", 0.0)
+    if isinstance(base_score_raw, str) and base_score_raw.strip().startswith("["):
+        base_score_raw = json.loads(base_score_raw)
+    if isinstance(base_score_raw, list):
+        base_scores = [float(v) for v in base_score_raw]
+    else:
+        base_scores = [float(base_score_raw)] * num_class
+    print(f"✓ base_score: {base_scores}")
+
     metadata = {
         "num_class": num_class,
         "num_feature": num_feature,
@@ -179,8 +188,9 @@ def parse_trees_from_xgboost(model_json: Dict[str, Any]) -> Tuple[List[DecisionT
         "num_trees": len(trees_data),
         "total_nodes": total_nodes,
         "total_leaves": total_leaves,
+        "base_scores": base_scores,
     }
-    
+
     return trees, metadata
 
 
@@ -298,8 +308,6 @@ float predict_confidence(const float* scores);
 
 }}  // namespace V5Embedded
 }}  // namespace SafeHer
-
-#endif  // SAFEHER_V5_MODEL_H
 '''
     return header
 
@@ -310,7 +318,13 @@ def generate_cpp_source(trees: List[DecisionTree], metadata: Dict[str, Any]) -> 
     num_trees = len(trees)
     num_classes = metadata["num_class"]
     num_features = metadata["num_feature"]
-    
+    base_scores = metadata["base_scores"]
+
+    # Build base score array declaration
+    base_score_array = "constexpr float kBaseScores[NUM_CLASSES] = {\n"
+    base_score_array += ",\n".join(f"    {v}f" for v in base_scores)
+    base_score_array += "\n};\n"
+
     # Build offset array and node array
     offsets = []
     all_nodes = []
@@ -358,7 +372,7 @@ def generate_cpp_source(trees: List[DecisionTree], metadata: Dict[str, Any]) -> 
 // INFERENCE IMPLEMENTATION
 // ============================================================================
 
-float SafeHer::V5Embedded::evaluate_tree(int tree_id, const float* features) {{
+float evaluate_tree(int tree_id, const float* features) {{
     if (tree_id < 0 || tree_id >= NUM_TREES) {{
         return 0.0f;  // Invalid tree ID
     }}
@@ -406,61 +420,58 @@ float SafeHer::V5Embedded::evaluate_tree(int tree_id, const float* features) {{
 }}
 
 
-void SafeHer::V5Embedded::evaluate_forest(const float* features, float* output) {{
-    // Initialize output to zero
+void evaluate_forest(const float* features, float* output) {{
+    // XGBoost multi:softprob stores the per-class base score and then accumulates
+    // each tree's leaf output into the class index given by tree_id % NUM_CLASSES.
+    // Trees are interleaved round-robin across classes within each boosting round
+    // (tree 0 -> class 0, tree 1 -> class 1, ..., tree C-1 -> class C-1, tree C -> class 0, ...).
     for (int i = 0; i < NUM_CLASSES; ++i) {{
-        output[i] = 0.0f;
+        output[i] = kBaseScores[i];
     }}
-    
-    // For multiclass softprob (XGBoost):
-    // Trees are ordered by class: trees 0...N/C-1 predict class 0,
-    // trees N/C...2N/C-1 predict class 1, etc.
-    
-    int trees_per_class = NUM_TREES / NUM_CLASSES;
-    
+
     for (int tree_id = 0; tree_id < NUM_TREES; ++tree_id) {{
-        float prediction = evaluate_tree(tree_id, features);
-        int class_id = tree_id / trees_per_class;
-        
-        if (class_id >= 0 && class_id < NUM_CLASSES) {{
-            output[class_id] += prediction;
-        }}
+        const float prediction = evaluate_tree(tree_id, features);
+        const int class_id = tree_id % NUM_CLASSES;
+        output[class_id] += prediction;
     }}
 }}
 
 
-int SafeHer::V5Embedded::predict_class(const float* scores) {{
+int predict_class(const float* scores) {{
     int best_class = 0;
     float best_score = scores[0];
-    
+
     for (int i = 1; i < NUM_CLASSES; ++i) {{
         if (scores[i] > best_score) {{
             best_score = scores[i];
             best_class = i;
         }}
     }}
-    
+
     return best_class;
 }}
 
 
-float SafeHer::V5Embedded::predict_confidence(const float* scores) {{
-    // Simple softmax approximation for embedded systems
-    float max_score = scores[0];
+float predict_confidence(const float* scores) {{
+    int best_class = 0;
+    float best_score = scores[0];
     for (int i = 1; i < NUM_CLASSES; ++i) {{
-        max_score = std::max(max_score, scores[i]);
+        if (scores[i] > best_score) {{
+            best_score = scores[i];
+            best_class = i;
+        }}
     }}
-    
+
+    float max_score = best_score;
     float exp_sum = 0.0f;
     for (int i = 0; i < NUM_CLASSES; ++i) {{
         exp_sum += std::exp(scores[i] - max_score);
     }}
-    
-    float max_exp = std::exp(max_score - max_score);
-    return max_exp / exp_sum;  // Probability of max class
+
+    return std::exp(scores[best_class] - max_score) / exp_sum;
 }}
 '''
-    
+
     # Combine header and functions
     source = f'''// SafeHer V5 XGBoost Embedded Model - Implementation
 // Auto-generated from XGBoost JSON model
@@ -470,7 +481,11 @@ float SafeHer::V5Embedded::predict_confidence(const float* scores) {{
 #include "safeher_v5_model.h"
 #include <cmath>
 
-using namespace SafeHer::V5Embedded;
+namespace SafeHer {{
+namespace V5Embedded {{
+
+namespace {{
+{base_score_array}}} // namespace
 
 // ============================================================================
 // TREE OFFSETS
@@ -489,8 +504,11 @@ using namespace SafeHer::V5Embedded;
 // ============================================================================
 
 {inference_code}
+
+}} // namespace V5Embedded
+}} // namespace SafeHer
 '''
-    
+
     return source
 
 

@@ -16,7 +16,8 @@
 #define SAMPLE_INTERVAL_US 10000UL
 #define WINDOW_SIZE 100
 #define OVERLAP 50
-#define NUM_CLASSES 7
+#define NUM_CLASSES 5
+#define FALL_CLASS_INDEX (NUM_CLASSES - 1)  // FALL is always the last class in CLASS_NAMES
 #define FEATURE_COUNT 51
 #define FALL_CONFIDENCE_THRESHOLD 0.65f
 #define DEBUG_FEATURES 1
@@ -30,7 +31,7 @@
 #define TELEMETRY_INTERVAL_MS 500UL
 
 const char* const CLASS_NAMES[NUM_CLASSES] = {
-  "NORMAL", "JERK", "PUSH", "PULL", "SHAKING", "TWISTING", "FALL"
+  "NORMAL", "SUDDEN_MOVEMENT", "SHAKING", "TWISTING", "FALL"
 };
 
 struct FeatureStats {
@@ -357,7 +358,7 @@ void printPredictionSummary(uint32_t id, int predictedClass, float confidence, c
 }
 
 const char* applyFallConfirmation(int predictedClass, float confidence) {
-  if (predictedClass != 6) {
+  if (predictedClass != FALL_CLASS_INDEX) {
     fallConfirmationCount = 0;
     return (predictedClass == 0) ? "SAFE" : "ABNORMAL";
   }
@@ -420,9 +421,9 @@ void runInference() {
 
   Serial.printf("RAW: %s | Confidence: %.2f | FALL_COUNT: %d\n",
                 CLASS_NAMES[predictedClass], confidence, fallConfirmationCount);
-  if (predictedClass == 6 && fallConfirmationCount < 2) {
+  if (predictedClass == FALL_CLASS_INDEX && fallConfirmationCount < 2) {
     Serial.println("SAFETY: FALL CANDIDATE");
-  } else if (predictedClass == 6) {
+  } else if (predictedClass == FALL_CLASS_INDEX) {
     Serial.println("SAFETY: HIGH_RISK - FALL CONFIRMED");
   } else {
     Serial.printf("SAFETY: %s\n", safetyText);

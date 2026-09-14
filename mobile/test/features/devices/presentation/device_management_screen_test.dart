@@ -248,11 +248,11 @@ void main() {
       expect(find.text('CONNECTED'), findsOneWidget);
       expect(find.text('--'), findsOneWidget);
 
-      ble.emitCharacteristicValue(deviceId, 'CLASS=PUSH,CONFIDENCE=0.8000');
+      ble.emitCharacteristicValue(deviceId, 'CLASS=SUDDEN_MOVEMENT,CONFIDENCE=0.8000');
       await tester.pump();
       await tester.pump();
       expect(find.text('40.0'), findsOneWidget);
-      expect(find.text('PUSH'), findsOneWidget);
+      expect(find.text('SUDDEN_MOVEMENT'), findsOneWidget);
       expect(find.text('Devices (2)'), findsOneWidget);
     });
 

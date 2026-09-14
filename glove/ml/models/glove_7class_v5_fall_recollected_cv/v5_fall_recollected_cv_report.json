@@ -1,0 +1,1308 @@
+{
+  "experiment": "v5_fall_recollected_cv",
+  "description": "5-fold recording-level StratifiedGroupKFold CV, exact V5 training config, after recollecting 16 new FALL recordings (fall_025-fall_040) with a tighter capture protocol to replace 18 deleted mislabeled ones. fall_018/fall_020 still missing (numbering gap, not backfilled).",
+  "recollected_fall_recordings": [
+    "fall_025",
+    "fall_026",
+    "fall_027",
+    "fall_028",
+    "fall_029",
+    "fall_030",
+    "fall_031",
+    "fall_032",
+    "fall_033",
+    "fall_034",
+    "fall_035",
+    "fall_036",
+    "fall_037",
+    "fall_038",
+    "fall_039",
+    "fall_040"
+  ],
+  "still_missing_fall_recordings": [
+    "fall_018",
+    "fall_020"
+  ],
+  "locked_test_recordings_all_22": [
+    "fall_003",
+    "fall_006",
+    "fall_018",
+    "fall_020",
+    "fall_025",
+    "jerk_002",
+    "jerk_009",
+    "normal_014",
+    "normal_016",
+    "normal_020",
+    "normal_022",
+    "normal_025",
+    "normal_027",
+    "normal_030",
+    "pull_008",
+    "pull_010",
+    "push_003",
+    "push_006",
+    "shaking_009",
+    "shaking_010",
+    "twisting_001",
+    "twisting_003"
+  ],
+  "locked_test_recordings_missing_pending_rerecord": [
+    "fall_018",
+    "fall_020"
+  ],
+  "development_recordings": 208,
+  "development_windows": 3405,
+  "feature_count": 51,
+  "class_order": [
+    "NORMAL",
+    "JERK",
+    "PUSH",
+    "PULL",
+    "SHAKING",
+    "TWISTING",
+    "FALL"
+  ],
+  "xgboost_params_v5_exact": {
+    "n_estimators": 600,
+    "max_depth": 6,
+    "learning_rate": 0.05,
+    "subsample": 0.9,
+    "colsample_bytree": 0.9,
+    "random_state": 42,
+    "objective": "multi:softprob",
+    "num_class": 7,
+    "eval_metric": "mlogloss",
+    "n_jobs": 1
+  },
+  "no_early_stopping": true,
+  "no_eval_set": true,
+  "no_class_weights": true,
+  "fold_results": [
+    {
+      "fold": 1,
+      "n_train_recordings": 166,
+      "n_val_recordings": 42,
+      "train_windows": 2719,
+      "val_windows": 686,
+      "accuracy": 0.7463556851311953,
+      "macro_precision": 0.74873716845582,
+      "macro_recall": 0.6887322041032304,
+      "macro_f1": 0.7120661104737576,
+      "weighted_f1": 0.7430788607759359,
+      "per_class": {
+        "NORMAL": {
+          "precision": 0.8064516129032258,
+          "recall": 0.9183673469387755,
+          "f1": 0.8587786259541985,
+          "support": 245
+        },
+        "JERK": {
+          "precision": 0.7142857142857143,
+          "recall": 0.625,
+          "f1": 0.6666666666666666,
+          "support": 56
+        },
+        "PUSH": {
+          "precision": 0.6631578947368421,
+          "recall": 0.6631578947368421,
+          "f1": 0.6631578947368421,
+          "support": 95
+        },
+        "PULL": {
+          "precision": 0.6111111111111112,
+          "recall": 0.7021276595744681,
+          "f1": 0.6534653465346535,
+          "support": 94
+        },
+        "SHAKING": {
+          "precision": 0.8444444444444444,
+          "recall": 0.5846153846153846,
+          "f1": 0.6909090909090909,
+          "support": 65
+        },
+        "TWISTING": {
+          "precision": 0.9555555555555556,
+          "recall": 0.7678571428571429,
+          "f1": 0.8514851485148515,
+          "support": 56
+        },
+        "FALL": {
+          "precision": 0.6461538461538462,
+          "recall": 0.56,
+          "f1": 0.6,
+          "support": 75
+        }
+      },
+      "confusion_matrix": [
+        [
+          225,
+          1,
+          7,
+          1,
+          0,
+          1,
+          10
+        ],
+        [
+          0,
+          35,
+          11,
+          7,
+          2,
+          0,
+          1
+        ],
+        [
+          7,
+          3,
+          63,
+          17,
+          0,
+          0,
+          5
+        ],
+        [
+          13,
+          6,
+          4,
+          66,
+          5,
+          0,
+          0
+        ],
+        [
+          2,
+          2,
+          4,
+          13,
+          38,
+          0,
+          6
+        ],
+        [
+          10,
+          0,
+          2,
+          0,
+          0,
+          43,
+          1
+        ],
+        [
+          22,
+          2,
+          4,
+          4,
+          0,
+          1,
+          42
+        ]
+      ],
+      "confusion_matrix_label_order": [
+        "NORMAL",
+        "JERK",
+        "PUSH",
+        "PULL",
+        "SHAKING",
+        "TWISTING",
+        "FALL"
+      ],
+      "fall_to_normal": 22,
+      "normal_to_fall": 10,
+      "push_to_pull": 17,
+      "pull_to_push": 4,
+      "val_recordings": [
+        "fall_009",
+        "fall_010",
+        "fall_013",
+        "fall_028",
+        "fall_030",
+        "fall_036",
+        "fall_040",
+        "jerk_005",
+        "jerk_006",
+        "jerk_008",
+        "normal_004",
+        "normal_007",
+        "normal_015",
+        "normal_018",
+        "normal_026",
+        "normal_029",
+        "normal_034",
+        "normal_036",
+        "normal_043",
+        "normal_049",
+        "normal_052",
+        "normal_061",
+        "normal_066",
+        "pull_004",
+        "pull_012",
+        "pull_015",
+        "pull_017",
+        "pull_026",
+        "pull_028",
+        "push_007",
+        "push_016",
+        "push_022",
+        "push_024",
+        "push_026",
+        "shaking_001",
+        "shaking_002",
+        "shaking_014",
+        "shaking_019",
+        "twisting_014",
+        "twisting_015",
+        "twisting_018",
+        "twisting_019"
+      ]
+    },
+    {
+      "fold": 2,
+      "n_train_recordings": 168,
+      "n_val_recordings": 40,
+      "train_windows": 2724,
+      "val_windows": 681,
+      "accuracy": 0.7870778267254038,
+      "macro_precision": 0.7818095538335631,
+      "macro_recall": 0.7604622285104733,
+      "macro_f1": 0.7684419024572037,
+      "weighted_f1": 0.7822944822029269,
+      "per_class": {
+        "NORMAL": {
+          "precision": 0.8127340823970037,
+          "recall": 0.9156118143459916,
+          "f1": 0.8611111111111112,
+          "support": 237
+        },
+        "JERK": {
+          "precision": 0.7419354838709677,
+          "recall": 0.8070175438596491,
+          "f1": 0.773109243697479,
+          "support": 57
+        },
+        "PUSH": {
+          "precision": 0.7411764705882353,
+          "recall": 0.6116504854368932,
+          "f1": 0.6702127659574468,
+          "support": 103
+        },
+        "PULL": {
+          "precision": 0.7263157894736842,
+          "recall": 0.7340425531914894,
+          "f1": 0.7301587301587301,
+          "support": 94
+        },
+        "SHAKING": {
+          "precision": 0.8888888888888888,
+          "recall": 0.8571428571428571,
+          "f1": 0.8727272727272727,
+          "support": 56
+        },
+        "TWISTING": {
+          "precision": 0.8888888888888888,
+          "recall": 0.8615384615384616,
+          "f1": 0.875,
+          "support": 65
+        },
+        "FALL": {
+          "precision": 0.6727272727272727,
+          "recall": 0.5362318840579711,
+          "f1": 0.5967741935483871,
+          "support": 69
+        }
+      },
+      "confusion_matrix": [
+        [
+          217,
+          0,
+          2,
+          3,
+          0,
+          2,
+          13
+        ],
+        [
+          3,
+          46,
+          4,
+          4,
+          0,
+          0,
+          0
+        ],
+        [
+          12,
+          11,
+          63,
+          13,
+          2,
+          2,
+          0
+        ],
+        [
+          9,
+          2,
+          12,
+          69,
+          2,
+          0,
+          0
+        ],
+        [
+          0,
+          3,
+          1,
+          4,
+          48,
+          0,
+          0
+        ],
+        [
+          3,
+          0,
+          0,
+          1,
+          0,
+          56,
+          5
+        ],
+        [
+          23,
+          0,
+          3,
+          1,
+          2,
+          3,
+          37
+        ]
+      ],
+      "confusion_matrix_label_order": [
+        "NORMAL",
+        "JERK",
+        "PUSH",
+        "PULL",
+        "SHAKING",
+        "TWISTING",
+        "FALL"
+      ],
+      "fall_to_normal": 23,
+      "normal_to_fall": 13,
+      "push_to_pull": 13,
+      "pull_to_push": 12,
+      "val_recordings": [
+        "fall_007",
+        "fall_012",
+        "fall_015",
+        "fall_017",
+        "fall_024",
+        "fall_029",
+        "fall_032",
+        "jerk_001",
+        "jerk_016",
+        "jerk_020",
+        "normal_001",
+        "normal_002",
+        "normal_006",
+        "normal_013",
+        "normal_017",
+        "normal_038",
+        "normal_042",
+        "normal_064",
+        "normal_067",
+        "normal_068",
+        "normal_070",
+        "pull_002",
+        "pull_005",
+        "pull_021",
+        "pull_023",
+        "pull_029",
+        "push_002",
+        "push_012",
+        "push_013",
+        "push_015",
+        "push_021",
+        "push_025",
+        "push_029",
+        "shaking_005",
+        "shaking_018",
+        "shaking_020",
+        "twisting_004",
+        "twisting_007",
+        "twisting_009",
+        "twisting_013"
+      ]
+    },
+    {
+      "fold": 3,
+      "n_train_recordings": 167,
+      "n_val_recordings": 41,
+      "train_windows": 2732,
+      "val_windows": 673,
+      "accuracy": 0.7756315007429421,
+      "macro_precision": 0.7723830153147995,
+      "macro_recall": 0.7750491531927405,
+      "macro_f1": 0.7718793191764088,
+      "weighted_f1": 0.7757023401041944,
+      "per_class": {
+        "NORMAL": {
+          "precision": 0.8260869565217391,
+          "recall": 0.8016877637130801,
+          "f1": 0.8137044967880086,
+          "support": 237
+        },
+        "JERK": {
+          "precision": 0.8545454545454545,
+          "recall": 0.7230769230769231,
+          "f1": 0.7833333333333333,
+          "support": 65
+        },
+        "PUSH": {
+          "precision": 0.7,
+          "recall": 0.7446808510638298,
+          "f1": 0.7216494845360825,
+          "support": 94
+        },
+        "PULL": {
+          "precision": 0.7010309278350515,
+          "recall": 0.723404255319149,
+          "f1": 0.7120418848167539,
+          "support": 94
+        },
+        "SHAKING": {
+          "precision": 0.8059701492537313,
+          "recall": 0.9473684210526315,
+          "f1": 0.8709677419354839,
+          "support": 57
+        },
+        "TWISTING": {
+          "precision": 0.8333333333333334,
+          "recall": 0.7894736842105263,
+          "f1": 0.8108108108108109,
+          "support": 57
+        },
+        "FALL": {
+          "precision": 0.6857142857142857,
+          "recall": 0.6956521739130435,
+          "f1": 0.6906474820143885,
+          "support": 69
+        }
+      },
+      "confusion_matrix": [
+        [
+          190,
+          0,
+          5,
+          19,
+          0,
+          4,
+          19
+        ],
+        [
+          0,
+          47,
+          7,
+          2,
+          8,
+          0,
+          1
+        ],
+        [
+          7,
+          8,
+          70,
+          5,
+          0,
+          3,
+          1
+        ],
+        [
+          5,
+          0,
+          15,
+          68,
+          5,
+          0,
+          1
+        ],
+        [
+          1,
+          0,
+          0,
+          2,
+          54,
+          0,
+          0
+        ],
+        [
+          12,
+          0,
+          0,
+          0,
+          0,
+          45,
+          0
+        ],
+        [
+          15,
+          0,
+          3,
+          1,
+          0,
+          2,
+          48
+        ]
+      ],
+      "confusion_matrix_label_order": [
+        "NORMAL",
+        "JERK",
+        "PUSH",
+        "PULL",
+        "SHAKING",
+        "TWISTING",
+        "FALL"
+      ],
+      "fall_to_normal": 15,
+      "normal_to_fall": 19,
+      "push_to_pull": 5,
+      "pull_to_push": 15,
+      "val_recordings": [
+        "fall_008",
+        "fall_014",
+        "fall_019",
+        "fall_022",
+        "fall_023",
+        "fall_034",
+        "fall_038",
+        "jerk_004",
+        "jerk_007",
+        "jerk_010",
+        "jerk_011",
+        "normal_003",
+        "normal_019",
+        "normal_024",
+        "normal_031",
+        "normal_035",
+        "normal_037",
+        "normal_039",
+        "normal_045",
+        "normal_047",
+        "normal_051",
+        "normal_056",
+        "normal_060",
+        "normal_062",
+        "pull_001",
+        "pull_003",
+        "pull_009",
+        "pull_024",
+        "pull_025",
+        "push_004",
+        "push_009",
+        "push_011",
+        "push_014",
+        "push_028",
+        "push_030",
+        "shaking_004",
+        "shaking_007",
+        "shaking_008",
+        "twisting_005",
+        "twisting_010",
+        "twisting_017"
+      ]
+    },
+    {
+      "fold": 4,
+      "n_train_recordings": 166,
+      "n_val_recordings": 42,
+      "train_windows": 2726,
+      "val_windows": 679,
+      "accuracy": 0.7776141384388807,
+      "macro_precision": 0.7698077125375725,
+      "macro_recall": 0.7609775905242916,
+      "macro_f1": 0.7574589855938348,
+      "weighted_f1": 0.7704637010286467,
+      "per_class": {
+        "NORMAL": {
+          "precision": 0.8571428571428571,
+          "recall": 0.9061224489795918,
+          "f1": 0.8809523809523809,
+          "support": 245
+        },
+        "JERK": {
+          "precision": 0.7454545454545455,
+          "recall": 0.7321428571428571,
+          "f1": 0.7387387387387387,
+          "support": 56
+        },
+        "PUSH": {
+          "precision": 0.5772357723577236,
+          "recall": 0.7473684210526316,
+          "f1": 0.6513761467889908,
+          "support": 95
+        },
+        "PULL": {
+          "precision": 0.6964285714285714,
+          "recall": 0.4148936170212766,
+          "f1": 0.52,
+          "support": 94
+        },
+        "SHAKING": {
+          "precision": 0.9655172413793104,
+          "recall": 1.0,
+          "f1": 0.9824561403508771,
+          "support": 56
+        },
+        "TWISTING": {
+          "precision": 0.796875,
+          "recall": 0.8947368421052632,
+          "f1": 0.8429752066115702,
+          "support": 57
+        },
+        "FALL": {
+          "precision": 0.75,
+          "recall": 0.631578947368421,
+          "f1": 0.6857142857142857,
+          "support": 76
+        }
+      },
+      "confusion_matrix": [
+        [
+          222,
+          1,
+          5,
+          4,
+          0,
+          7,
+          6
+        ],
+        [
+          0,
+          41,
+          11,
+          3,
+          1,
+          0,
+          0
+        ],
+        [
+          8,
+          0,
+          71,
+          8,
+          0,
+          0,
+          8
+        ],
+        [
+          9,
+          13,
+          28,
+          39,
+          0,
+          3,
+          2
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          56,
+          0,
+          0
+        ],
+        [
+          3,
+          0,
+          1,
+          2,
+          0,
+          51,
+          0
+        ],
+        [
+          17,
+          0,
+          7,
+          0,
+          1,
+          3,
+          48
+        ]
+      ],
+      "confusion_matrix_label_order": [
+        "NORMAL",
+        "JERK",
+        "PUSH",
+        "PULL",
+        "SHAKING",
+        "TWISTING",
+        "FALL"
+      ],
+      "fall_to_normal": 17,
+      "normal_to_fall": 6,
+      "push_to_pull": 8,
+      "pull_to_push": 28,
+      "val_recordings": [
+        "fall_001",
+        "fall_005",
+        "fall_011",
+        "fall_021",
+        "fall_026",
+        "fall_033",
+        "fall_037",
+        "jerk_012",
+        "jerk_014",
+        "jerk_018",
+        "jerk_019",
+        "normal_008",
+        "normal_009",
+        "normal_012",
+        "normal_028",
+        "normal_033",
+        "normal_040",
+        "normal_041",
+        "normal_046",
+        "normal_050",
+        "normal_055",
+        "normal_058",
+        "normal_065",
+        "normal_069",
+        "pull_006",
+        "pull_011",
+        "pull_014",
+        "pull_019",
+        "pull_020",
+        "pull_027",
+        "push_008",
+        "push_017",
+        "push_018",
+        "push_019",
+        "push_023",
+        "shaking_003",
+        "shaking_006",
+        "shaking_011",
+        "shaking_013",
+        "twisting_002",
+        "twisting_008",
+        "twisting_020"
+      ]
+    },
+    {
+      "fold": 5,
+      "n_train_recordings": 165,
+      "n_val_recordings": 43,
+      "train_windows": 2719,
+      "val_windows": 686,
+      "accuracy": 0.7011661807580175,
+      "macro_precision": 0.7068085019284956,
+      "macro_recall": 0.6900600098423192,
+      "macro_f1": 0.6933934643949676,
+      "weighted_f1": 0.6996178510428196,
+      "per_class": {
+        "NORMAL": {
+          "precision": 0.7683397683397684,
+          "recall": 0.8122448979591836,
+          "f1": 0.7896825396825397,
+          "support": 245
+        },
+        "JERK": {
+          "precision": 0.6486486486486487,
+          "recall": 0.8571428571428571,
+          "f1": 0.7384615384615385,
+          "support": 56
+        },
+        "PUSH": {
+          "precision": 0.5842696629213483,
+          "recall": 0.5473684210526316,
+          "f1": 0.5652173913043478,
+          "support": 95
+        },
+        "PULL": {
+          "precision": 0.5842696629213483,
+          "recall": 0.5048543689320388,
+          "f1": 0.5416666666666666,
+          "support": 103
+        },
+        "SHAKING": {
+          "precision": 0.9318181818181818,
+          "recall": 0.7321428571428571,
+          "f1": 0.82,
+          "support": 56
+        },
+        "TWISTING": {
+          "precision": 0.8571428571428571,
+          "recall": 0.75,
+          "f1": 0.8,
+          "support": 56
+        },
+        "FALL": {
+          "precision": 0.573170731707317,
+          "recall": 0.6266666666666667,
+          "f1": 0.5987261146496815,
+          "support": 75
+        }
+      },
+      "confusion_matrix": [
+        [
+          199,
+          0,
+          4,
+          7,
+          0,
+          6,
+          29
+        ],
+        [
+          3,
+          48,
+          4,
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          10,
+          12,
+          52,
+          19,
+          0,
+          0,
+          2
+        ],
+        [
+          18,
+          6,
+          23,
+          52,
+          0,
+          0,
+          4
+        ],
+        [
+          1,
+          7,
+          0,
+          7,
+          41,
+          0,
+          0
+        ],
+        [
+          8,
+          1,
+          2,
+          3,
+          0,
+          42,
+          0
+        ],
+        [
+          20,
+          0,
+          4,
+          0,
+          3,
+          1,
+          47
+        ]
+      ],
+      "confusion_matrix_label_order": [
+        "NORMAL",
+        "JERK",
+        "PUSH",
+        "PULL",
+        "SHAKING",
+        "TWISTING",
+        "FALL"
+      ],
+      "fall_to_normal": 20,
+      "normal_to_fall": 29,
+      "push_to_pull": 19,
+      "pull_to_push": 23,
+      "val_recordings": [
+        "fall_002",
+        "fall_004",
+        "fall_016",
+        "fall_027",
+        "fall_031",
+        "fall_035",
+        "fall_039",
+        "jerk_003",
+        "jerk_013",
+        "jerk_015",
+        "jerk_017",
+        "normal_005",
+        "normal_010",
+        "normal_011",
+        "normal_021",
+        "normal_023",
+        "normal_032",
+        "normal_044",
+        "normal_048",
+        "normal_053",
+        "normal_054",
+        "normal_057",
+        "normal_059",
+        "normal_063",
+        "pull_007",
+        "pull_013",
+        "pull_016",
+        "pull_018",
+        "pull_022",
+        "pull_030",
+        "push_001",
+        "push_005",
+        "push_010",
+        "push_020",
+        "push_027",
+        "shaking_012",
+        "shaking_015",
+        "shaking_016",
+        "shaking_017",
+        "twisting_006",
+        "twisting_011",
+        "twisting_012",
+        "twisting_016"
+      ]
+    }
+  ],
+  "summary_mean_std": {
+    "accuracy": {
+      "mean": 0.7575690663592879,
+      "std": 0.03502088238323412,
+      "values": [
+        0.7464,
+        0.7871,
+        0.7756,
+        0.7776,
+        0.7012
+      ]
+    },
+    "macro_precision": {
+      "mean": 0.7559091904140502,
+      "std": 0.029990415794326004,
+      "values": [
+        0.7487,
+        0.7818,
+        0.7724,
+        0.7698,
+        0.7068
+      ]
+    },
+    "macro_recall": {
+      "mean": 0.735056237234611,
+      "std": 0.04209332132597673,
+      "values": [
+        0.6887,
+        0.7605,
+        0.775,
+        0.761,
+        0.6901
+      ]
+    },
+    "macro_f1": {
+      "mean": 0.7406479564192344,
+      "std": 0.03563853634783386,
+      "values": [
+        0.7121,
+        0.7684,
+        0.7719,
+        0.7575,
+        0.6934
+      ]
+    },
+    "weighted_f1": {
+      "mean": 0.7542314470309047,
+      "std": 0.03398177566432597,
+      "values": [
+        0.7431,
+        0.7823,
+        0.7757,
+        0.7705,
+        0.6996
+      ]
+    },
+    "NORMAL_precision": {
+      "mean": 0.8141510554609187,
+      "std": 0.03221305636714857,
+      "values": [
+        0.8065,
+        0.8127,
+        0.8261,
+        0.8571,
+        0.7683
+      ]
+    },
+    "NORMAL_recall": {
+      "mean": 0.8708068543873246,
+      "std": 0.05857394375139353,
+      "values": [
+        0.9184,
+        0.9156,
+        0.8017,
+        0.9061,
+        0.8122
+      ]
+    },
+    "NORMAL_f1": {
+      "mean": 0.8408458308976478,
+      "std": 0.03773306395979619,
+      "values": [
+        0.8588,
+        0.8611,
+        0.8137,
+        0.881,
+        0.7897
+      ]
+    },
+    "JERK_precision": {
+      "mean": 0.7409739693610662,
+      "std": 0.07442397147910029,
+      "values": [
+        0.7143,
+        0.7419,
+        0.8545,
+        0.7455,
+        0.6486
+      ]
+    },
+    "JERK_recall": {
+      "mean": 0.7488760362444573,
+      "std": 0.0885903568312166,
+      "values": [
+        0.625,
+        0.807,
+        0.7231,
+        0.7321,
+        0.8571
+      ]
+    },
+    "JERK_f1": {
+      "mean": 0.7400619041795513,
+      "std": 0.04570480296700739,
+      "values": [
+        0.6667,
+        0.7731,
+        0.7833,
+        0.7387,
+        0.7385
+      ]
+    },
+    "PUSH_precision": {
+      "mean": 0.6531679601208299,
+      "std": 0.07167846462335725,
+      "values": [
+        0.6632,
+        0.7412,
+        0.7,
+        0.5772,
+        0.5843
+      ]
+    },
+    "PUSH_recall": {
+      "mean": 0.6628452146685657,
+      "std": 0.08630922855553695,
+      "values": [
+        0.6632,
+        0.6117,
+        0.7447,
+        0.7474,
+        0.5474
+      ]
+    },
+    "PUSH_f1": {
+      "mean": 0.6543227366647419,
+      "std": 0.05659480760569839,
+      "values": [
+        0.6632,
+        0.6702,
+        0.7216,
+        0.6514,
+        0.5652
+      ]
+    },
+    "PULL_precision": {
+      "mean": 0.6638312125539533,
+      "std": 0.06216948256885814,
+      "values": [
+        0.6111,
+        0.7263,
+        0.701,
+        0.6964,
+        0.5843
+      ]
+    },
+    "PULL_recall": {
+      "mean": 0.6158644908076842,
+      "std": 0.1463597698609289,
+      "values": [
+        0.7021,
+        0.734,
+        0.7234,
+        0.4149,
+        0.5049
+      ]
+    },
+    "PULL_f1": {
+      "mean": 0.6314665256353609,
+      "std": 0.09644336274449908,
+      "values": [
+        0.6535,
+        0.7302,
+        0.712,
+        0.52,
+        0.5417
+      ]
+    },
+    "SHAKING_precision": {
+      "mean": 0.8873277811569114,
+      "std": 0.06433014327418655,
+      "values": [
+        0.8444,
+        0.8889,
+        0.806,
+        0.9655,
+        0.9318
+      ]
+    },
+    "SHAKING_recall": {
+      "mean": 0.8242539039907462,
+      "std": 0.168104597448394,
+      "values": [
+        0.5846,
+        0.8571,
+        0.9474,
+        1.0,
+        0.7321
+      ]
+    },
+    "SHAKING_f1": {
+      "mean": 0.8474120491845449,
+      "std": 0.1056849494398327,
+      "values": [
+        0.6909,
+        0.8727,
+        0.871,
+        0.9825,
+        0.82
+      ]
+    },
+    "TWISTING_precision": {
+      "mean": 0.866359126984127,
+      "std": 0.06014000253612692,
+      "values": [
+        0.9556,
+        0.8889,
+        0.8333,
+        0.7969,
+        0.8571
+      ]
+    },
+    "TWISTING_recall": {
+      "mean": 0.8127212261422787,
+      "std": 0.06244371489026965,
+      "values": [
+        0.7679,
+        0.8615,
+        0.7895,
+        0.8947,
+        0.75
+      ]
+    },
+    "TWISTING_f1": {
+      "mean": 0.8360542331874464,
+      "std": 0.030577458517741286,
+      "values": [
+        0.8515,
+        0.875,
+        0.8108,
+        0.843,
+        0.8
+      ]
+    },
+    "FALL_precision": {
+      "mean": 0.6655532272605443,
+      "std": 0.06422626819380081,
+      "values": [
+        0.6462,
+        0.6727,
+        0.6857,
+        0.75,
+        0.5732
+      ]
+    },
+    "FALL_recall": {
+      "mean": 0.6100259344012204,
+      "std": 0.06328794357934198,
+      "values": [
+        0.56,
+        0.5362,
+        0.6957,
+        0.6316,
+        0.6267
+      ]
+    },
+    "FALL_f1": {
+      "mean": 0.6343724151853485,
+      "std": 0.04916456740844522,
+      "values": [
+        0.6,
+        0.5968,
+        0.6906,
+        0.6857,
+        0.5987
+      ]
+    }
+  },
+  "total_fall_to_normal_across_folds": 97,
+  "total_normal_to_fall_across_folds": 77,
+  "comparison_previous_20_20_cv": {
+    "accuracy": {
+      "mean": 0.7407,
+      "std": 0.0234
+    },
+    "macro_f1": {
+      "mean": 0.7138,
+      "std": 0.0328
+    },
+    "fall_recall": {
+      "mean": 0.6857,
+      "std": 0.111
+    }
+  },
+  "comparison_previous_30_30_cv": {
+    "accuracy": {
+      "mean": 0.7458,
+      "std": 0.0403
+    },
+    "macro_f1": {
+      "mean": 0.7455,
+      "std": 0.0431
+    },
+    "fall_recall": {
+      "mean": 0.7227,
+      "std": 0.1486
+    }
+  },
+  "comparison_previous_post_cleanup_cv_20_fall_only": {
+    "accuracy": {
+      "mean": 0.7474,
+      "std": 0.0318
+    },
+    "macro_f1": {
+      "mean": 0.7159,
+      "std": 0.0373
+    },
+    "fall_recall": {
+      "mean": 0.5359,
+      "std": 0.1148
+    },
+    "total_fall_to_normal": 87,
+    "total_normal_to_fall": 41,
+    "note": "immediately after deleting 18 mislabeled FALL recordings, before recollecting - only 20 FALL recordings in dev set"
+  },
+  "locked_test_set_used": false,
+  "final_candidate_trained": false
+}

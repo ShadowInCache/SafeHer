@@ -1,0 +1,164 @@
+{
+  "locked_test_recordings": [
+    "fall_003",
+    "fall_006",
+    "fall_018",
+    "fall_020",
+    "fall_025",
+    "jerk_002",
+    "jerk_009",
+    "normal_014",
+    "normal_016",
+    "normal_020",
+    "normal_022",
+    "normal_025",
+    "normal_027",
+    "normal_030",
+    "pull_008",
+    "pull_010",
+    "push_003",
+    "push_006",
+    "shaking_009",
+    "shaking_010",
+    "twisting_001",
+    "twisting_003"
+  ],
+  "total_test_windows": 431,
+  "candidate_node_count": 50176,
+  "original_v5": {
+    "model_path": "A:\\Capstone\\SafeHer\\glove\\ml\\models\\safeher_glove_7class_v5_xgboost.json",
+    "sha256": "69fb6a417af1135bda5f62629691579e2e574bcda1cc3183d9b703ccc83779ea",
+    "accuracy": 0.8491879350348028,
+    "macro_f1": 0.8410408521780808,
+    "weighted_f1": 0.8498695065341285,
+    "fall_precision": 0.8068181818181818,
+    "fall_recall": 0.7473684210526316,
+    "fall_f1": 0.7759562841530054,
+    "normal_precision": 0.9357142857142857,
+    "normal_recall": 0.8851351351351351,
+    "fall_to_normal": 8,
+    "normal_to_fall": 16
+  },
+  "candidate": {
+    "model_path": "A:\\Capstone\\SafeHer\\glove\\ml\\models\\glove_7class_v5_size_constrained_final\\safeher_glove_7class_v5_size_constrained_candidate_xgboost.json",
+    "sha256": "0d54e4167d07e6d8fa599b5ef0335f96eed3c3562f976431f72d79bab2c417b2",
+    "accuracy": 0.8491879350348028,
+    "macro_f1": 0.8372837006635007,
+    "weighted_f1": 0.8495255935375855,
+    "fall_precision": 0.8636363636363636,
+    "fall_recall": 0.8,
+    "fall_f1": 0.8306010928961749,
+    "normal_precision": 0.891156462585034,
+    "normal_recall": 0.8851351351351351,
+    "fall_to_normal": 13,
+    "normal_to_fall": 11
+  },
+  "delta_candidate_minus_original": {
+    "accuracy": 0.0,
+    "macro_f1": -0.003757151514580115,
+    "weighted_f1": -0.00034391299654301655,
+    "fall_recall": 0.052631578947368474,
+    "fall_precision": 0.05681818181818188,
+    "normal_recall": 0.0
+  },
+  "per_class_both": {
+    "NORMAL": {
+      "original": {
+        "precision": 0.9357142857142857,
+        "recall": 0.8851351351351351,
+        "f1": 0.9097222222222222,
+        "support": 148
+      },
+      "candidate": {
+        "precision": 0.891156462585034,
+        "recall": 0.8851351351351351,
+        "f1": 0.888135593220339,
+        "support": 148
+      }
+    },
+    "JERK": {
+      "original": {
+        "precision": 0.6551724137931034,
+        "recall": 1.0,
+        "f1": 0.7916666666666666,
+        "support": 38
+      },
+      "candidate": {
+        "precision": 0.7446808510638298,
+        "recall": 0.9210526315789473,
+        "f1": 0.8235294117647058,
+        "support": 38
+      }
+    },
+    "PUSH": {
+      "original": {
+        "precision": 0.9285714285714286,
+        "recall": 0.6842105263157895,
+        "f1": 0.7878787878787878,
+        "support": 38
+      },
+      "candidate": {
+        "precision": 0.8709677419354839,
+        "recall": 0.7105263157894737,
+        "f1": 0.782608695652174,
+        "support": 38
+      }
+    },
+    "PULL": {
+      "original": {
+        "precision": 0.7435897435897436,
+        "recall": 0.7837837837837838,
+        "f1": 0.7631578947368421,
+        "support": 37
+      },
+      "candidate": {
+        "precision": 0.6341463414634146,
+        "recall": 0.7027027027027027,
+        "f1": 0.6666666666666666,
+        "support": 37
+      }
+    },
+    "SHAKING": {
+      "original": {
+        "precision": 0.8571428571428571,
+        "recall": 0.9473684210526315,
+        "f1": 0.9,
+        "support": 38
+      },
+      "candidate": {
+        "precision": 0.8809523809523809,
+        "recall": 0.9736842105263158,
+        "f1": 0.925,
+        "support": 38
+      }
+    },
+    "TWISTING": {
+      "original": {
+        "precision": 0.9722222222222222,
+        "recall": 0.9459459459459459,
+        "f1": 0.958904109589041,
+        "support": 37
+      },
+      "candidate": {
+        "precision": 0.9714285714285714,
+        "recall": 0.918918918918919,
+        "f1": 0.9444444444444444,
+        "support": 37
+      }
+    },
+    "FALL": {
+      "original": {
+        "precision": 0.8068181818181818,
+        "recall": 0.7473684210526316,
+        "f1": 0.7759562841530054,
+        "support": 95
+      },
+      "candidate": {
+        "precision": 0.8636363636363636,
+        "recall": 0.8,
+        "f1": 0.8306010928961749,
+        "support": 95
+      }
+    }
+  }
+}

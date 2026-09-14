@@ -71,17 +71,17 @@ void main() {
       addTearDown(subB.close);
       await Future<void>.delayed(Duration.zero);
 
-      fakeBle.emitCharacteristicValue('glove-A', 'CLASS=PUSH,CONFIDENCE=0.8124');
-      fakeBle.emitCharacteristicValue('glove-B', 'CLASS=PULL,CONFIDENCE=0.7341');
+      fakeBle.emitCharacteristicValue('glove-A', 'CLASS=SUDDEN_MOVEMENT,CONFIDENCE=0.8124');
+      fakeBle.emitCharacteristicValue('glove-B', 'CLASS=SHAKING,CONFIDENCE=0.7341');
       await Future<void>.delayed(Duration.zero);
 
       expect(
         container.read(motionDataProvider('glove-A')).value,
-        const MotionData(classification: 'PUSH', confidence: 0.8124),
+        const MotionData(classification: 'SUDDEN_MOVEMENT', confidence: 0.8124),
       );
       expect(
         container.read(motionDataProvider('glove-B')).value,
-        const MotionData(classification: 'PULL', confidence: 0.7341),
+        const MotionData(classification: 'SHAKING', confidence: 0.7341),
       );
     });
   });

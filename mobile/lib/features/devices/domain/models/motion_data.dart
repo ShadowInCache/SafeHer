@@ -10,7 +10,7 @@
 class MotionData {
   const MotionData({required this.classification, required this.confidence});
 
-  /// One of [kKnownMotionClasses]: NORMAL, JERK, PUSH, PULL, SHAKING,
+  /// One of [kKnownMotionClasses]: NORMAL, SUDDEN_MOVEMENT, SHAKING,
   /// TWISTING, or FALL. [parseMotionPacket] already rejects anything else,
   /// so a valid [MotionData] instance is guaranteed to carry a known class.
   final String classification;
@@ -33,12 +33,13 @@ class MotionData {
   int get hashCode => Object.hash(classification, confidence);
 }
 
-/// The exact classes the glove's on-device V5 model can predict. Mirrors
-/// `CLASS_NAMES[]` in `SafeHer_Glove_Final.ino` and nothing else — this is
-/// a validity check for incoming packets, not a scoring policy. Order does
-/// not matter here (unlike the firmware's array, which is index-mapped to
-/// the model's class IDs); this is only ever used for membership tests.
-const kKnownMotionClasses = {'NORMAL', 'JERK', 'PUSH', 'PULL', 'SHAKING', 'TWISTING', 'FALL'};
+/// The exact classes the glove's on-device V7 model can predict. Mirrors
+/// `CLASS_NAMES[]` in `SafeHer_Glove_V5_OnDevice.ino` and nothing else —
+/// this is a validity check for incoming packets, not a scoring policy.
+/// Order does not matter here (unlike the firmware's array, which is
+/// index-mapped to the model's class IDs); this is only ever used for
+/// membership tests. `PUSH`/`PULL`/`JERK` were merged into `SUDDEN_MOVEMENT`.
+const kKnownMotionClasses = {'NORMAL', 'SUDDEN_MOVEMENT', 'SHAKING', 'TWISTING', 'FALL'};
 
 /// Parses one `CLASS=<name>,CONFIDENCE=<0.0-1.0>` notification payload from
 /// the glove's BLE result characteristic (see [MotionData]).

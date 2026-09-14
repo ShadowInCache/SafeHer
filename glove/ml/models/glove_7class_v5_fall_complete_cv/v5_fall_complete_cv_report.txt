@@ -1,0 +1,60 @@
+SAFEHER V5-CONFIGURATION 5-FOLD CV, COMPLETE FALL DATASET (40/40, LOCKED TEST SET 22/22)
+======================================================================
+
+Locked test set: EXCLUDED, NEVER EVALUATED IN THIS EXPERIMENT.
+All 22 locked test recordings present on disk - the locked test set is COMPLETE.
+Development: 208 recordings / 3585 windows.
+
+XGBoost config (exact V5 script values):
+{
+  "n_estimators": 600,
+  "max_depth": 6,
+  "learning_rate": 0.05,
+  "subsample": 0.9,
+  "colsample_bytree": 0.9,
+  "random_state": 42,
+  "objective": "multi:softprob",
+  "num_class": 7,
+  "eval_metric": "mlogloss",
+  "n_jobs": 1
+}
+
+PER-FOLD RESULTS:
+----------------------------------------------------------------------
+Fold 1: acc=0.7399 macroF1=0.7137 weightedF1=0.7369
+  FALL R=0.6875  FALL->NORMAL=22  NORMAL->FALL=18
+Fold 2: acc=0.7151 macroF1=0.6754 weightedF1=0.7088
+  FALL R=0.6518  FALL->NORMAL=29  NORMAL->FALL=7
+Fold 3: acc=0.8212 macroF1=0.8094 weightedF1=0.8171
+  FALL R=0.8269  FALL->NORMAL=2  NORMAL->FALL=15
+Fold 4: acc=0.7510 macroF1=0.7359 weightedF1=0.7421
+  FALL R=0.8393  FALL->NORMAL=8  NORMAL->FALL=10
+Fold 5: acc=0.7594 macroF1=0.7691 weightedF1=0.7559
+  FALL R=0.6635  FALL->NORMAL=29  NORMAL->FALL=13
+
+MEAN +- STD ACROSS 5 FOLDS:
+----------------------------------------------------------------------
+accuracy: 0.7573 +- 0.0394
+macro_f1: 0.7407 +- 0.0513
+weighted_f1: 0.7522 +- 0.0401
+NORMAL recall: 0.8756 +- 0.0300
+JERK recall: 0.7261 +- 0.2033
+PUSH recall: 0.6126 +- 0.1394
+PULL recall: 0.5574 +- 0.1719
+SHAKING recall: 0.8334 +- 0.1782
+TWISTING recall: 0.8217 +- 0.0340
+FALL recall: 0.7338 +- 0.0917
+
+TOTAL FALL->NORMAL across folds: 90
+TOTAL NORMAL->FALL across folds: 63
+
+COMPARISON (20/20 / 30/30 / post-cleanup-20-fall / single-burst-4s / multiburst-2-missing / this run):
+Accuracy:    0.7407 / 0.7458 / 0.7474 / 0.7576 / 0.7573 / 0.7573
+Macro F1:    0.7138 / 0.7455 / 0.7159 / 0.7406 / 0.7407 / 0.7407
+FALL recall: 0.6857 / 0.7227 / 0.5359 / 0.6100 / 0.7338 / 0.7338
+NORMAL->FALL: -- / -- / 41 / 77 / 63 / 63
+
+locked_test_set_used: False
+final_candidate_trained: False
+Dataset and locked test set are now both complete - ready for a final candidate
+to be trained and evaluated exactly once on the locked test set, if desired.

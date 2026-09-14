@@ -1,0 +1,8 @@
+{
+  "model_path": "A:\\Capstone\\SafeHer\\glove\\ml\\models\\glove_7class_expanded_v2\\safeher_glove_7class_expanded_v2_xgboost.json",
+  "sha256": "d7ac1c89fbe4d6d19dad06fa853c7e274bbf6bf8446f9123f1f23d58c06d7747",
+  "decision_signal": "B_KEEP_ORIGINAL_FROZEN_BASELINE",
+  "decision_reasons": [
+    "macro F1 did not improve meaningfully and/or FALL regressed"
+  ]
+}
