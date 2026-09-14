@@ -4,7 +4,16 @@ from datetime import datetime
 from typing import Any, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    UploadFile,
+    status,
+)
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,7 +33,7 @@ from fastapi_app.schemas import (
     UserPublic,
 )
 from fastapi_app.security import get_current_user
-from fastapi_app.services import threat_fusion, threat_models
+from fastapi_app.services import threat_fusion, threat_models, weapon_detector
 from fastapi_app.services.emergency_dispatch import (
     DISPATCH_COMPLETE,
     DISPATCH_IN_PROGRESS,
@@ -762,4 +771,82 @@ async def analyze_model_scores(
         "modalities_used": scores.reporting_modalities,
         "live_score": _latest_scores[current_user.id],
         "auto_sos": auto_sos,
+    }
+
+
+@router.post("/weapon-frame")
+async def analyse_weapon_frame(
+    file: UploadFile = File(...),
+    current_user: UserPublic = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+):
+    """Scores one camera frame — the web fallback for weapon detection.
+
+    **Android does not use this.** There the detector runs on the phone against
+    a continuous stream from the glasses and no video leaves the device. Web has
+    no on-device runtime, so it posts occasional frames here instead, and the
+    two are not the same promise: one is continuous and local, the other is
+    sampled and uploaded. The client is required to say which it is running.
+
+    Nothing is stored. The frame is decoded, scored and dropped — it is not
+    evidence, nobody chose to record it, and keeping it would turn a detection
+    check into surveillance of every journey.
+
+    Returns `available: false` when no model is loaded, so the caller reports
+    the modality as **absent** rather than as a zero score. A zero would claim
+    the camera looked and saw calm, which caps the fused score below the alarm
+    threshold and quietly disables automatic dispatch.
+    """
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type not in {"image/jpeg", "image/jpg", "image/png"}:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Frame must be a JPEG or PNG image.",
+        )
+
+    # Read with a cap rather than trusting Content-Length, which the client
+    # controls. One byte over is enough to reject.
+    limit = settings.weapon_frame_max_size_bytes
+    data = await file.read(limit + 1)
+    if len(data) > limit:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Frame is too large.",
+        )
+    if not data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Frame is empty."
+        )
+
+    if weapon_detector.weapon_status() is not threat_models.ModelStatus.READY:
+        return {
+            "available": False,
+            "reason": weapon_detector.weapon_status().value,
+            "weapon_confidence": None,
+            "weapon_label": None,
+        }
+
+    try:
+        verdict = await run_in_threadpool(weapon_detector.analyse_frame, data)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Frame could not be decoded.",
+        )
+
+    return {
+        "available": True,
+        "weapon_confidence": round(verdict.weapon_confidence, 4),
+        "weapon_label": verdict.weapon_label,
+        # Supporting context. Deliberately NOT a fusion input — see
+        # `threat_fusion` for why expression cannot move the threat score, and
+        # `tests/test_fusion_architecture.py` for the test that keeps it out.
+        "supporting_context": {
+            "emotion_label": verdict.emotion_label,
+            "emotion_confidence": (
+                round(verdict.emotion_confidence, 4)
+                if verdict.emotion_confidence is not None
+                else None
+            ),
+        },
     }

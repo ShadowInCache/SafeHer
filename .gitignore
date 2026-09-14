@@ -82,3 +82,7 @@ mobile/flutter_*.txt
 
 # Playwright MCP scratch output (browser logs/screenshots from local QA runs)
 .playwright-mcp/
+
+# Firmware credentials. `secrets.h.example` is committed; `secrets.h` is not.
+glasses/**/secrets.h
+glove/**/secrets.h

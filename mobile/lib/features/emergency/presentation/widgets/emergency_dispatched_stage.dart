@@ -28,6 +28,7 @@ class EmergencyDispatchedStage extends StatelessWidget {
     this.dispatchResult,
     this.evidence = EvidenceState.idle,
     this.hasVideo = false,
+    this.hasGlassesAudio = false,
     this.location,
     super.key,
   });
@@ -45,6 +46,12 @@ class EmergencyDispatchedStage extends StatelessWidget {
 
   /// True when the camera opened alongside the microphone.
   final bool hasVideo;
+
+  /// Whether the glasses' microphone is also recording.
+  ///
+  /// A second vantage point, not a replacement: the phone's recording is the
+  /// one that always exists, and this one is on her head rather than in a bag.
+  final bool hasGlassesAudio;
 
   final VoidCallback onMarkSafe;
   final LocationResult? location;
@@ -189,7 +196,11 @@ class EmergencyDispatchedStage extends StatelessWidget {
         const SizedBox(height: AppSpacing.space5),
         const _CallHelplineButton(),
         const SizedBox(height: AppSpacing.space3),
-        _EvidencePanel(state: evidence, hasVideo: hasVideo),
+        _EvidencePanel(
+          state: evidence,
+          hasVideo: hasVideo,
+          hasGlassesAudio: hasGlassesAudio,
+        ),
         const SizedBox(height: AppSpacing.space3),
         _LiveLocationPanel(location: location),
         const SizedBox(height: AppSpacing.space6),
@@ -379,7 +390,11 @@ class _CouldNotReachBanner extends StatelessWidget {
 /// when it is the difference between a report that stands up and one that
 /// does not.
 class _EvidencePanel extends StatelessWidget {
-  const _EvidencePanel({required this.state, this.hasVideo = false});
+  const _EvidencePanel({
+    required this.state,
+    this.hasVideo = false,
+    this.hasGlassesAudio = false,
+  });
 
   final EvidenceState state;
 
@@ -388,20 +403,27 @@ class _EvidencePanel extends StatelessWidget {
   /// pointed at something, so it qualifies the message rather than
   /// replacing it.
   final bool hasVideo;
+  final bool hasGlassesAudio;
+
+  /// Names every source actually capturing, so the sentence describes what
+  /// is happening rather than what the feature is capable of.
+  String get _sources {
+    if (hasVideo && hasGlassesAudio) return 'audio, video and camera audio';
+    if (hasVideo) return 'audio and video';
+    if (hasGlassesAudio) return 'audio from your phone and camera';
+    return 'audio';
+  }
 
   @override
   Widget build(BuildContext context) {
     if (state == EvidenceState.idle) return const SizedBox.shrink();
 
     final (String message, Color color) = switch (state) {
-      EvidenceState.recording => (
-        hasVideo ? 'Recording audio and video evidence' : 'Recording audio evidence',
-        _onField,
-      ),
+      EvidenceState.recording => ('Recording $_sources evidence', _onField),
       EvidenceState.uploading => ('Saving evidence securely…', _onField),
       EvidenceState.saved => (
-        hasVideo
-            ? 'Audio and video saved and encrypted'
+        hasVideo || hasGlassesAudio
+            ? 'Evidence saved and encrypted — $_sources'
             : 'Evidence saved and encrypted',
         _onField,
       ),

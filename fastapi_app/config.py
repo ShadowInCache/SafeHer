@@ -169,6 +169,10 @@ class Settings(BaseSettings):
     # never written in the clear just because nobody configured this.
     evidence_encryption_key: Optional[str] = None
     evidence_max_size_bytes: int = 25 * 1024 * 1024
+    # One camera frame, for the web weapon-detection fallback. Far smaller
+    # than an evidence recording because it is one VGA JPEG, and because
+    # nothing about it is kept: it is scored and dropped.
+    weapon_frame_max_size_bytes: int = 2 * 1024 * 1024
     # Where a share link points. Must be reachable by the recipient,
     # who is not on this machine -- the localhost default only works
     # for local testing and has to be set before any real deployment.

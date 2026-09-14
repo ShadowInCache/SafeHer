@@ -65,3 +65,26 @@ pytest-asyncio==1.4.0
 pytest-subtests==0.14.2
 # Used by the live-server suites (test_api_gateway.py, test_integration.py).
 requests==2.31.0
+
+# --- weapon detection, web fallback only ---
+#
+# On Android the detector runs on the phone and the server never sees a frame.
+# These exist for web clients, which have no on-device runtime.
+#
+# Optional by design. `services/weapon_detector.py` imports both lazily and
+# reports the modality as unavailable if either is missing, so a deploy that
+# omits them starts and serves normally -- web simply gets no weapon signal,
+# reported as absent rather than as a zero score.
+#
+# `-headless` rather than plain opencv: the server has no display, and the GUI
+# build fails to import without X libraries present.
+# Both must be binary-compatible with numpy 2, which is what pip resolves
+# here. onnxruntime 1.17 and opencv 4.8 were built against numpy 1.x and fail
+# at import with "numpy.core.multiarray failed to import" -- a message that
+# names neither package.
+#
+# Do NOT install this file into the same environment as requirements.txt: that
+# one pins plain `opencv-python`, and the two opencv distributions overwrite
+# each other's `cv2` module, leaving an import that half-works.
+onnxruntime==1.29.0
+opencv-python-headless==4.14.0.94

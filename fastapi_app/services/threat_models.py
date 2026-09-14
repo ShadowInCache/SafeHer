@@ -1,13 +1,37 @@
 """The three-model threat pipeline — what each model is, and what it owes.
 
-**Status: no model is trained yet.** This module exists so that the day one
-is, dropping it in is a configuration change rather than an archaeology
-expedition. Nothing here invents a score. A model that is not loaded reports
-itself as unavailable, and its modality is excluded from the fusion rather
-than counted as calm — see `threat_fusion.fuse_available` for why that
-distinction is a safety property and not a nicety.
+**Status: all three signals are trained and wired.** Nothing here invents a
+score. A model that is not loaded reports itself as unavailable, and its
+modality is excluded from the fusion rather than counted as calm — see
+`threat_fusion.fuse_available` for why that distinction is a safety property
+and not a nicety.
 
-The intended pipeline, per the product design and SRS §6:
+Where each one runs, and what it measured:
+
+    glove   MPU6050 accel + gyro ─▶ XGBoost on the ESP32     ─▶ motion_score
+            BLE to the phone, which maps the class onto 0..1 and reports it.
+
+    audio   phone microphone ─▶ platform ASR ─▶ TF-IDF + logistic regression
+            On the phone, in pure Dart. 0.905 accuracy at 0.968 recall on the
+            elevated/normal boundary, over held-out phrasings.
+
+    weapon  glasses camera ─▶ MJPEG over WiFi ─▶ YOLOv8n on the phone
+            mAP@0.5 0.906 on 658 held-out images, LiteRT fp16.
+
+    emotion  trained (65.5%) and deliberately NOT a fusion input. It is
+             supporting evidence only; `test_fusion_architecture.py` enforces
+             that it can never reach the score.
+
+Two things this pipeline still does not do, both recorded so neither gets
+assumed:
+
+* Notifying a police station or help centre is not implemented. See
+  `docs/TRACEABILITY.md` — it needs a real dispatch integration, and a safety
+  app must never imply it has called for help when it has not.
+* On web there is no on-device weapon detector; the plugin is Android-only, so
+  that signal is absent rather than zero on that platform.
+
+The original design, per the product design and SRS §6:
 
     glove  MPU6050 accel + gyro  ──▶ XGBoost      ──▶ motion_score
     glove  pulse sensor          ──▶ (booster)    ──▶ heart_rate_bpm
@@ -23,19 +47,15 @@ The intended pipeline, per the product design and SRS §6:
                                           ▼
                              FR-EMG-02 automatic SOS
 
-**Where inference runs is deliberately not decided here.** SRS §6.3 puts
-YOLOv8 on GPU-enabled Cloud Run and TFLite models in firmware, and an
-ESP32-WROOM-32E cannot run YOLOv8 whatever the ambition. This module takes
-*scores*, not frames, so a model can move between firmware, phone and
-server without the fusion contract changing.
+**Where inference runs was deliberately not decided here, and that paid off.**
+SRS §6.3 put YOLOv8 on GPU-enabled Cloud Run and TFLite models in firmware.
+Neither survived contact: an ESP32 cannot run YOLOv8 whatever the ambition
+(`docs/WEAPON_INFERENCE_PLACEMENT.md` has the arithmetic), and streaming a
+woman's continuous video to a server to be scored is a privacy cost far larger
+than the one it saves. Both models ended up on the phone instead.
 
-**Two things this pipeline does not do yet**, both recorded so neither gets
-assumed:
-
-* No model is trained, so nothing produces these scores in production.
-* Notifying a police station or help centre is not implemented. See
-  `docs/TRACEABILITY.md` — it needs a real dispatch integration, and a
-  safety app must never imply it has called for help when it has not.
+This module takes *scores*, not frames, which is why that move cost nothing
+here. The contract did not change.
 """
 
 from __future__ import annotations

@@ -87,7 +87,7 @@ Phase 5: offline queue (Hive-backed retry queue + ConnectivityNotifier)
 - Subject line: what changed, imperative mood, no trailing period, ~70 chars.
 - Body (optional): why, not what — the diff already shows what.
 - Reference the affected area when it's not obvious from context (`mobile:`,
-  `fastapi_app:`, `ml_training:`).
+  `fastapi_app:`, `glove:`).
 
 ## Pull request process
 
@@ -108,8 +108,11 @@ Phase 5: offline queue (Hive-backed retry queue + ConnectivityNotifier)
 - New mobile screen → new folder under `mobile/lib/features/<name>/` with
   `data/domain/presentation`, route registered in `mobile/lib/core/router/`, mirrored
   test folder under `mobile/test/features/<name>/`.
-- New ML model → new folder under `ml_training/<model_name>/`, corresponding inference
-  function under `cloud_functions/<model_name>/` if it needs to run standalone.
+- New ML model → train it outside this repository and commit only the artifact
+  that ships: `mobile/assets/models/` for on-device, `ml_models/` for
+  server-side. Record its measured result and its dataset in
+  `mobile/assets/models/README.md`. A model with no recorded evaluation does not
+  ship.
 - New firmware → new folder under `hardware/<device_name>/`.
 
 ## Security-sensitive changes

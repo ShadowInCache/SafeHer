@@ -1,7 +1,7 @@
 # Dependencies
 
 `requirements.txt` (root) mixes three concerns in one flat file: the FastAPI backend,
-the Dockerised event processor, and the `ml_training/` pipeline. Grouped below by what
+the Dockerised event processor, and model training. Grouped below by what
 actually needs each one.
 
 ## Backend (`fastapi_app/`) — needed to run the app
@@ -42,7 +42,7 @@ previously documented as belonging to the legacy Flask gateway; when that gatewa
 deleted on 2026-08-15 they were checked and kept, because the event processor imports
 all three. `flask-sock` was removed at the same time — nothing imports it.
 
-## ML training (`ml_training/`) — only needed to retrain models
+## ML training — only needed to retrain models
 
 | Package | Why |
 |---|---|
@@ -61,7 +61,7 @@ installing this group (edit a local copy of `requirements.txt`, or split it into
 report).
 
 **Note:** `opencv-python` showed no direct `import cv2` hit in a repo-wide grep during
-this audit. Before removing it, check `ml_training/weapon_detection/` more closely — it's
+this audit. Before removing it, check the weapon training pipeline more closely — it's
 plausible it's a transitive need of `ultralytics`, but this wasn't independently confirmed.
 
 ## Deployment-only (`deployment/docker/requirements.simple.txt`)
@@ -112,7 +112,7 @@ ESP32's stream, so a fresh environment installed from `requirements.txt` alone
 fails at the first recording with an `ImportError`. Install it explicitly until
 the file is corrected.
 
-This group is entirely separate from `ml_training/` above, which trains the
+This group is entirely separate from the training dependencies above, which train the
 server-side models. Nothing in `fastapi_app/` or `mobile/` imports either.
 
 ## Alternatives considered (for future reference, not acted on)

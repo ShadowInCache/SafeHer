@@ -7,6 +7,88 @@ until the first tagged release.
 
 ## [Unreleased]
 
+### 2026-09-01 — the third signal, and the scorer that decides what a detection means
+
+#### Added
+- **CNN+LSTM audio keyword spotter.** Google Speech Commands v0.02, canonical
+  split. **98.9% test accuracy**, `stop` at 99.3% recall / 99.0% precision,
+  every target word above 93% on both. INT8 at **1.12 MB**, lossless.
+- **`WeaponScorer`** — turns per-frame detections into `weapon_score` using a
+  vote over the last five frames rather than the best single frame. `0.84,
+  0.88, 0.86` is a weapon; `0.42, 0.08, 0.03` is a reflection and scores as
+  one. Frames expire, so a detection from before the camera cut out cannot
+  combine with one after it. 11 tests.
+
+#### Fixed
+- **`_silence_` was a class with zero samples** — declared in the label space
+  and absent from the data, because torchaudio's loader yields only spoken
+  words. It scored 0.0% recall on 0 support. Now built from the corpus's
+  `_background_noise_`, reaching 100% recall. This matters for deployment more
+  than for the metric: a keyword spotter that has only ever heard speech will
+  confidently hear a word in traffic noise.
+- **The silence generator re-decoded minute-long WAVs hundreds of times**,
+  exhausting virtual memory on a 3.7 MiB allocation and starving the GPU to 7%
+  utilisation. Each source is now read once and sliced; GPU went to 97%.
+
+#### Not done, deliberately
+The `onnxruntime` Flutter package was **not** added. It has no web support
+("coming soon") and web is a declared target; it was last published two years
+ago by an unverified uploader. Taking an unmaintained native dependency that
+breaks one of two platforms, for a code path with no camera or microphone feed,
+is not correct wiring. The scoring rules are built and tested; running the
+models stays a seam, as `BleService` and `SafetyForegroundService` already are.
+
+#### Where the three signals stand
+- **glove** — trained, connected, raising alarms
+- **weapon** — trained (mAP@0.5 0.907), scorer built and tested, no frame source
+- **audio** — trained (98.9%), no scorer yet, no microphone feed
+
+Emotion is trained too (65.5%) and stays supporting evidence: its `fear` class
+runs at 47% recall, which is the argument for keeping it out of the score.
+
+758 mobile tests, 468 backend, analyzer clean. APK 76.3 → 77.2 MB.
+
+
+### 2026-09-01 — a facial-expression classifier, and why it stays out of the score
+
+#### Added
+- **Facial expression classifier.** MobileNetV3-Small over FER2013's canonical
+  split, **65.5% test accuracy**, exported to fp16 at 3.09 MB and bundled at
+  `mobile/assets/models/emotion_mobilenetv3_fp16.onnx`. Two-stage by design: a
+  face detector crops, this classifies the crop. Training "fear face" as a YOLO
+  class would have asked one nano backbone to do localisation and fine-grained
+  classification at once, and spent weapon-detection capacity doing it.
+
+#### The finding worth reading
+`fear` — the only class with any safety relevance — is the model's **weakest**:
+47.0% recall, 56.1% precision. It misses more than half of fearful faces and is
+right barely more often than a coin toss when it fires. That is not a defect
+more epochs would fix; it is what facial expression recognition is like, and it
+is the strongest practical argument for the architecture already in place:
+expression goes to `SupportingContext` and cannot reach `ThreatSignals`.
+
+65.5% overall is also not underperformance. Human agreement on FER2013 is about
+65%. Anything much above 75% on this dataset should be read as a leak.
+
+#### Fixed before it shipped
+- **INT8 quantisation destroys this model** — 65.5% to **16.9%**, barely above
+  the 14.3% random baseline; per-channel is no better at 18.7%. MobileNetV3's
+  hard-swish and squeeze-excite blocks over depthwise separable convolutions
+  have per-channel weight ranges that per-tensor scaling collapses.
+  Caught only by validating on the real test set: a random-input check reported
+  **100% agreement** between INT8 and fp32, because noise produces garbage
+  logits that agree by luck. The broken INT8 files were deleted rather than
+  left in `exported/`. fp16 is lossless here and half the size.
+- A first FER2013 mirror (`3una/Fer2013`) turned out to hold **700 images, 100
+  per class** — a toy subset. Training on it would have produced a confident,
+  meaningless number. Switched to `AutumnQiu/fer2013`, which has the real
+  28,709 / 3,589 / 3,589 split.
+
+#### Still true
+Nothing loads either model. No ONNX runtime dependency, no inference code.
+APK 73.7 → 76.3 MB.
+
+
 ### 2026-09-01 — the weapon detector, and the knife gap it opened
 
 #### Added
@@ -299,7 +381,7 @@ generic 500. No secrets are tracked in the repository.
 - `audit_system.py` — dead script auditing the (now-archived) legacy Flask gateway,
   referenced by nothing else in the repo.
 - `hardware/esp32_cam/smart_glasses.ino` — byte-identical duplicate of
-  `hardware/smart_glasses/smart_glasses.ino`.
+  `glasses/firmware/legacy_esp32cam/smart_glasses.ino`.
 - `deployment/docker/dy` — a stray cached HTTP error response, not source code.
 
 ### Fixed / Security
