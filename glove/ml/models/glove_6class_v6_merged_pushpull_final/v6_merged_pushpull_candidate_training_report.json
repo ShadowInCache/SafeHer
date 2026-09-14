@@ -1,0 +1,29 @@
+{
+  "experiment": "v6_merged_pushpull_candidate_final",
+  "description": "6-class candidate: PUSH+PULL merged into SUDDEN_MOVEMENT. Config A hyperparameters (V5 config + min_child_weight=30) for ESP32-C3 flash fit.",
+  "class_order": [
+    "NORMAL",
+    "JERK",
+    "SUDDEN_MOVEMENT",
+    "SHAKING",
+    "TWISTING",
+    "FALL"
+  ],
+  "xgboost_params": {
+    "n_estimators": 600,
+    "max_depth": 6,
+    "min_child_weight": 30,
+    "gamma": 0.0,
+    "learning_rate": 0.05,
+    "subsample": 0.9,
+    "colsample_bytree": 0.9,
+    "random_state": 42,
+    "objective": "multi:softprob",
+    "num_class": 6,
+    "eval_metric": "mlogloss",
+    "n_jobs": 1
+  },
+  "node_count": 42458,
+  "model_sha256": "d003c4feafdfd6588083d0ffb111bacbdfc9c6c45e200350555f69e3f154b822",
+  "training_duration_seconds": 38.84236741065979
+}

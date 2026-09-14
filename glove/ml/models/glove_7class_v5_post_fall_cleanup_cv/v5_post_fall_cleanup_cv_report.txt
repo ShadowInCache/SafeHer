@@ -1,0 +1,59 @@
+SAFEHER V5-CONFIGURATION 5-FOLD CV AFTER DELETING 18 MISLABELED FALL RECORDINGS
+======================================================================
+
+Locked test set: EXCLUDED, NEVER EVALUATED IN THIS EXPERIMENT.
+3 of the 22 locked-test recordings (fall_018/020/025) are pending re-recording.
+Development: 193 recordings / 3300 windows.
+
+XGBoost config (exact V5 script values):
+{
+  "n_estimators": 600,
+  "max_depth": 6,
+  "learning_rate": 0.05,
+  "subsample": 0.9,
+  "colsample_bytree": 0.9,
+  "random_state": 42,
+  "objective": "multi:softprob",
+  "num_class": 7,
+  "eval_metric": "mlogloss",
+  "n_jobs": 1
+}
+
+PER-FOLD RESULTS:
+----------------------------------------------------------------------
+Fold 1: acc=0.7280 macroF1=0.6990 weightedF1=0.7210
+  FALL R=0.4000  FALL->NORMAL=26  NORMAL->FALL=4
+Fold 2: acc=0.7979 macroF1=0.7715 weightedF1=0.7919
+  FALL R=0.4545  FALL->NORMAL=25  NORMAL->FALL=10
+Fold 3: acc=0.7436 macroF1=0.7229 weightedF1=0.7415
+  FALL R=0.6809  FALL->NORMAL=11  NORMAL->FALL=10
+Fold 4: acc=0.7147 macroF1=0.6697 weightedF1=0.7083
+  FALL R=0.5273  FALL->NORMAL=14  NORMAL->FALL=14
+Fold 5: acc=0.7527 macroF1=0.7165 weightedF1=0.7461
+  FALL R=0.6170  FALL->NORMAL=11  NORMAL->FALL=3
+
+MEAN +- STD ACROSS 5 FOLDS:
+----------------------------------------------------------------------
+accuracy: 0.7474 +- 0.0318
+macro_f1: 0.7159 +- 0.0373
+weighted_f1: 0.7418 +- 0.0320
+NORMAL recall: 0.8917 +- 0.0252
+JERK recall: 0.7303 +- 0.1448
+PUSH recall: 0.6395 +- 0.0709
+PULL recall: 0.5505 +- 0.0947
+SHAKING recall: 0.8658 +- 0.0737
+TWISTING recall: 0.7315 +- 0.2175
+FALL recall: 0.5359 +- 0.1148
+
+TOTAL FALL->NORMAL across folds: 87
+TOTAL NORMAL->FALL across folds: 41
+
+COMPARISON (previous 20/20 CV / previous 30/30 CV / this run):
+Accuracy:    0.7407 / 0.7458 / 0.7474
+Macro F1:    0.7138 / 0.7455 / 0.7159
+FALL recall: 0.6857 / 0.7227 / 0.5359
+
+locked_test_set_used: False
+final_candidate_trained: False
+NOTE: 3 locked-test recordings (fall_018/020/025) still need to be re-recorded
+before any final candidate can be evaluated on the complete locked test set.

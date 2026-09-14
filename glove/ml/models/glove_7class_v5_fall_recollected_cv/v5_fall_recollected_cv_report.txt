@@ -1,0 +1,59 @@
+SAFEHER V5-CONFIGURATION 5-FOLD CV AFTER RECOLLECTING FALL DATA
+======================================================================
+
+Locked test set: EXCLUDED, NEVER EVALUATED IN THIS EXPERIMENT.
+2 of the 22 locked-test recordings (fall_018/fall_020) are still missing (numbering gap).
+Development: 208 recordings / 3405 windows.
+
+XGBoost config (exact V5 script values):
+{
+  "n_estimators": 600,
+  "max_depth": 6,
+  "learning_rate": 0.05,
+  "subsample": 0.9,
+  "colsample_bytree": 0.9,
+  "random_state": 42,
+  "objective": "multi:softprob",
+  "num_class": 7,
+  "eval_metric": "mlogloss",
+  "n_jobs": 1
+}
+
+PER-FOLD RESULTS:
+----------------------------------------------------------------------
+Fold 1: acc=0.7464 macroF1=0.7121 weightedF1=0.7431
+  FALL R=0.5600  FALL->NORMAL=22  NORMAL->FALL=10
+Fold 2: acc=0.7871 macroF1=0.7684 weightedF1=0.7823
+  FALL R=0.5362  FALL->NORMAL=23  NORMAL->FALL=13
+Fold 3: acc=0.7756 macroF1=0.7719 weightedF1=0.7757
+  FALL R=0.6957  FALL->NORMAL=15  NORMAL->FALL=19
+Fold 4: acc=0.7776 macroF1=0.7575 weightedF1=0.7705
+  FALL R=0.6316  FALL->NORMAL=17  NORMAL->FALL=6
+Fold 5: acc=0.7012 macroF1=0.6934 weightedF1=0.6996
+  FALL R=0.6267  FALL->NORMAL=20  NORMAL->FALL=29
+
+MEAN +- STD ACROSS 5 FOLDS:
+----------------------------------------------------------------------
+accuracy: 0.7576 +- 0.0350
+macro_f1: 0.7406 +- 0.0356
+weighted_f1: 0.7542 +- 0.0340
+NORMAL recall: 0.8708 +- 0.0586
+JERK recall: 0.7489 +- 0.0886
+PUSH recall: 0.6628 +- 0.0863
+PULL recall: 0.6159 +- 0.1464
+SHAKING recall: 0.8243 +- 0.1681
+TWISTING recall: 0.8127 +- 0.0624
+FALL recall: 0.6100 +- 0.0633
+
+TOTAL FALL->NORMAL across folds: 97
+TOTAL NORMAL->FALL across folds: 77
+
+COMPARISON (20/20 CV / 30/30 CV / post-cleanup-20-fall-only / this run):
+Accuracy:    0.7407 / 0.7458 / 0.7474 / 0.7576
+Macro F1:    0.7138 / 0.7455 / 0.7159 / 0.7406
+FALL recall: 0.6857 / 0.7227 / 0.5359 / 0.6100
+
+locked_test_set_used: False
+final_candidate_trained: False
+NOTE: fall_018/fall_020 still need to be re-recorded (numbering gap) before
+any final candidate can be evaluated on the complete locked test set.

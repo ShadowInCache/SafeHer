@@ -7,9 +7,7 @@ import 'motion_data.dart';
 /// `FALL` is the only class scored at full severity.
 const Map<String, double> kMotionSeverity = {
   'NORMAL': 0.0,
-  'JERK': 0.50,
-  'PUSH': 0.50,
-  'PULL': 0.50,
+  'SUDDEN_MOVEMENT': 0.50,
   'SHAKING': 0.50,
   'TWISTING': 0.50,
   'FALL': 1.00,

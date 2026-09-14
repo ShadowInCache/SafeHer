@@ -1,0 +1,19 @@
+V7 MERGED PUSH/PULL/JERK CANDIDATE vs ORIGINAL V5 (collapsed) - LOCKED TEST (22 recordings)
+======================================================================
+
+Original V5 SHA-256: 69fb6a417af1135bda5f62629691579e2e574bcda1cc3183d9b703ccc83779ea
+Candidate SHA-256:   5f649215fb15143a4941d4c0b7daa5c93146257f4e381bb15e64285cb6025cfb
+Candidate nodes:     37,176
+
+Accuracy:  original=0.8910  candidate=0.8886
+Macro F1:  original=0.8955  candidate=0.9001
+
+SUDDEN_MOVEMENT:
+  precision: original=0.8880 candidate=0.8692
+  recall:    original=0.9823 candidate=1.0000
+  f1:        original=0.9328 candidate=0.9300
+
+NORMAL->SUDDEN_MOVEMENT: original=0 candidate=7
+SUDDEN_MOVEMENT->NORMAL: original=1 candidate=0
+FALL->NORMAL: original=8 candidate=12
+NORMAL->FALL: original=16 candidate=13

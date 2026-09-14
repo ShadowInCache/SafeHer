@@ -1,0 +1,111 @@
+{
+  "locked_test_recordings": [
+    "fall_003",
+    "fall_006",
+    "fall_018",
+    "fall_020",
+    "fall_025",
+    "jerk_002",
+    "jerk_009",
+    "normal_014",
+    "normal_016",
+    "normal_020",
+    "normal_022",
+    "normal_025",
+    "normal_027",
+    "normal_030",
+    "pull_008",
+    "pull_010",
+    "push_003",
+    "push_006",
+    "shaking_009",
+    "shaking_010",
+    "twisting_001",
+    "twisting_003"
+  ],
+  "total_test_windows": 431,
+  "candidate_node_count": 37176,
+  "original_v5_sha256": "69fb6a417af1135bda5f62629691579e2e574bcda1cc3183d9b703ccc83779ea",
+  "candidate_sha256": "5f649215fb15143a4941d4c0b7daa5c93146257f4e381bb15e64285cb6025cfb",
+  "note": "original_v5 evaluated as its native 7-class model, then PUSH/PULL/JERK predictions collapsed to SUDDEN_MOVEMENT for a fair comparison against the 5-class candidate.",
+  "original_v5_collapsed": {
+    "accuracy": 0.8909512761020881,
+    "macro_f1": 0.8954711450415932,
+    "per_class": {
+      "NORMAL": {
+        "precision": 0.9357142857142857,
+        "recall": 0.8851351351351351,
+        "f1": 0.9097222222222222,
+        "support": 148
+      },
+      "SUDDEN_MOVEMENT": {
+        "precision": 0.888,
+        "recall": 0.9823008849557522,
+        "f1": 0.9327731092436975,
+        "support": 113
+      },
+      "SHAKING": {
+        "precision": 0.8571428571428571,
+        "recall": 0.9473684210526315,
+        "f1": 0.9,
+        "support": 38
+      },
+      "TWISTING": {
+        "precision": 0.9722222222222222,
+        "recall": 0.9459459459459459,
+        "f1": 0.958904109589041,
+        "support": 37
+      },
+      "FALL": {
+        "precision": 0.8068181818181818,
+        "recall": 0.7473684210526316,
+        "f1": 0.7759562841530054,
+        "support": 95
+      }
+    },
+    "normal_to_sudden": 0,
+    "sudden_to_normal": 1,
+    "fall_to_normal": 8,
+    "normal_to_fall": 16
+  },
+  "candidate": {
+    "accuracy": 0.888631090487239,
+    "macro_f1": 0.9000765328003443,
+    "per_class": {
+      "NORMAL": {
+        "precision": 0.8951048951048951,
+        "recall": 0.8648648648648649,
+        "f1": 0.8797250859106529,
+        "support": 148
+      },
+      "SUDDEN_MOVEMENT": {
+        "precision": 0.8692307692307693,
+        "recall": 1.0,
+        "f1": 0.9300411522633745,
+        "support": 113
+      },
+      "SHAKING": {
+        "precision": 0.9487179487179487,
+        "recall": 0.9736842105263158,
+        "f1": 0.961038961038961,
+        "support": 38
+      },
+      "TWISTING": {
+        "precision": 0.9705882352941176,
+        "recall": 0.8918918918918919,
+        "f1": 0.9295774647887324,
+        "support": 37
+      },
+      "FALL": {
+        "precision": 0.8470588235294118,
+        "recall": 0.7578947368421053,
+        "f1": 0.8,
+        "support": 95
+      }
+    },
+    "normal_to_sudden": 7,
+    "sudden_to_normal": 0,
+    "fall_to_normal": 12,
+    "normal_to_fall": 13
+  }
+}

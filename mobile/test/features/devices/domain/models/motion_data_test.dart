@@ -2,12 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:safeher_app/features/devices/domain/models/motion_data.dart';
 
 void main() {
-  group('parseMotionPacket - all seven classes', () {
+  group('parseMotionPacket - all five classes', () {
     const cases = {
       'CLASS=NORMAL,CONFIDENCE=0.9726': ('NORMAL', 0.9726),
-      'CLASS=PUSH,CONFIDENCE=0.8124': ('PUSH', 0.8124),
-      'CLASS=PULL,CONFIDENCE=0.7341': ('PULL', 0.7341),
-      'CLASS=JERK,CONFIDENCE=0.6500': ('JERK', 0.6500),
+      'CLASS=SUDDEN_MOVEMENT,CONFIDENCE=0.8124': ('SUDDEN_MOVEMENT', 0.8124),
       'CLASS=SHAKING,CONFIDENCE=0.9000': ('SHAKING', 0.9000),
       'CLASS=TWISTING,CONFIDENCE=0.9400': ('TWISTING', 0.9400),
       'CLASS=FALL,CONFIDENCE=0.9613': ('FALL', 0.9613),

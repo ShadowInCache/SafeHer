@@ -64,19 +64,24 @@ class GloveClassification {
   /// The raw label as the firmware sent it, e.g. `FALL`.
   ///
   /// Kept verbatim rather than parsed into an enum at the boundary: firmware
-  /// that adds an eighth class should show up as an unknown label in the UI,
+  /// that adds a sixth class should show up as an unknown label in the UI,
   /// not crash the parser or get silently mapped to something wrong.
   final String label;
 
   /// 0.0-1.0, as reported by the model.
   final double confidence;
 
-  /// The seven classes the v5 model was trained on, in label order.
+  /// The five classes the v7 model was trained on, in label order. `PUSH`,
+  /// `PULL`, and `JERK` were merged into `SUDDEN_MOVEMENT`: trained
+  /// separately, the model could barely tell them apart from each other or
+  /// from other classes (self-recall as low as ~6-18% on some PUSH/PULL
+  /// recordings), and the app already scored all three identically, so
+  /// nothing downstream lost information by combining them. Merging all
+  /// three (not just PUSH+PULL) raised held-out CV self-recall for this
+  /// class further, to ~87%.
   static const knownLabels = <String>[
     'NORMAL',
-    'JERK',
-    'PUSH',
-    'PULL',
+    'SUDDEN_MOVEMENT',
     'SHAKING',
     'TWISTING',
     'FALL',
@@ -94,16 +99,16 @@ class GloveClassification {
   /// protects nobody.
   ///
   /// So the mapping is deliberately conservative. `FALL` is the only class
-  /// treated as danger. `PUSH` and `PULL` describe force applied by someone
-  /// else and are raised to elevated. `JERK`, `SHAKING` and `TWISTING` all
-  /// occur constantly in ordinary use -- a bag lifted, a hand dried, a jar
+  /// treated as danger. `SUDDEN_MOVEMENT` (a sudden push, pull, or jerk --
+  /// force applied by someone else) is raised to elevated. `SHAKING` and
+  /// `TWISTING` occur constantly in ordinary use -- a hand dried, a jar
   /// opened -- and stay at caution. Nothing here dispatches on its own; the
   /// threshold and the fusion layer decide that, and this only says how
   /// alarming the movement looked.
   ThreatLevel get threatLevel => switch (label) {
     'FALL' => ThreatLevel.danger,
-    'PUSH' || 'PULL' => ThreatLevel.elevated,
-    'JERK' || 'SHAKING' || 'TWISTING' => ThreatLevel.caution,
+    'SUDDEN_MOVEMENT' => ThreatLevel.elevated,
+    'SHAKING' || 'TWISTING' => ThreatLevel.caution,
     _ => ThreatLevel.safe,
   };
 

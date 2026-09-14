@@ -103,11 +103,11 @@ void main() {
         // FALL reading.
         expect(container.read(liveMotionDataProvider(deviceId)), isNull);
 
-        fakeBle.emitCharacteristicValue(deviceId, 'CLASS=PUSH,CONFIDENCE=0.8000');
+        fakeBle.emitCharacteristicValue(deviceId, 'CLASS=SUDDEN_MOVEMENT,CONFIDENCE=0.8000');
         await Future<void>.delayed(const Duration(milliseconds: 100));
         expect(
           container.read(liveMotionDataProvider(deviceId)),
-          const MotionData(classification: 'PUSH', confidence: 0.8000),
+          const MotionData(classification: 'SUDDEN_MOVEMENT', confidence: 0.8000),
         );
       },
       timeout: const Timeout(Duration(seconds: 15)),

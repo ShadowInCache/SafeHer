@@ -14,16 +14,8 @@ void main() {
       expect(score('NORMAL', 1.00), 0.0);
     });
 
-    test('PUSH + 0.8124 -> 40.62', () {
-      expect(score('PUSH', 0.8124), closeTo(40.62, 0.01));
-    });
-
-    test('PULL + 0.7341 -> 36.71', () {
-      expect(score('PULL', 0.7341), closeTo(36.71, 0.01));
-    });
-
-    test('JERK + 0.6500 -> 32.50', () {
-      expect(score('JERK', 0.6500), closeTo(32.50, 0.01));
+    test('SUDDEN_MOVEMENT + 0.8124 -> 40.62', () {
+      expect(score('SUDDEN_MOVEMENT', 0.8124), closeTo(40.62, 0.01));
     });
 
     test('SHAKING + 0.9000 -> 45.00', () {

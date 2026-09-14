@@ -1,0 +1,17 @@
+V5 EXPANDED CANDIDATE vs ORIGINAL V5 - LOCKED TEST EVALUATION (22 recordings)
+======================================================================
+
+Original V5 SHA-256:   69fb6a417af1135bda5f62629691579e2e574bcda1cc3183d9b703ccc83779ea
+Candidate SHA-256:     c175ecb410366748864fb2c651e3ed01715b2863c0d92fbf967cb8eedee7a77d
+
+Metric                   Original V5       Candidate      Delta
+Accuracy                      0.8554          0.8479    -0.0075
+Macro F1                      0.8533          0.8475    -0.0058
+Weighted F1                   0.8550          0.8470    -0.0080
+FALL precision                0.7385          0.7458    +0.0073
+FALL recall                   0.7385          0.6769    -0.0615
+PUSH recall                   0.6842          0.7368    +0.0526
+PULL recall                   0.7838          0.8108    +0.0270
+
+FALL->NORMAL: original=15 candidate=19
+NORMAL->FALL: original=16 candidate=13
