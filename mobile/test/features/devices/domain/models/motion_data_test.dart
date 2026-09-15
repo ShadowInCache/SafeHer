@@ -47,6 +47,38 @@ void main() {
     });
   });
 
+  group('parseMotionPacket - the bare format SafeHer_Glove_V5_OnDevice sends', () {
+    // Before this, only the keyed format parsed, so the Motion Risk card read
+    // `--` against the firmware the glove actually runs.
+    test('parses FALL,0.93', () {
+      expect(parseMotionPacket('FALL,0.93'), const MotionData(classification: 'FALL', confidence: 0.93));
+    });
+
+    test('parses SUDDEN_MOVEMENT with a trailing \\r\\n', () {
+      expect(
+        parseMotionPacket('SUDDEN_MOVEMENT,0.81\r\n'),
+        const MotionData(classification: 'SUDDEN_MOVEMENT', confidence: 0.81),
+      );
+    });
+
+    test('bare and keyed payloads of the same reading are equal', () {
+      expect(parseMotionPacket('FALL,0.9613'), parseMotionPacket('CLASS=FALL,CONFIDENCE=0.9613'));
+    });
+
+    test('a retired 7-class label is rejected in the bare format too', () {
+      expect(parseMotionPacket('PUSH,0.90'), isNull);
+    });
+
+    test('a half-keyed packet is rejected, not guessed', () {
+      expect(parseMotionPacket('FALL,CONFIDENCE=0.9'), isNull);
+    });
+
+    test('bare format with a bad confidence is rejected', () {
+      expect(parseMotionPacket('FALL,abc'), isNull);
+      expect(parseMotionPacket('FALL,1.5'), isNull);
+    });
+  });
+
   group('parseMotionPacket - malformed packets never throw, return null', () {
     test('missing confidence field entirely', () {
       expect(() => parseMotionPacket('CLASS=FALL'), returnsNormally);

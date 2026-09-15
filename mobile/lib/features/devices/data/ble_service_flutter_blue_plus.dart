@@ -146,52 +146,111 @@ class FlutterBluePlusBleService implements BleService {
     String deviceId, {
     required String serviceUuid,
     required String characteristicUuid,
-  }) async* {
-    final device = BluetoothDevice.fromId(deviceId);
-    final services = await device.discoverServices();
-
-    // UUID comparison is case-insensitive and format-sensitive: the platform
-    // may hand back a short 16-bit form or different casing than the constant
-    // written in the firmware, and `==` on the raw strings quietly never
-    // matches.
-    bool sameUuid(String a, String b) =>
-        a.toLowerCase().replaceAll('-', '') == b.toLowerCase().replaceAll('-', '');
-
-    final service = services.where((s) => sameUuid(s.uuid.str, serviceUuid)).firstOrNull;
-    if (service == null) {
-      throw StateError('Device $deviceId does not expose service $serviceUuid');
-    }
-
-    final characteristic = service.characteristics
-        .where((c) => sameUuid(c.uuid.str, characteristicUuid))
-        .firstOrNull;
-    if (characteristic == null) {
-      throw StateError(
-        'Service $serviceUuid has no characteristic $characteristicUuid',
-      );
-    }
-
-    await characteristic.setNotifyValue(true);
-    try {
-      await for (final bytes in characteristic.onValueReceived) {
-        if (bytes.isEmpty) continue;
-        // Malformed bytes are dropped, not thrown: a truncated notification
-        // is a lost reading, and taking the stream down over one would end
-        // the glove's connection to the app for the rest of the session.
+  }) =>
+      _sharedNotifications(deviceId, serviceUuid, characteristicUuid)
+          .where((bytes) => bytes.isNotEmpty)
+          // Malformed bytes are dropped, not thrown: a truncated notification
+          // is a lost reading, and taking the stream down over one would end
+          // the glove's connection to the app for the rest of the session.
+          .expand((bytes) {
         try {
-          yield utf8.decode(bytes);
+          return [utf8.decode(bytes)];
         } on FormatException {
-          continue;
+          return const <String>[];
         }
-      }
-    } finally {
-      // The link may already be gone, which is the usual way this stream
-      // ends; unsubscribing then is expected to fail and is not an error.
+      });
+
+  /// One notification subscription per device + characteristic, shared by
+  /// every listener in the app.
+  ///
+  /// The glove's classification characteristic has two consumers — the alarm
+  /// path (`glove_link_providers.dart`) and the Motion Risk card
+  /// (`motion_data_providers.dart`). When each opened its own subscription,
+  /// whichever cancelled first called `setNotifyValue(false)`, and the
+  /// peripheral's notify flag is per characteristic, not per subscriber — so
+  /// closing the pairing sheet silently stopped the readings feeding auto-SOS.
+  /// Here the flag is switched off only when the last listener leaves.
+  static final _shared = <String, StreamController<List<int>>>{};
+
+  /// UUID comparison is case-insensitive and format-sensitive: the platform
+  /// may hand back a different casing or dash layout than the constant written
+  /// in the firmware, and `==` on the raw strings quietly never matches.
+  static bool _sameUuid(String a, String b) =>
+      a.toLowerCase().replaceAll('-', '') == b.toLowerCase().replaceAll('-', '');
+
+  Stream<List<int>> _sharedNotifications(
+    String deviceId,
+    String serviceUuid,
+    String characteristicUuid,
+  ) {
+    final key = '$deviceId|${serviceUuid.toLowerCase()}|${characteristicUuid.toLowerCase()}';
+    final existing = _shared[key];
+    if (existing != null) return existing.stream;
+
+    late final StreamController<List<int>> controller;
+    StreamSubscription<List<int>>? valueSub;
+    BluetoothCharacteristic? characteristic;
+    var cancelled = false;
+
+    Future<void> start() async {
       try {
-        await characteristic.setNotifyValue(false);
-      } on Exception {
-        // Nothing to unsubscribe from.
+        final services = await BluetoothDevice.fromId(deviceId).discoverServices();
+        final service = services.where((s) => _sameUuid(s.uuid.str, serviceUuid)).firstOrNull;
+        if (service == null) {
+          throw BleFailure('Device $deviceId does not expose service $serviceUuid');
+        }
+        final found = service.characteristics
+            .where((c) => _sameUuid(c.uuid.str, characteristicUuid))
+            .firstOrNull;
+        if (found == null) {
+          throw BleFailure('Service $serviceUuid has no characteristic $characteristicUuid');
+        }
+        await found.setNotifyValue(true);
+        characteristic = found;
+        if (cancelled) {
+          // Everyone left while discovery was in flight.
+          await _notifyOffQuietly(found);
+          return;
+        }
+        // `onValueReceived`, not `lastValueStream`: the latter replays the
+        // cached value on listen, which would present the previous connection's
+        // last reading as a fresh one.
+        valueSub = found.onValueReceived.listen(controller.add, onError: controller.addError);
+      } on FlutterBluePlusException catch (error) {
+        if (!controller.isClosed) {
+          controller.addError(
+            _mapException(error, fallback: "Couldn't subscribe to $characteristicUuid."),
+          );
+        }
+      } on BleFailure catch (error) {
+        if (!controller.isClosed) controller.addError(error);
       }
+    }
+
+    controller = StreamController<List<int>>.broadcast(
+      onListen: () => unawaited(start()),
+      // A broadcast controller calls this only when the LAST listener cancels.
+      onCancel: () async {
+        cancelled = true;
+        if (identical(_shared[key], controller)) _shared.remove(key);
+        await valueSub?.cancel();
+        valueSub = null;
+        final c = characteristic;
+        if (c != null) await _notifyOffQuietly(c);
+        await controller.close();
+      },
+    );
+    _shared[key] = controller;
+    return controller.stream;
+  }
+
+  /// The link may already be gone, which is the usual way a subscription
+  /// ends; unsubscribing then is expected to fail and is not an error.
+  static Future<void> _notifyOffQuietly(BluetoothCharacteristic characteristic) async {
+    try {
+      await characteristic.setNotifyValue(false);
+    } on Exception {
+      // Nothing to unsubscribe from.
     }
   }
 
@@ -229,62 +288,19 @@ class FlutterBluePlusBleService implements BleService {
   /// bad byte belongs to [MotionData]'s parser to reject, not something
   /// that should crash this stream — see `domain/models/motion_data.dart`.
   ///
-  /// Lazy: does nothing until the returned stream gets its first listener,
-  /// and tears the subscription + notification flag down again when the
-  /// last listener cancels, so an unwatched provider does not keep the
-  /// peripheral's notify flag on forever.
+  /// Lazy: does nothing until the returned stream gets its first listener.
+  /// Shares one subscription with [subscribeToCharacteristic] — see
+  /// [_sharedNotifications] — so this and the alarm path can listen to the
+  /// same characteristic without either one switching the other off.
   @override
   Stream<String> characteristicNotifications(
     String deviceId, {
     required String serviceUuid,
     required String characteristicUuid,
-  }) {
-    final device = BluetoothDevice.fromId(deviceId);
-    late final StreamController<String> controller;
-    StreamSubscription<List<int>>? valueSub;
-    BluetoothCharacteristic? characteristic;
-
-    Future<void> start() async {
-      try {
-        final services = await device.discoverServices();
-        final service = services.firstWhere(
-          (candidate) => candidate.uuid.str.toLowerCase() == serviceUuid.toLowerCase(),
-          orElse: () => throw BleFailure('Service $serviceUuid not found on $deviceId.'),
-        );
-        characteristic = service.characteristics.firstWhere(
-          (candidate) => candidate.uuid.str.toLowerCase() == characteristicUuid.toLowerCase(),
-          orElse: () => throw BleFailure('Characteristic $characteristicUuid not found on $deviceId.'),
-        );
-        await characteristic!.setNotifyValue(true);
-        valueSub = characteristic!.lastValueStream.listen(
-          (bytes) {
-            if (bytes.isEmpty) return;
-            controller.add(utf8.decode(bytes, allowMalformed: true));
-          },
-          onError: controller.addError,
-        );
-      } on FlutterBluePlusException catch (error) {
-        controller.addError(_mapException(error, fallback: "Couldn't subscribe to $characteristicUuid."));
-      } on BleFailure catch (error) {
-        controller.addError(error);
-      }
-    }
-
-    controller = StreamController<String>.broadcast(
-      onListen: () => unawaited(start()),
-      onCancel: () async {
-        await valueSub?.cancel();
-        valueSub = null;
-        try {
-          await characteristic?.setNotifyValue(false);
-        } on Exception {
-          // Best-effort - the link may already be gone, which is fine: the
-          // peripheral drops its subscriber list on disconnect anyway.
-        }
-      },
-    );
-    return controller.stream;
-  }
+  }) =>
+      _sharedNotifications(deviceId, serviceUuid, characteristicUuid)
+          .where((bytes) => bytes.isNotEmpty)
+          .map((bytes) => utf8.decode(bytes, allowMalformed: true));
 
   BleDiscoveredDevice _mapScanResult(ScanResult result) {
     // `advName` is what the peripheral put in this advertisement;

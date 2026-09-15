@@ -127,10 +127,18 @@ class GloveClassification {
     final parts = raw.trim().split(',');
     if (parts.length < 2) return null;
 
-    final label = parts[0].trim().toUpperCase();
+    // `SafeHer_Glove_Final` keys its fields (`CLASS=FALL,CONFIDENCE=0.93`).
+    // Read as-is, the label would be `CLASS=FALL` — never `FALL` — and a real
+    // fall could not raise an alarm. Strip the keys so either firmware works.
+    String unkey(String field, String key) {
+      final value = field.trim();
+      return value.toUpperCase().startsWith(key) ? value.substring(key.length).trim() : value;
+    }
+
+    final label = unkey(parts[0], 'CLASS=').toUpperCase();
     if (label.isEmpty) return null;
 
-    final confidence = double.tryParse(parts[1].trim());
+    final confidence = double.tryParse(unkey(parts[1], 'CONFIDENCE='));
     if (confidence == null || confidence.isNaN) return null;
 
     return GloveClassification(

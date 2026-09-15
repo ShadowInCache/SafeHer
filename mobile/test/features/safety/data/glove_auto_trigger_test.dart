@@ -123,14 +123,14 @@ void main() {
     });
 
     test('non-danger classes never alarm, however confident', () async {
-      // SHAKING at 0.99 is a hand being dried. PUSH and PULL are deliberately
-      // elevated rather than danger; raising them is a product decision to be
+      // SHAKING at 0.99 is a hand being dried. SUDDEN_MOVEMENT is deliberately
+      // elevated rather than danger; raising it is a product decision to be
       // made with data, not here.
       ble.notifications[GloveBle.classificationCharacteristicUuid] = [
         'SHAKING,0.99',
         'SHAKING,0.99',
-        'PUSH,0.99',
-        'PULL,0.99',
+        'SUDDEN_MOVEMENT,0.99',
+        'SUDDEN_MOVEMENT,0.99',
       ];
 
       await connectGlove();

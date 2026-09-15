@@ -73,7 +73,7 @@ void main() {
     test('keeps only the most recent reading of each kind', () async {
       ble.notifications[GloveBle.classificationCharacteristicUuid] = [
         'NORMAL,0.10',
-        'JERK,0.40',
+        'SUDDEN_MOVEMENT,0.40',
         'FALL,0.95',
       ];
 
@@ -88,12 +88,12 @@ void main() {
       // Additive firmware change: a glove without the telemetry
       // characteristic must keep working rather than failing to connect.
       ble.missingCharacteristics.add(GloveBle.telemetryCharacteristicUuid);
-      ble.notifications[GloveBle.classificationCharacteristicUuid] = ['PUSH,0.7'];
+      ble.notifications[GloveBle.classificationCharacteristicUuid] = ['SUDDEN_MOVEMENT,0.7'];
 
       await connectGlove();
 
       final state = container.read(gloveLinkProvider);
-      expect(state.classification?.label, 'PUSH');
+      expect(state.classification?.label, 'SUDDEN_MOVEMENT');
       expect(state.isListening, isTrue);
       expect(state.telemetry, isNull);
       expect(state.telemetryUnsupported, isTrue,

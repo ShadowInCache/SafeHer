@@ -16,15 +16,24 @@ void main() {
     });
 
     test('force applied by someone else outranks everyday movement', () {
-      // PUSH and PULL describe another person acting on her. JERK, SHAKING and
-      // TWISTING happen all day — a bag lifted, a hand dried, a jar opened.
-      expect(score('PUSH', 1.0), greaterThan(score('SHAKING', 1.0)));
-      expect(score('PULL', 1.0), greaterThan(score('TWISTING', 1.0)));
+      // SUDDEN_MOVEMENT (a push, pull or jerk) describes another person acting
+      // on her. SHAKING and TWISTING happen all day — a hand dried, a jar opened.
+      expect(score('SUDDEN_MOVEMENT', 1.0), greaterThan(score('SHAKING', 1.0)));
+      expect(score('SUDDEN_MOVEMENT', 1.0), greaterThan(score('TWISTING', 1.0)));
     });
 
     test('a fall outranks force, which outranks everyday movement', () {
-      expect(score('FALL', 1.0), greaterThan(score('PUSH', 1.0)));
-      expect(score('PUSH', 1.0), greaterThan(score('JERK', 1.0)));
+      expect(score('FALL', 1.0), greaterThan(score('SUDDEN_MOVEMENT', 1.0)));
+      expect(score('SUDDEN_MOVEMENT', 1.0), greaterThan(score('SHAKING', 1.0)));
+      expect(score('SHAKING', 1.0), greaterThan(score('NORMAL', 1.0)));
+    });
+
+    test('the retired 7-class labels score zero rather than a guess', () {
+      // A glove still running the old model must not have PUSH quietly treated
+      // as SUDDEN_MOVEMENT; check_glove.py flags that firmware instead.
+      for (final label in ['PUSH', 'PULL', 'JERK']) {
+        expect(score(label, 1.0), 0.0, reason: label);
+      }
     });
 
     test('normal movement contributes nothing', () {
@@ -36,6 +45,23 @@ void main() {
       // meaning it does not have. Zero is the safe reading: it contributes no
       // alarm, and the glove's own direct path is unaffected.
       expect(score('SOMETHING_NEW', 1.0), 0.0);
+    });
+  });
+
+  group('both firmware payloads parse to the same classification', () {
+    // V5_OnDevice sends `FALL,0.93`; SafeHer_Glove_Final keys its fields. Read
+    // literally, the keyed label is `CLASS=FALL` and a real fall scores zero.
+    test('bare and keyed FALL are identical', () {
+      final bare = GloveClassification.tryParse('FALL,0.93')!;
+      final keyed = GloveClassification.tryParse('CLASS=FALL,CONFIDENCE=0.9300')!;
+      expect(keyed.label, 'FALL');
+      expect(keyed.confidence, closeTo(bare.confidence, 1e-9));
+      expect(ThreatPipeline.gloveScore(keyed), closeTo(ThreatPipeline.gloveScore(bare), 1e-9));
+    });
+
+    test('a keyed packet with no value is still rejected', () {
+      expect(GloveClassification.tryParse('CLASS=,CONFIDENCE=0.9'), isNull);
+      expect(GloveClassification.tryParse('CLASS=FALL,CONFIDENCE=abc'), isNull);
     });
   });
 
