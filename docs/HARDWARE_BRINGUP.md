@@ -74,6 +74,15 @@ the phone has been touched.
 
 ## Stage 2 — Glove, firmware only
 
+Flash **`glove/firmware/SafeHer_Glove_V5_OnDevice/`** — the only sketch carrying
+the current 5-class model. Check `DATA_COLLECTION_MODE` is **`0`** first: at `1`
+(used when recording training data) BLE is never started and the glove is
+invisible to the app and to this script. The Serial Monitor tells you which you
+have within a second: raw CSV at 100 Hz means mode `1`.
+
+Then close the SafeHer app — a BLE peripheral holds one connection, and if the
+phone has it this script cannot see the glove.
+
 ```bash
 python scripts/check_glove.py --seconds 60
 ```
@@ -81,8 +90,11 @@ python scripts/check_glove.py --seconds 60
 Wear it, move normally for most of the window, then act out a fall near the end.
 
 It verifies the advertised name, the service and characteristic UUIDs, the
-`<LABEL>,<confidence>` payload format, that labels are among the seven known
-classes, and that confidence stays in range. It prints every classification as
+`<LABEL>,<confidence>` payload format, that labels are among the five known
+classes (`NORMAL`, `SUDDEN_MOVEMENT`, `SHAKING`, `TWISTING`, `FALL`), and that
+confidence stays in range. It also recognises the two ways a board can be
+running the wrong sketch: the `CLASS=…,CONFIDENCE=…` payload of
+`SafeHer_Glove_Final`, and the retired `PUSH`/`PULL`/`JERK` labels. It prints every classification as
 it arrives, so you can see what the glove thinks you are doing.
 
 Then it **replays the app's own alarm rule** — two `FALL` at or above 0.75
@@ -91,7 +103,9 @@ would have fired.
 
 | It says | Meaning |
 |---|---|
-| `FAIL advertising as SafeHer-Glove` | Off, out of range, or a different name. The app filters on this exact string |
+| `FAIL advertising as SafeHer-Glove` | `DATA_COLLECTION_MODE 1`, off, out of range, the phone still holds the connection, or a different name |
+| `warn payload format 'CLASS=..'` | `SafeHer_Glove_Final` is flashed — the app reads it, but it carries the retired model |
+| `warn model version` | The retired 7-class model is flashed |
 | `FAIL exposes the SafeHer service` | Wrong service UUID — firmware and `glove_protocol.dart` disagree |
 | `FAIL notifies classifications` | Connected, but the model is not running or not notifying |
 | `warn telemetry omits unmeasured fields` | Sending `0` for heart rate. Zero is not absence on this wire |

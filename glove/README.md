@@ -12,27 +12,53 @@ reports that none of its own models are ready.
 ```text
 glove/
 ├── firmware/
-│   ├── SafeHer_Glove_Final/                The production sketch, hardware-validated
-│   │   ├── SafeHer_Glove_Final.ino         Sampling, windowing, inference, BLE
-│   │   ├── safeher_glove_final_model.h     Generated — do not hand-edit
-│   │   ├── safeher_glove_final_model.cpp   Generated — do not hand-edit
+│   ├── SafeHer_Glove_V5_OnDevice/          FLASH THIS — 5-class model, app payload
+│   │   ├── SafeHer_Glove_V5_OnDevice.ino   Sampling, windowing, inference, BLE
+│   │   ├── safeher_v5_model.h              Generated — do not hand-edit
+│   │   └── safeher_v5_model.cpp            Generated — do not hand-edit
+│   ├── SafeHer_Glove_Final/                FreeRTOS timing fix, still 7-class
+│   │   ├── SafeHer_Glove_Final.ino
+│   │   ├── safeher_glove_final_model.{h,cpp}  Retired 7-class model
 │   │   ├── FALL_CONFIRMATION_3HIT_EXPERIMENT.md
 │   │   └── HARDWARE_VALIDATION_REPORT.md   Real ESP32-C3 findings (2026-09-10)
 │   ├── SafeHer_Glove_Hardware_Diagnostic/  Sensor + timing only, no model/BLE
-│   ├── SafeHer_Glove_Inference_Diagnostic/ Full pipeline, per-window timing
-│   ├── SafeHer_Glove_Failure_Capture/      Captures the raw stream around a fault
-│   └── SafeHer_Glove_V5_OnDevice/          Earlier on-device sketch (superseded)
+│   ├── SafeHer_Glove_Inference_Diagnostic/ Full pipeline, per-window timing (7-class)
+│   ├── SafeHer_Glove_Failure_Capture/      Captures the raw stream around a fault (7-class)
+│   └── SafeHer_Minimal_Test/               Serial counter only — toolchain check
 ├── ml/
 │   ├── dataset/          Raw labelled recordings, one folder per class
-│   ├── features/         glove_7class_features.csv — 51 features per window
-│   ├── models/           Trained XGBoost model + column/label/split metadata
+│   ├── features/         glove_5class_features_from_raw.csv — 51 features per window
+│   ├── models/           Every experiment; the shipped one is glove_5class_v7_merged_pushpulljerk_final/
 │   └── scripts/          Collect → extract → train → evaluate → convert
 └── requirements.txt      Python deps for the ML pipeline
 ```
 
-The embedded model is still the V5 7-class XGBoost (4,200 trees, 51 features);
-`safeher_glove_final_model.{h,cpp}` is that same model compiled into C arrays,
-verified node-for-node against `safeher_glove_7class_v5_xgboost.json`.
+The embedded model is the **5-class v7 XGBoost** (600 rounds × 5 classes =
+3,000 trees, 37,176 nodes, 51 features). `SafeHer_Glove_V5_OnDevice/safeher_v5_model.cpp`
+is byte-identical to
+`ml/models/glove_5class_v7_merged_pushpulljerk_final/esp32_compact/safeher_v5_model.cpp`
+— checked by hash, so the sketch carries exactly the model that was evaluated.
+
+### Two sketches, two contracts — read before flashing
+
+| | `SafeHer_Glove_V5_OnDevice` | `SafeHer_Glove_Final` |
+|---|---|---|
+| Model | 5-class v7 (current) | 7-class V5 (retired) |
+| Payload | `FALL,0.93` | `CLASS=FALL,CONFIDENCE=0.9300` |
+| Labels the app recognises | all five | `PUSH`/`PULL`/`JERK` are unknown |
+| Sampling | single loop | FreeRTOS tasks, validated not to starve |
+
+**Flash `V5_OnDevice`.** Both app parsers — the alarm path
+(`GloveClassification.tryParse`) and the Motion Risk card (`parseMotionPacket`)
+— accept either payload, so the format no longer decides whether a fall raises
+an alarm. The model does: `Final` still reports the three retired labels, which
+the app scores as zero. Porting `Final`'s FreeRTOS timing fix onto the 5-class
+model is the change that would make it the sketch to flash again.
+
+Before 2026-09-16 each parser accepted only one format, so whichever sketch was
+flashed, one of the two app paths saw nothing — the Motion Risk card read `--`
+against `V5_OnDevice`, and against `Final` the alarm path read the label as
+`CLASS=FALL` and could never fire.
 
 ---
 
@@ -44,14 +70,24 @@ verified node-for-node against `safeher_glove_7class_v5_xgboost.json`.
 | **Sampling** | 100 Hz |
 | **Window** | 100 samples (1 s), 50-sample overlap → a classification every 0.5 s |
 | **Features** | 51 per window — mean, std, min, max, range, RMS across six axes |
-| **Model** | XGBoost, 7 classes, converted to C arrays and compiled into the sketch |
+| **Model** | XGBoost, 5 classes, converted to C arrays and compiled into the sketch |
 | **Output** | BLE notify, `"<LABEL>,<confidence>"` — e.g. `FALL,0.93` |
 
-The seven classes, in the order the firmware indexes them:
+The five classes, in the order the firmware indexes them:
 
 ```
-NORMAL  JERK  PUSH  PULL  SHAKING  TWISTING  FALL
+NORMAL  SUDDEN_MOVEMENT  SHAKING  TWISTING  FALL
 ```
+
+`PUSH`, `PULL` and `JERK` were merged into `SUDDEN_MOVEMENT`. Trained apart, the
+model could barely separate them (self-recall as low as ~6–18% on some
+recordings), and the app already scored all three the same, so nothing
+downstream lost information.
+
+**`SUDDEN_MOVEMENT` is debounced on the glove.** It is notified only after two
+consecutive windows agree (`SUDDEN_MOVEMENT_CONFIRMATION_WINDOWS`), so a single
+one-window blip never reaches the phone. Every other class, `FALL` included, is
+notified immediately.
 
 **That order is part of the wire contract**, not a presentation detail. The
 firmware notifies a label by indexing `CLASS_NAMES` with the model's predicted
@@ -60,9 +96,9 @@ another word.
 
 ### What the app does with it
 
-Only `FALL` maps to danger. `PUSH` and `PULL` are elevated; `JERK`, `SHAKING`
-and `TWISTING` stay at caution, because all three happen constantly in
-ordinary life — a bag lifted, a hand dried, a jar opened.
+Only `FALL` maps to danger. `SUDDEN_MOVEMENT` is elevated; `SHAKING` and
+`TWISTING` stay at caution, because both happen constantly in ordinary life — a
+hand dried, a jar opened.
 
 The app raises an alarm on **two qualifying FALLs within five seconds**, each
 at or above the user's confidence threshold (default 0.75). One `FALL` alone
@@ -93,6 +129,10 @@ Leave it at `1` and the glove will never advertise. The app will scan forever
 with nothing visibly wrong, which is a confusing hour if you don't know to
 check this first.
 
+> Commit `e15b70b` left `SafeHer_Glove_V5_OnDevice.ino` at `1` after a data
+> collection session, and a glove flashed from it gave no readings. It is back
+> at `0`. **Switch it back to `0` after every collection session.**
+
 ---
 
 ## The pipeline
@@ -101,12 +141,17 @@ check this first.
 pip install -r glove/requirements.txt
 pip install pyserial          # needed by the collector, not in requirements.txt
 
-python glove/ml/scripts/collect_glove_dataset.py      # DATA_COLLECTION_MODE 1
-python glove/ml/scripts/extract_glove_features.py
-python glove/ml/scripts/train_glove_7class_xgboost_v5.py
-python glove/ml/scripts/evaluate_v5.py
+python glove/ml/scripts/collect_glove_dataset.py                   # DATA_COLLECTION_MODE 1
+python glove/ml/scripts/extract_glove_features_5class.py
+python glove/ml/scripts/train_and_evaluate_v7_merged_pushpulljerk_final.py
 python glove/ml/scripts/convert_v5_to_embedded_arrays.py
 ```
+
+**The converter still points at the 7-class model.** `convert_v5_to_embedded_arrays.py`
+hardcodes `models/glove_7class/safeher_glove_7class_v5_xgboost.json`. The
+shipped 5-class arrays already exist in
+`ml/models/glove_5class_v7_merged_pushpulljerk_final/esp32_compact/`; to
+regenerate them, point `V5_MODEL_PATH` and `OUTPUT_DIR` at that folder first.
 
 `evaluate_v5.py` is the one that matters. Per-window accuracy is not the
 product; the product is whether a fall raises an alarm and an ordinary
@@ -142,9 +187,30 @@ against the app end to end, is in the runbook rather than here.
 
 | Class | Recordings |
 |---|---|
-| normal | 40 |
-| fall | 25 |
-| jerk, pull, push, shaking, twisting | 15 each |
+| normal | 70 |
+| sudden_movement | 80 (30 push + 30 pull + 20 jerk) |
+| fall | 40 |
+| shaking, twisting | 20 each |
+
+**`sudden_movement/` is a relabelled copy, not new data.** All 80 files have
+sensor columns identical to their twins in `push/`, `pull/` and `jerk/`; only
+the label column differs. The three old folders are kept so the 7-class
+experiments stay reproducible — but they are the same recordings, so never
+train on both at once.
+
+Measured on the locked test set (22 held-out recordings), per window:
+
+| | Retired 7-class, collapsed to 5 | Shipped 5-class v7 |
+|---|---|---|
+| Accuracy | 0.8910 | 0.8886 |
+| Macro F1 | 0.8955 | 0.9001 |
+| `SUDDEN_MOVEMENT` recall | 0.9823 | 1.0000 |
+| `FALL` → `NORMAL` (missed falls) | 8 windows | **12 windows** |
+| `NORMAL` → `FALL` (false falls) | 16 windows | 13 windows |
+
+The merge was not free: missed-fall windows rose from 8 to 12. The on-glove
+debounce and the app's two-FALL vote act on recordings, not windows, so this
+needs checking at recording level before it is quoted as a safety result.
 
 Each file is `timestamp_ms,Ax,Ay,Az,Gx,Gy,Gz,label` at 100 Hz, holding **raw
 int16 sensor counts** — not values converted to g and dps. The firmware feeds
@@ -174,13 +240,15 @@ jitter, and on-device 7-class inference runs at ~31 ms/window (feature ~6.3 ms +
 forest ~24.8 ms) with the sampling task never starved during inference. Full
 evidence and method in
 [`firmware/SafeHer_Glove_Final/HARDWARE_VALIDATION_REPORT.md`](firmware/SafeHer_Glove_Final/HARDWARE_VALIDATION_REPORT.md).
+That measurement was of the **7-class** `SafeHer_Glove_Final` sketch. The
+5-class model is smaller (37,176 nodes vs 62,804), so it should be faster, but
+the sketch now recommended has not itself been timed on hardware.
 
 **Two build settings that report as software faults** (found by actually
 compiling): the inference build overflows the default flash partition — select
 **Huge APP (3MB No OTA)** — and **USB CDC On Boot** must be **Enabled** or
-`Serial` is silent on this board. The production sketch also still ships in
-`DATA_COLLECTION_MODE=1` (raw logger); set it to `0` and reflash before any
-classification/FALL/BLE test.
+`Serial` is silent on this board. Confirm `DATA_COLLECTION_MODE` is `0` before
+any classification/FALL/BLE test.
 
 **Not implemented:** heart rate and battery. The firmware has no pulse sensor
 and no battery monitoring.

@@ -23,7 +23,7 @@
 #define FEATURE_COUNT 51
 #define FALL_CONFIDENCE_THRESHOLD 0.65f
 #define DEBUG_FEATURES 1
-#define DATA_COLLECTION_MODE 1
+#define DATA_COLLECTION_MODE 0  // 1 = raw CSV logger with BLE OFF; never pair in that mode
 
 #define BLE_DEVICE_NAME "SafeHer-Glove"
 #define BLE_SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"

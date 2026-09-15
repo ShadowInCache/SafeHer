@@ -123,10 +123,21 @@ though not drawing, so the countdown is already up when the activity arrives
 rather than racing it.
 
 The BLE wire format is a contract between two codebases that cannot import each
-other, duplicated in `glove/firmware/SafeHer_Glove_Final/` and
+other, duplicated in `glove/firmware/SafeHer_Glove_V5_OnDevice/` and
 `mobile/lib/features/devices/domain/glove_protocol.dart`. The Dart half is
 pinned by tests carrying the firmware's literal payloads; nothing can check the
 firmware half automatically. See [glove/README.md](../glove/README.md).
+
+**Two payloads exist, and the app reads both.** `SafeHer_Glove_Final/` sends
+`CLASS=FALL,CONFIDENCE=0.9300` with the retired 7-class labels; `V5_OnDevice`
+sends `FALL,0.93`. The alarm path and the Motion Risk card each accept either.
+
+**Two consumers, one subscription.** Both paths listen to the same
+characteristic, and the peripheral's notify flag belongs to the characteristic,
+not to a subscriber. `FlutterBluePlusBleService` therefore shares one
+subscription per device and characteristic, and switches notifications off only
+when the last listener leaves. Before that, closing the pairing sheet switched
+off the readings feeding auto-SOS.
 
 ## Threat fusion: three signals, and everything else
 

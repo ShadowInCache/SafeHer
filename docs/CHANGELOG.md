@@ -7,6 +7,43 @@ until the first tagged release.
 
 ## [Unreleased]
 
+### 2026-09-16 — 5-class glove model, and a review of what it left inconsistent
+
+#### Changed
+- **Glove model is now 5-class (PR #32, `e15b70b`).** `PUSH`/`PULL`/`JERK`
+  merged into `SUDDEN_MOVEMENT`; 3,000 trees, 37,176 nodes. Locked-test accuracy
+  0.8886, macro F1 0.9001 — but missed-fall windows rose from 8 to 12.
+  Shipped in `SafeHer_Glove_V5_OnDevice/`, with `SUDDEN_MOVEMENT` debounced over
+  two windows on the glove.
+- App label set, threat mapping and `motion_data.dart` updated to five classes.
+- `scripts/check_glove.py` knows the five labels, reads both firmware payloads,
+  and says which sketch is flashed.
+
+#### Fixed
+- **Glove gave no readings.** `SafeHer_Glove_V5_OnDevice.ino` was committed with
+  `DATA_COLLECTION_MODE 1`, which never starts BLE. Back to `0`.
+- **Each app parser read only one firmware payload.** Against `V5_OnDevice` the
+  Motion Risk card showed `--`; against `SafeHer_Glove_Final` the alarm path read
+  the label as `CLASS=FALL` and could never fire. `GloveClassification.tryParse`
+  and `parseMotionPacket` now both accept `FALL,0.93` and
+  `CLASS=FALL,CONFIDENCE=0.9300`.
+- **Closing the pairing sheet could stop auto-SOS readings.** The alarm path and
+  the Motion Risk card each subscribed to the classification characteristic, and
+  whichever cancelled first switched notifications off for both.
+  `FlutterBluePlusBleService` now shares one subscription and switches off only
+  when the last listener leaves. It also uses `onValueReceived` rather than
+  `lastValueStream`, which replayed the previous connection's reading as new.
+- **Tests that passed without testing anything.** Four test files still used
+  `PUSH`/`PULL`/`JERK`; two failed, and two passed only because unknown labels
+  also never trigger. Rewritten for `SUDDEN_MOVEMENT`, with new tests pinning
+  both payload formats.
+
+#### Still open
+- `SafeHer_Glove_Final`, both diagnostics and Failure Capture still carry the
+  7-class model.
+- The shared subscription is untested against a real radio — the tests use a
+  fake BLE service.
+
 ### 2026-09-11 — glove ML integration merged, and the wearables meet real hardware
 
 #### Added

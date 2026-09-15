@@ -33,14 +33,17 @@ move: `fastapi_app.main:app` is the import path the deployment, Dockerfile,
 Makefile and every test rely on, and relocating it would buy tidiness at the
 cost of the one thing that has to keep working.
 
-> **Several glove sketches, one folder.** `glove/firmware/SafeHer_Glove_Final/`
-> is the production sketch — it runs the model on the ESP32 and talks to the
-> phone over BLE with no server in the path, and it is the one the app pairs
-> with (hardware-validated 2026-09-10). Alongside it: `SafeHer_Glove_V5_OnDevice/`
-> (the earlier on-device sketch it succeeded), two diagnostic sketches
+> **Several glove sketches, one folder.** `glove/firmware/SafeHer_Glove_V5_OnDevice/`
+> is the sketch to flash: it carries the current **5-class** model
+> (`PUSH`/`PULL`/`JERK` merged into `SUDDEN_MOVEMENT`) and the payload
+> (`FALL,0.93`). Check `DATA_COLLECTION_MODE` is `0` — at `1` BLE never starts.
+> `SafeHer_Glove_Final/` holds the FreeRTOS timing fix (hardware-validated
+> 2026-09-10) but still the **retired 7-class model**, with a keyed payload
+> (`CLASS=FALL,CONFIDENCE=0.9300`) the app also reads. Alongside them: two diagnostic sketches
 > (`SafeHer_Glove_Hardware_Diagnostic/`, `SafeHer_Glove_Inference_Diagnostic/`),
-> `SafeHer_Glove_Failure_Capture/`, and `legacy_mqtt/smart_glove.ino` — kept
-> because the MQTT ingestion path still exists in the backend.
+> `SafeHer_Glove_Failure_Capture/`, `SafeHer_Minimal_Test/` (Serial-only
+> toolchain check), and `legacy_mqtt/smart_glove.ino` — kept because the MQTT
+> ingestion path still exists in the backend.
 
 ---
 
@@ -133,14 +136,18 @@ detail in [glove/README.md](../glove/README.md).
 
 ```text
 glove/
-├── firmware/SafeHer_Glove_Final/                CURRENT, hardware-validated
-│   ├── SafeHer_Glove_Final.ino                  100 Hz sampling, 51 features, BLE notify
-│   ├── safeher_glove_final_model.{h,cpp}        Generated from the trained V5 model
+├── firmware/SafeHer_Glove_V5_OnDevice/          FLASH THIS — 5-class model, app payload
+│   ├── SafeHer_Glove_V5_OnDevice.ino            100 Hz sampling, 51 features, BLE notify
+│   └── safeher_v5_model.{h,cpp}                 Generated from the 5-class v7 model
+├── firmware/SafeHer_Glove_Final/                FreeRTOS timing fix, still 7-class
+│   ├── SafeHer_Glove_Final.ino                  Different payload: CLASS=..,CONFIDENCE=..
+│   ├── safeher_glove_final_model.{h,cpp}        Retired 7-class V5 model
 │   └── HARDWARE_VALIDATION_REPORT.md            Real ESP32-C3 findings (2026-09-10)
-├── firmware/SafeHer_Glove_{Hardware,Inference}_Diagnostic/   Bench sketches
-├── firmware/SafeHer_Glove_V5_OnDevice/          Earlier on-device sketch (superseded)
+├── firmware/SafeHer_Glove_{Hardware,Inference}_Diagnostic/   Bench sketches (7-class)
+├── firmware/SafeHer_Glove_Failure_Capture/      Raw capture around a fault (7-class)
+├── firmware/SafeHer_Minimal_Test/               Serial-only toolchain check
 ├── ml/
-│   ├── dataset/     Labelled recordings across 7 classes
+│   ├── dataset/     5 training classes; push/pull/jerk kept for the 7-class history
 │   ├── features/    51 features per 1-second window
 │   ├── models/      XGBoost model + column/label/split metadata
 │   └── scripts/     collect → extract → train → evaluate → convert
@@ -148,10 +155,11 @@ glove/
 ```
 
 The BLE contract is duplicated by necessity in two codebases:
-`SafeHer_Glove_Final.ino` and
+`SafeHer_Glove_V5_OnDevice.ino` and
 `mobile/lib/features/devices/domain/glove_protocol.dart`. The Dart side is
 pinned by tests carrying the firmware's literal payloads; nothing can check the
-firmware side automatically.
+firmware side automatically — `scripts/check_glove.py` against a real board is
+the only check that does.
 
 ---
 
@@ -180,8 +188,8 @@ they succeeded:
 
 ```text
 glove/firmware/
-├── SafeHer_Glove_Final/                 CURRENT — on-device XGBoost over BLE
-├── SafeHer_Glove_V5_OnDevice/           Earlier on-device sketch (superseded)
+├── SafeHer_Glove_V5_OnDevice/           CURRENT — 5-class on-device XGBoost over BLE
+├── SafeHer_Glove_Final/                 Timing fix on the retired 7-class model
 └── legacy_mqtt/smart_glove.ino          Earlier: raw telemetry over MQTT
 ```
 
