@@ -18,10 +18,12 @@
 #define OVERLAP 50
 #define NUM_CLASSES 5
 #define FALL_CLASS_INDEX (NUM_CLASSES - 1)  // FALL is always the last class in CLASS_NAMES
+#define SUDDEN_MOVEMENT_CLASS_INDEX 1        // must match CLASS_NAMES[1] below
+#define SUDDEN_MOVEMENT_CONFIRMATION_WINDOWS 2  // consecutive windows required before it is notified over BLE
 #define FEATURE_COUNT 51
 #define FALL_CONFIDENCE_THRESHOLD 0.65f
 #define DEBUG_FEATURES 1
-#define DATA_COLLECTION_MODE 0
+#define DATA_COLLECTION_MODE 1
 
 #define BLE_DEVICE_NAME "SafeHer-Glove"
 #define BLE_SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
@@ -54,6 +56,7 @@ int windowCount = 0;
 uint32_t predictionCounter = 0;
 unsigned long nextSampleTime = 0;
 int fallConfirmationCount = 0;
+int suddenMovementConfirmationCount = 0;
 
 // TEMP_SENSOR_DIAGNOSTIC
 int16_t diagnosticAxRaw = 0;
@@ -430,6 +433,26 @@ void runInference() {
   }
 
   printPredictionSummary(predictionCounter, predictedClass, confidence, safetyText);
+
+  // SUDDEN_MOVEMENT debounce: a single isolated window is often a brief,
+  // ordinary hand movement rather than force applied by someone else.
+  // Hold the BLE notification back until the same class is seen on
+  // SUDDEN_MOVEMENT_CONFIRMATION_WINDOWS consecutive windows, so the phone
+  // (and the risk score it derives from this stream) does not react to a
+  // one-window blip. Every other class - including FALL - is reported
+  // immediately, unaffected by this.
+  if (predictedClass == SUDDEN_MOVEMENT_CLASS_INDEX) {
+    suddenMovementConfirmationCount++;
+    if (suddenMovementConfirmationCount < SUDDEN_MOVEMENT_CONFIRMATION_WINDOWS) {
+      Serial.printf("SUDDEN_MOVEMENT_DEBOUNCE: window %d/%d, not yet notified\n",
+                    suddenMovementConfirmationCount, SUDDEN_MOVEMENT_CONFIRMATION_WINDOWS);
+      predictionCounter++;
+      return;
+    }
+  } else {
+    suddenMovementConfirmationCount = 0;
+  }
+
   notifyClassification(predictedClass, confidence);
   predictionCounter++;
 }
@@ -474,6 +497,7 @@ void setup() {
   delay(1500);
 
   fallConfirmationCount = 0;
+  suddenMovementConfirmationCount = 0;
 
   Wire.begin();
   Wire.setClock(100000);
