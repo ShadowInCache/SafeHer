@@ -59,12 +59,18 @@ where a frame ends. A part without one is skipped; a part claiming more than
 unbounded read on a corrupt length never recovers and would eventually take the
 phone's memory with it.
 
-**2. The mDNS name `safeher-glasses`.** Release builds of the Android app deny
-cleartext HTTP everywhere except that one hostname — the exception exists so an
-attacker on the same café WiFi cannot strip TLS from traffic carrying a woman's
-location and her evidence. **A raw IP address works in a debug build and fails
-in a release build.** This is the single most common way the glasses appear to
-work in development and are unreachable in production.
+**2. The mDNS name `safeher-glasses`.** The app is built around this name: it
+survives the camera getting a new DHCP lease, and it means nobody has to read an
+IP off a serial monitor to pair.
+
+The release network-security config still permits cleartext for that one
+hostname and nothing else, because an attacker on the same café WiFi must not be
+able to strip TLS from traffic carrying a woman's location and her evidence.
+That policy governs Android's Java/Kotlin HTTP stacks. **It does not govern
+Dart's `HttpClient`, which is native and never consults it — so a raw IP pairs
+in a release build too** (verified 2026-09-16 on a signed release APK). Earlier
+versions of this file claimed the opposite; the IP is a genuine fallback when
+mDNS is blocked.
 
 **3. Omit `battery` rather than sending `0`.** The app treats an implausible
 zero as *absent*, exactly as it does for the glove's heart rate. "No reading"

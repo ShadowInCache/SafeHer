@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:multicast_dns/multicast_dns.dart';
 
 import 'glasses_resolver.dart';
+import 'mdns_socket_io.dart';
 import 'multicast_lock.dart';
 
 /// Native resolver: a real mDNS query, so `safeher-glasses.local` resolves on
@@ -15,8 +16,13 @@ class MdnsGlassesResolver implements GlassesAddressResolver {
   MdnsGlassesResolver({
     MDnsClient Function()? clientFactory,
     MulticastLock lock = const MulticastLock(),
-  })  : _clientFactory = clientFactory ?? MDnsClient.new,
+  })  : _clientFactory = clientFactory ?? _defaultClient,
         _lock = lock;
+
+  /// A client whose queries leave by the WiFi interface rather than by
+  /// whichever network Android has made the default — see [mdnsSocketFactory].
+  static MDnsClient _defaultClient() =>
+      MDnsClient(rawDatagramSocketFactory: mdnsSocketFactory);
 
   final MDnsClient Function() _clientFactory;
 

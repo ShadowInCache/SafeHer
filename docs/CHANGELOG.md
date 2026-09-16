@@ -54,11 +54,53 @@ until the first tagged release.
   no importer — and has been removed. CI never builds an APK, which is why this
   went unnoticed.
 
+- **mDNS queries left over the wrong network.** The multicast lock was necessary
+  but not sufficient: it governs whether *replies* survive the Wi-Fi chip's
+  filter, not which interface the *question* leaves by. `multicast_dns` binds one
+  socket to `anyIPv4`, and with mobile data and WiFi up at once a datagram to
+  `224.0.0.251` has no specific route — so Android sends it over whichever
+  network is default, normally cellular, and the camera never hears it. Unicast
+  HTTP keeps working throughout, because an RFC1918 address does route over
+  WiFi, which is what makes "pairs by IP, fails by name" so misleading.
+  `mdns_socket.dart` now sets `IP_MULTICAST_IF` to the WiFi interface on that one
+  socket. `ConnectivityManager.bindProcessToNetwork` was rejected: it binds every
+  socket in the process, so an SOS raised during a lookup could try to reach the
+  API over a WiFi link with no internet.
+- **The docs were wrong about release builds and raw IPs.** They claimed a raw
+  IP fails in release because of `network_security_config.xml`. That policy
+  governs Android's Java/Kotlin HTTP stacks; Dart's `HttpClient` is native and
+  never consults it. Disproven on a signed release APK that paired with
+  `10.66.78.183`. Corrected in `glasses/README.md`, `glasses/SETUP.md`,
+  `docs/GLASSES_STREAM_PROTOCOL.md`, `docs/HARDWARE_BRINGUP.md` and the firmware
+  comments. The IP is a genuine fallback when multicast is blocked.
+
+#### Added
+- **A live view of the glasses' camera**, on the pairing sheet. Until now nothing
+  in the app ever drew a frame — the detector consumes them and emits a score —
+  so a user could pair a camera and have no way to tell where it pointed, and the
+  system could not be shown working without starting a Safe Journey.
+  Off by default and started by a deliberate tap; nothing is recorded.
+  **It never opens a second connection while detection is running.** The firmware
+  keeps one `WiFiClient videoClient` and stops the old one when a new `/stream`
+  request arrives, so a preview of its own would evict the detector, which would
+  reconnect and evict the preview, thrashing while weapon detection lost frames.
+  `ThreatPipeline` publishes its stream on `activeGlassesVideoStreamProvider` and
+  the preview borrows it, showing the same picture the detector is scoring and
+  saying so on screen.
+
 #### Still open
 - `SafeHer_Glove_Final`, both diagnostics and Failure Capture still carry the
   7-class model.
-- The multicast lock is verified by unit tests and a release build only. Whether
-  it fixes resolution on a phone that filters multicast needs that phone.
+- The multicast lock and the interface pinning are verified by unit tests and a
+  release build. Whether the name now resolves on the phone that failed needs
+  that phone.
+- **The app never displays the camera's video, by design.** `GlassesVideoStream`
+  is constructed only in `threat_pipeline.dart`'s `_startVideo`, which runs when
+  a Safe Journey arms the pipeline; frames go to the weapon detector and become a
+  score. No widget renders them, so pairing a camera shows no picture and outside
+  a journey no frames are pulled at all. If a live preview is wanted — for a demo,
+  or to let a user confirm the camera points where she thinks — it does not exist
+  yet.
 - The shared subscription is untested against a real radio — the tests use a
   fake BLE service.
 

@@ -9,6 +9,7 @@ import '../../../core/audio/microphone_arbiter.dart';
 import '../../../core/audio/threat_phrase_classifier.dart';
 import '../../../core/local/app_preferences.dart';
 import '../../devices/data/glasses_dio.dart';
+import '../../devices/data/glasses_preview_providers.dart';
 import '../../devices/data/glasses_providers.dart';
 import '../../../core/network/network_providers.dart';
 import '../../devices/data/glove_link_providers.dart';
@@ -297,6 +298,11 @@ class ThreatPipeline extends _$ThreatPipeline {
     );
     _weapons = service;
     _video = stream;
+    // Published so the Devices screen's live preview can watch these frames
+    // rather than opening a second connection: the glasses serve one video
+    // client, and a second one would evict the detector. See
+    // `activeGlassesVideoStreamProvider`.
+    ref.read(activeGlassesVideoStreamProvider.notifier).state = stream;
 
     _weaponSub = service.scores.listen((score) {
       aggregator.reportWeapon(score.value, label: score.strongestLabel);
@@ -334,6 +340,9 @@ class ThreatPipeline extends _$ThreatPipeline {
     _audio = null;
     _video = null;
     _weapons = null;
+    // Cleared before anything else can borrow a stopped stream and render its
+    // last frame as though the camera were still watching.
+    ref.read(activeGlassesVideoStreamProvider.notifier).state = null;
 
     ref.read(threatSignalAggregatorProvider).disarm();
     ref.read(microphoneArbiterProvider.notifier).releaseThreatListening();

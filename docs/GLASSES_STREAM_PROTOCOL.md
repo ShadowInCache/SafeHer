@@ -102,7 +102,7 @@ It then emails stills over SMTP. For streaming, **WiFi has to stay up** and an
 HTTP server has to serve `/stream`. Email can stay or go; it is independent of
 this interface.
 
-## mDNS name — required for release builds
+## mDNS name — how the app is meant to find the glasses
 
 The firmware must advertise itself as **`safeher-glasses.local`**:
 
@@ -111,16 +111,21 @@ MDNS.begin("safeher-glasses");
 MDNS.addService("http", "tcp", 80);
 ```
 
-This is not a convenience. Release builds of the Android app block cleartext
-HTTP entirely — `network_security_config.xml` sets
-`cleartextTrafficPermitted="false"` so that an attacker on the same cafe wifi
-cannot strip TLS from traffic carrying a woman's location and evidence.
+`network_security_config.xml` sets `cleartextTrafficPermitted="false"` with one
+exception carved out for exactly this hostname, so that an attacker on the same
+cafe wifi cannot strip TLS from traffic carrying a woman's location and
+evidence. Android's config cannot express an IP range, so permitting "the local
+network" would mean permitting cleartext to anything at all, which is the
+blanket setting that was removed in the first place.
 
-One exception is carved out, for exactly this hostname. Android's config cannot
-express an IP range, so permitting "the local network" would mean permitting
-cleartext to anything at all, which is the blanket setting that was removed in
-the first place. **A raw IP address will therefore work in debug builds and
-fail in release ones.** Serve the mDNS name.
+**That policy does not reach this traffic.** It governs Android's Java/Kotlin
+HTTP stacks; Dart's `HttpClient` is native and never consults it, so a raw IP
+pairs in a release build too — verified 2026-09-16 on a signed release APK that
+paired with `10.66.78.183`. This document previously claimed the opposite.
+
+Serve the mDNS name anyway: it survives a new DHCP lease, and it means nobody
+has to read an address off a serial monitor to pair. The IP is the fallback for
+when multicast is blocked, not a debug-only trick.
 
 TLS on the glasses is not the alternative. An ESP32-S3 cannot terminate it at
 15 fps, and no certificate authority issues for a device on someone's home wifi.
@@ -130,8 +135,8 @@ scored on the device and only a number is sent onward.
 ## Pairing
 
 The app stores one address in preferences (`glassesHost`), as `host` or
-`host:port`, and builds `http://<host>/stream` from it. For release builds that
-value must be `safeher-glasses.local`.
+`host:port`, and builds `http://<host>/stream` from it. Either
+`safeher-glasses.local` or a raw IP works, in debug and release alike.
 
 **There is no default and no guess.** With no address stored, the app reports
 the weapon signal as *absent* rather than as zero. That distinction is

@@ -53,14 +53,22 @@ resolution, and the audio stream's data rate.
 
 | It says | Do this |
 |---|---|
-| `FAIL resolve safeher-glasses.local` | mDNS is blocked — router multicast filtering or AP/client isolation. **Fix before pairing**: the release build cannot use a raw IP. To keep going meanwhile, pass `--host <ip>` |
+| `FAIL resolve safeher-glasses.local` | mDNS is blocked — router multicast filtering or AP/client isolation. Pass `--host <ip>` to keep going; the app pairs by IP too, release builds included |
 
 This script runs on a laptop, whose OS resolves `.local` itself. **The phone is
-a different test.** Android's Wi-Fi chip discards multicast replies unless the
-app holds a `WifiManager.MulticastLock`; SafeHer takes one around every lookup
-(`MulticastLockPlugin.kt`), which is what makes the name resolve there. So this
-script passing does not prove the phone will resolve it, and a phone that
-resolves by raw IP but not by name is that lock failing, not the camera.
+a different test**, and it can fail for two independent reasons:
+
+1. **Receiving.** Android's Wi-Fi chip discards multicast replies unless the app
+   holds a `WifiManager.MulticastLock`. SafeHer takes one around every lookup
+   (`MulticastLockPlugin.kt`).
+2. **Sending.** With mobile data and WiFi up at once, the query to `224.0.0.251`
+   leaves over whichever network Android has made the *default* — usually
+   cellular when the WiFi has no internet — and never reaches the LAN. Unicast
+   to the camera still works, because RFC1918 addresses route over WiFi.
+
+So a phone that pairs by IP but not by name has one of those two, not a broken
+camera. Turning mobile data off is the quickest way to tell them apart:
+if the name then resolves, it was the second.
 | `FAIL identifies as safeher-glasses` | Something else answered on that address. The app will refuse it too |
 | `FAIL Content-Length on every part` | The phone's parser cannot find frame boundaries — firmware bug, see the protocol doc |
 | `warn frame rate 3 fps` | PSRAM is off in Tools, or WiFi is weak/5 GHz |
