@@ -1,6 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Lets the app hold a WifiManager.MulticastLock while it resolves
+         safeher-glasses.local. Android's Wi-Fi chip discards multicast not
+         addressed to the phone unless this lock is held, so without it the
+         mDNS query goes out and the reply is silently dropped — the camera
+         works by raw IP and fails by name. Normal permission: granted at
+         install, never prompts. See network/MulticastLockPlugin.kt. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 

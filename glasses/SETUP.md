@@ -99,6 +99,17 @@ being blocked — some routers filter multicast, and "client isolation" or "AP
 isolation" on a guest network blocks it outright. Fix that before pairing: the
 release Android build **cannot use a raw IP** (see below).
 
+**On a phone, that same symptom has a second cause.** Android's Wi-Fi chip
+discards multicast not addressed to the phone unless the app holds a
+`WifiManager.MulticastLock` — so the query goes out, the camera answers, and
+the reply is dropped before the app sees it. The name fails while the raw IP
+streams video perfectly. SafeHer takes that lock around every lookup
+(`android/.../network/MulticastLockPlugin.kt`, with
+`CHANGE_WIFI_MULTICAST_STATE` in the manifest), so a phone still failing by
+name after a reinstall points at the router, not the app. A computer on the
+same network is not a valid test of this: its OS resolves `.local` itself and
+needs no such lock.
+
 ## 6. Pair with the app
 
 SafeHer → **Devices** → **SafeHer Camera** → enter `safeher-glasses.local` →

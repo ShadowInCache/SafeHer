@@ -133,8 +133,16 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.1
   flutter_test:
     sdk: flutter
-  integration_test:
-    sdk: flutter
+  # integration_test is deliberately NOT declared. It broke every release APK
+  # build: Flutter 3.41.6 writes IntegrationTestPlugin into
+  # GeneratedPluginRegistrant.java on every build, while Gradle keeps
+  # dev-dependency plugins off the release classpath -- so
+  # compileReleaseJavaWithJavac fails on a file the tool generated itself
+  # ("package dev.flutter.plugins.integration_test does not exist").
+  # Nothing here used it: no integration_test/ directory, no test_driver/, and
+  # no Dart file imports package:integration_test. If real integration tests
+  # are ever written, add it back and verify `flutter build apk --release`
+  # still succeeds in the same commit.
   flutter_lints: ^5.0.0
   riverpod_generator: ^2.4.0
   build_runner: ^2.4.9

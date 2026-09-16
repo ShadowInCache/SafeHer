@@ -5,16 +5,24 @@ import 'package:flutter/foundation.dart';
 import 'package:multicast_dns/multicast_dns.dart';
 
 import 'glasses_resolver.dart';
+import 'multicast_lock.dart';
 
 /// Native resolver: a real mDNS query, so `safeher-glasses.local` resolves on
 /// Android where the OS will not do it.
 GlassesAddressResolver createGlassesResolver() => MdnsGlassesResolver();
 
 class MdnsGlassesResolver implements GlassesAddressResolver {
-  MdnsGlassesResolver({MDnsClient Function()? clientFactory})
-      : _clientFactory = clientFactory ?? MDnsClient.new;
+  MdnsGlassesResolver({
+    MDnsClient Function()? clientFactory,
+    MulticastLock lock = const MulticastLock(),
+  })  : _clientFactory = clientFactory ?? MDnsClient.new,
+        _lock = lock;
 
   final MDnsClient Function() _clientFactory;
+
+  /// Held for the duration of the query. Without it Android's Wi-Fi chip
+  /// discards the reply before Dart ever sees it — see [MulticastLock].
+  final MulticastLock _lock;
   String? _cached;
 
   @override
@@ -36,6 +44,12 @@ class MdnsGlassesResolver implements GlassesAddressResolver {
     }
     if (!bare.endsWith('.local')) return bare;
 
+    // The lock wraps the whole query, including client startup: the reply can
+    // arrive within milliseconds of the question going out.
+    return _lock.hold(() => _lookup(bare, timeout));
+  }
+
+  Future<String?> _lookup(String bare, Duration timeout) async {
     final client = _clientFactory();
     try {
       await client.start();

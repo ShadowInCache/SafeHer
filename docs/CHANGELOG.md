@@ -38,9 +38,27 @@ until the first tagged release.
   also never trigger. Rewritten for `SUDDEN_MOVEMENT`, with new tests pinning
   both payload formats.
 
+- **`safeher-glasses.local` would not resolve on Android.** The mDNS resolver
+  never took a `WifiManager.MulticastLock`, and Android's Wi-Fi chip discards
+  multicast not addressed to the phone — so the query went out and the reply
+  was dropped below Dart, while the same phone streamed video from the camera's
+  raw IP. Added `MulticastLockPlugin.kt`, the `CHANGE_WIFI_MULTICAST_STATE`
+  permission, and a `MulticastLock` Dart wrapper that `MdnsGlassesResolver`
+  holds around each query and releases in a `finally`. Every failure to take
+  the lock is non-fatal: the lookup still runs.
+- **Release APK builds were impossible.** Flutter 3.41.6 writes
+  `IntegrationTestPlugin` into `GeneratedPluginRegistrant.java` on every build
+  while Gradle keeps dev-dependency plugins off the release classpath, so
+  `compileReleaseJavaWithJavac` failed on generated code. `integration_test`
+  was declared but entirely unused — no `integration_test/`, no `test_driver/`,
+  no importer — and has been removed. CI never builds an APK, which is why this
+  went unnoticed.
+
 #### Still open
 - `SafeHer_Glove_Final`, both diagnostics and Failure Capture still carry the
   7-class model.
+- The multicast lock is verified by unit tests and a release build only. Whether
+  it fixes resolution on a phone that filters multicast needs that phone.
 - The shared subscription is untested against a real radio — the tests use a
   fake BLE service.
 
