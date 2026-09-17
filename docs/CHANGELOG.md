@@ -7,6 +7,93 @@ until the first tagged release.
 
 ## [Unreleased]
 
+### 2026-09-18 — the background watch covers the journey, not just the glove
+
+#### Fixed
+- **A journey armed with no glove had no foreground service at all.** The
+  service was started by exactly one condition — a connected glove, via
+  `GloveWatchService` watching `gloveLinkProvider.isListening` — and
+  `threat_pipeline.dart` never referenced it. So a Safe Journey running on the
+  glasses with no glove paired lost detection the moment the screen went off:
+  Android freezes the process, so the speech recogniser stopped, the camera
+  policy's 1 s tick stopped, and the once-a-second post to `/alerts/analyze`
+  stopped. `threatPipelineArmed` watches only the journey, so the app went on
+  reporting itself armed throughout. New `SafetyWatch`
+  (`core/background/safety_watch.dart`) owns the service's lifetime as the
+  **union of `WatchReason`s**; the glove and the pipeline each claim and release
+  their own, so neither one ending can switch the other off.
+- **Continuous background listening was never declared to the platform.** The
+  manifest held `FOREGROUND_SERVICE_LOCATION` and
+  `FOREGROUND_SERVICE_CONNECTED_DEVICE` with
+  `foregroundServiceType="connectedDevice|location"` and no microphone type —
+  which is the configuration Android 14+ mutes the microphone for. Added
+  `FOREGROUND_SERVICE_MICROPHONE` and `microphone`.
+- **The Profile screen promised journey listening with no off-screen caveat.**
+  The glove's text has carried "only does this while SafeHer is open" since the
+  service landed; the journey's carried nothing, so a phone that refused the
+  service claimed listening it was not doing. Both halves are now gated on the
+  same `backgroundWatchActive`.
+
+#### Changed
+- `SafetyForegroundService.start` takes the live `reasons` and derives the
+  Android service types and the notification text from them, instead of
+  hardcoding a glove. **The microphone type is added only when
+  `Permission.microphone` is actually granted:** Android 14 refuses a service
+  whose declared types exceed the permissions held, so declaring it after a
+  denial would cost the entire service — and with it the glove's BLE stream —
+  rather than just the microphone.
+- `safetyForegroundServiceProvider` moved to `core/background/safety_watch.dart`,
+  beside the service it creates. The glove is no longer its only consumer, and
+  leaving it in `glove_auto_trigger.dart` made it look as though it were.
+- Notification channel renamed from "Glove monitoring" to "Safety monitoring";
+  the title and body now name whichever reasons are live.
+
+#### Not verified
+- 966 passing tests and a clean analyzer, but **none of this has run on a
+  device.** The claim that matters — that Android 14+ keeps the recogniser alive
+  with the microphone type declared — is exactly the part a test cannot make.
+  The release APK has not been rebuilt.
+- The `location` service type is still declared unconditionally, as it always
+  has been. It should get the same permission gate as the microphone; it is left
+  alone here rather than changed untested alongside a working path.
+
+### 2026-09-17 — the camera opens on a trigger, not for the whole journey
+
+#### Changed
+- **Video is no longer streamed continuously.** The microphone and the glove run
+  for the whole journey because they are cheap; the camera is opened when one of
+  them says something is happening and closed again afterwards. New
+  `CameraActivationPolicy` (`features/safety/domain/`): opens on an utterance
+  scored ≥0.5 or a glove score ≥0.7, holds for 30 s, extends while something is
+  still in view, caps one opening at 3 minutes, and refuses to reopen for 10 s —
+  except for a confident `FALL`, which bypasses that cooldown, because a fall
+  describes something that has already gone wrong.
+- `ThreatPipeline` splits `_startVideo` into preparing the detector when a
+  journey arms (model loaded with the camera shut, so its start-up is not spent
+  in the seconds after a trigger) and opening/closing the stream on the policy's
+  verdict. A 1 s tick enforces the dwell, since the policy is passive.
+- **No firmware change was needed.** `videoStreamTask` only calls
+  `esp_camera_fb_get()` when a client is connected, so closing the stream
+  already stops capture, JPEG encoding and radio transmission on the glasses.
+- New `ThreatPipelineStatus.cameraOpen`, distinct from `glassesStreaming`: the
+  first says the app opened the camera, the second says video is arriving.
+  Glasses that have gone flat leave the first true and the second false, which
+  is what the user needs to be told.
+
+#### Fixed
+- **A closing camera would have reported calm.** `WeaponDetectionService.onStreamLost()`
+  publishes a zero score when its window is reset. With the camera now cycling
+  all journey that would have told the fusion engine "the camera looked and saw
+  nothing" at a 0.40 weight after every opening — capping the fused score and
+  suppressing the alarm the microphone and the glove were raising.
+  `ThreatSignalAggregator.retractWeapon()` withdraws the signal instead, and the
+  pipeline drops any score computed from an empty window.
+
+#### Not verified
+- All of the above is covered by 950 passing tests and a clean analyzer, but
+  **no part of the trigger flow has run against real glasses**. The thresholds
+  and the 30-second dwell are reasoned, not measured.
+
 ### 2026-09-16 — 5-class glove model, and a review of what it left inconsistent
 
 #### Changed

@@ -94,9 +94,17 @@ phone for no detection benefit. Frames arriving while inference is still
 running are dropped rather than queued: on a safety signal, a queue is a
 machine for reporting the past.
 
-Detection runs **only while a Safe Journey is active**. The camera is the most
-intrusive thing the app touches, and it stays tied to a boundary the user sets
-herself.
+Detection runs **only while a Safe Journey is active**, and even then the camera
+is not left streaming. The microphone and the glove run for the whole journey
+because they are cheap; the camera is opened when one of them says something is
+happening — an utterance scored as elevated, or a fall or force applied by
+someone else — and closed again after a thirty-second dwell, extended while
+something is still in view. See `CameraActivationPolicy` for the thresholds.
+
+Two reasons, and the second is the one that matters. It saves the glasses'
+battery, the phone's, and the link. And the camera is the most intrusive thing
+the app touches: tying it to a journey is a boundary the user sets herself, and
+opening it only when something has happened narrows it further.
 
 **Audio** is recorded as evidence during an emergency, capped at two minutes or
 4 MB, and uploaded with the incident alongside the phone's own recording. The

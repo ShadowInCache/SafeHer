@@ -39,8 +39,11 @@ class DetectionSources {
   /// Whether a glove is connected and its classification stream subscribed.
   final bool gloveListening;
 
-  /// Whether the foreground service is genuinely running, so the glove keeps
-  /// detecting with the app off screen.
+  /// Whether the foreground service is genuinely running, so detection
+  /// continues with the app off screen.
+  ///
+  /// Governs both the glove and the journey pipeline, because one service
+  /// keeps the whole process alive and either can be the thing that needs it.
   ///
   /// Defaults to false, and is the platform's answer rather than the app's
   /// intention. Starting the service can fail — notification permission
@@ -106,10 +109,25 @@ class DetectionSources {
       // What runs is speech recognition on the device: the words are scored
       // and dropped, and only a number is sent. Saying so is the difference
       // between a feature she can consent to and one she discovers.
+      //
+      // The off-screen half is gated for the same reason the glove's is. The
+      // journey pipeline used to have no foreground service of its own at all
+      // — only a connected glove ever started one — so a journey armed with
+      // no glove paired stopped listening the moment the screen went off,
+      // while this text promised listening and the pipeline reported itself
+      // armed. Both halves now depend on the platform confirming the service.
+      if (backgroundWatchActive) {
+        return 'While this journey is running, SafeHer listens for words that '
+            'sound like trouble. Speech is recognised on your phone and '
+            'discarded — only a score leaves the device. It keeps listening '
+            'with your screen off, for as long as the SafeHer notification is '
+            'showing, and stops when the journey ends.';
+      }
       return 'While this journey is running, SafeHer listens for words that '
           'sound like trouble. Speech is recognised on your phone and '
-          'discarded — only a score leaves the device. It stops when the '
-          'journey ends.';
+          'discarded — only a score leaves the device. It only does this while '
+          'SafeHer is open — with your screen off, listening stops. It stops '
+          'when the journey ends.';
     }
     if (backend.autoSosActive) {
       return 'SafeHer raises the alarm on its own when the threat score passes '

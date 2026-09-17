@@ -48,7 +48,7 @@ final deviceRegistrationRepositoryProvider =
 typedef DeviceRegistrationRepositoryRef =
     ProviderRef<DeviceRegistrationRepository>;
 String _$gloveConnectionManagerHash() =>
-    r'dd84df5070e35c258944c90b746787c6aaaf9bfe';
+    r'5b9ced57174e05fc69ebab856801ea160adb56da';
 
 /// Keeps retrying [BleService.connect] for the glove at
 /// [connectedGloveIdProvider] whenever [gloveConnectionStateProvider]
@@ -90,7 +90,7 @@ final gloveConnectionManagerProvider =
 
 typedef _$GloveConnectionManager = Notifier<void>;
 String _$blePairingControllerHash() =>
-    r'3eb71e7872f1f662df3ac30bc3bf54a382e1214a';
+    r'd6508e952e31a7d682f49ac0165dfd9a9b4faeef';
 
 /// Drives the BLE pairing sheet: permissions → adapter state → live scan →
 /// connect + service discovery → backend registration, plus bounded

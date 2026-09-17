@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/background/safety_watch.dart';
 import '../../../../core/sensors/shake_detector.dart';
 import '../../data/glove_auto_trigger.dart';
 import '../../data/safety_providers.dart';

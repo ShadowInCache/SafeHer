@@ -75,6 +75,20 @@ class ThreatSignalAggregator {
   void reportWeapon(double value, {String? label}) =>
       _weapon = TimedSignal(value: value, at: _now(), label: label);
 
+  /// Forgets the weapon signal, so the next payload omits it entirely.
+  ///
+  /// Needed because the camera no longer runs for the whole journey: it is
+  /// opened when the microphone or the glove suggests something is happening,
+  /// and closed again afterwards. Closing it must leave the weapon signal
+  /// **absent**, not zero.
+  ///
+  /// The difference decides whether an alarm can be raised at all. A zero says
+  /// the camera looked and saw calm, and the fusion engine weighs it at 0.40 —
+  /// which with a quiet camera caps the achievable score below the threshold
+  /// and silently disables the automatic alarm the audio and the glove should
+  /// have produced between them. Absent is the truth: nothing looked.
+  void retractWeapon() => _weapon = null;
+
   bool get isArmed => _armed;
 
   void arm() {

@@ -68,6 +68,12 @@ class UltralyticsWeaponDetector implements WeaponDetector {
     return _loaded;
   }
 
+  /// Loads the model ahead of the first frame — see [WeaponDetector.prepare].
+  /// Failure is not raised: [ensureLoaded] records it, and `detect` returns
+  /// nothing rather than pretending the frame was examined.
+  @override
+  Future<void> prepare() async => ensureLoaded();
+
   @override
   Future<List<WeaponDetection>> detect(Uint8List jpegFrame) async {
     if (!await ensureLoaded()) return const [];

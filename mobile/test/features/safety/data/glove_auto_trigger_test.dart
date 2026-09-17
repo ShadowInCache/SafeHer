@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:safeher_app/core/background/safety_watch.dart';
 import 'package:safeher_app/core/local/local_key_value_store.dart';
 import 'package:safeher_app/core/local/onboarding_prefs.dart';
 import 'package:safeher_app/features/devices/data/ble_providers.dart';

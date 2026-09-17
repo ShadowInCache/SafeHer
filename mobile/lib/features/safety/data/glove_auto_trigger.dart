@@ -1,7 +1,7 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/background/safety_foreground_service.dart';
+import '../../../core/background/safety_watch.dart';
 import '../../../core/local/app_preferences.dart';
 import '../../devices/data/glove_link_providers.dart';
 import '../../devices/domain/glove_protocol.dart';
@@ -26,11 +26,6 @@ class GloveAlarmRequest {
   @override
   String toString() => 'GloveAlarmRequest(${classification.label}, $raisedAt)';
 }
-
-/// The platform's foreground service, or a no-op where there isn't one.
-@Riverpod(keepAlive: true)
-SafetyForegroundService safetyForegroundService(Ref ref) =>
-    createForegroundService();
 
 /// Votes on the glove's classifications and publishes the decision to alarm.
 ///
@@ -101,56 +96,51 @@ class GloveAutoTrigger extends _$GloveAutoTrigger {
   int get pendingHits => _detector.pendingHits;
 }
 
-/// Runs the foreground service for exactly as long as a glove is being
+/// Claims the background watch for exactly as long as a glove is being
 /// listened to.
 ///
-/// Tied to the glove rather than to a switch of its own, because the service
-/// has one job — keep the BLE stream and the vote alive — and there is nothing
-/// for it to keep alive when no glove is connected. A persistent "SafeHer is
-/// watching your glove" notification sitting over no glove would be the same
-/// lie this file exists to remove, in the opposite direction.
+/// Tied to the glove rather than to a switch of its own, because there is
+/// nothing here for the service to keep alive when no glove is connected. A
+/// persistent "watching your glove" notification sitting over no glove would
+/// be the same lie this file exists to remove, in the opposite direction.
 ///
-/// Whether it is actually running is asked of the platform and published here,
-/// so the UI can distinguish "the glove is connected" from "the glove will
-/// still be watching when the screen goes off". They are not the same promise.
+/// **It no longer starts and stops the service directly.** [SafetyWatch] owns
+/// that, because the glove is not the only thing that needs the process kept
+/// alive — an armed journey needs it for the microphone — and two owners
+/// calling `start` and `stop` on one operating-system object means whichever
+/// finished first switched the other one off.
+///
+/// The published value is whether the background watch is genuinely running,
+/// which is what the Profile screen turns into "you can put your phone in
+/// your pocket". It is asked of the platform rather than remembered, so a
+/// service the system quietly stopped is not reported as active.
 @Riverpod(keepAlive: true)
 class GloveWatchService extends _$GloveWatchService {
-  /// Resolved once and held, rather than read where it is used.
-  ///
-  /// The teardown below has to stop the service, and `ref.read` throws once
-  /// disposal has begun — so the only moment this can be obtained is before
-  /// there is any need for it.
-  late final SafetyForegroundService _service;
+  /// Resolved once and held rather than read where it is used: `ref.read`
+  /// throws once disposal has begun.
+  late final SafetyWatch _watch;
 
   @override
   bool build() {
-    _service = ref.read(safetyForegroundServiceProvider);
+    _watch = ref.read(safetyWatchProvider.notifier);
 
     ref.listen<GloveLinkState>(gloveLinkProvider, (previous, next) {
       if (previous?.isListening == next.isListening) return;
       _sync(next.isListening);
     }, fireImmediately: true);
 
-    ref.onDispose(() {
-      // Nothing is watching once this is gone; leaving the notification up
-      // would outlive the thing it describes.
-      _service.stop();
-    });
-
+    // Deliberately no teardown here. [SafetyWatch] stops the service when it
+    // is disposed, and releasing a reason into a notifier that may already be
+    // disposed would throw on the way out.
     return false;
   }
 
   Future<void> _sync(bool shouldWatch) async {
-    final service = _service;
     if (shouldWatch) {
-      // `start` reports whether the service is genuinely running: a denied
-      // notification permission or an OEM restriction means it is not, and
-      // the app must say the phone-in-pocket case still does not work rather
-      // than assume the request succeeded.
-      state = await service.start();
+      await _watch.claim(WatchReason.glove);
     } else {
-      await service.stop();
-      state = false;
+      await _watch.release(WatchReason.glove);
     }
+    state = ref.read(safetyWatchProvider);
   }
 }

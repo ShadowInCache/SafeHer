@@ -15,6 +15,14 @@ class _FakeDetector implements WeaponDetector {
   int calls = 0;
   bool disposed = false;
 
+  /// Counted so the pipeline can be held to pre-loading the model when a
+  /// journey arms, rather than paying that cost in the seconds after a trigger
+  /// — when the camera has just been opened because something is happening.
+  int prepareCalls = 0;
+
+  @override
+  Future<void> prepare() async => prepareCalls++;
+
   @override
   Future<List<WeaponDetection>> detect(Uint8List jpegFrame) async {
     calls++;

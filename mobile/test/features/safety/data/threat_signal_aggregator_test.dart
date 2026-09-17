@@ -139,6 +139,70 @@ void main() {
     });
   });
 
+  group('a camera that runs only when triggered', () {
+    // The camera is opened when the microphone or the glove suggests something
+    // is happening, and closed again afterwards. Closing it must leave the
+    // weapon signal absent — a zero would claim the camera looked and saw
+    // calm, and at a 0.40 weight that caps the fused score below the alarm
+    // threshold, disabling the very alarm the audio and glove were raising.
+    test('retracting removes the weapon signal from the payload', () {
+      final aggregator = build()
+        ..reportGlove(0.4)
+        ..reportWeapon(0.9, label: 'knife');
+
+      aggregator.retractWeapon();
+
+      final payload = aggregator.buildPayload()!;
+      expect(payload['motion_score'], 0.4);
+      expect(payload.containsKey('vision_score'), isFalse);
+      expect(payload.containsKey('weapon_confidence'), isFalse);
+      expect(payload.containsKey('weapon_label'), isFalse);
+    });
+
+    test('a retracted camera is absent, where a live one reporting 0.0 is not', () {
+      // The distinction the whole design rests on: "nothing looked" versus
+      // "something looked and saw nothing".
+      final looking = (build()..reportWeapon(0.0)).buildPayload()!;
+      expect(looking['vision_score'], 0.0);
+
+      final closed = build()
+        ..reportWeapon(0.0)
+        ..retractWeapon();
+      expect(closed.buildPayload(), isNull);
+    });
+
+    test('retracting leaves the always-on signals untouched', () {
+      // Audio and the glove keep running while the camera cycles; a camera
+      // shutting down must not disturb them.
+      final aggregator = build()
+        ..reportGlove(0.7)
+        ..reportAudio(0.6, label: 'distress')
+        ..reportWeapon(0.8, label: 'knife')
+        ..retractWeapon();
+
+      final payload = aggregator.buildPayload()!;
+      expect(payload['motion_score'], 0.7);
+      expect(payload['audio_score'], 0.6);
+      expect(payload.containsKey('vision_score'), isFalse);
+    });
+
+    test('retracting when nothing was reported is harmless', () {
+      final aggregator = build();
+      expect(aggregator.retractWeapon, returnsNormally);
+      expect(aggregator.buildPayload(), isNull);
+    });
+
+    test('a later trigger reports again after a retraction', () {
+      // Cycles repeat all journey: retract must not wedge the signal off.
+      final aggregator = build()
+        ..reportWeapon(0.9, label: 'knife')
+        ..retractWeapon()
+        ..reportWeapon(0.6, label: 'knife');
+
+      expect(aggregator.buildPayload()!['vision_score'], 0.6);
+    });
+  });
+
   group('arming', () {
     test('does not post while disarmed', () async {
       final aggregator = build()..reportGlove(0.9);

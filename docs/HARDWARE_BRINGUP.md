@@ -157,12 +157,30 @@ Then check each signal reaches the fusion, one at a time:
 
 | Signal | How to trigger it | What should happen |
 |---|---|---|
-| **Weapon** | Hold a knife or replica in the glasses' view for ~5 seconds | Score rises over a 15-frame window, then decays when removed |
+| **Weapon** | **Trigger the camera first** (speak a distress phrase, or act out a fall), then hold a knife or replica in view inside the 30-second dwell | Score rises over a 15-frame window, then decays when removed |
 | **Audio** | Say a held-out distress phrase clearly | Score rises for that utterance |
 | **Glove** | Act out a fall | Countdown opens — the direct BLE path, no server involved |
 
 Watch the backend log for `POST /alerts/analyze` arriving about once a second
 while armed.
+
+**The camera stays shut until something asks for it.** Presenting a knife to a
+camera nobody opened produces nothing, and that is the design rather than a
+fault — so test it in that order:
+
+| Step | Expect |
+|---|---|
+| Start a journey, say nothing | No video. `vision_score` **absent** from the payload — not zero |
+| Speak a held-out distress phrase | Camera opens within a second; `glassesStreaming` true |
+| Present the knife inside 30 s | Weapon score rises |
+| Wait 30 s after the last trigger, nothing in view | Camera closes; `vision_score` disappears from the payload again |
+| Act out a fall immediately after it closes | Camera reopens — a confident `FALL` bypasses the 10-second cooldown |
+
+The payload check is the one worth doing carefully. A closed camera must be
+**absent** from `/alerts/analyze`, never `vision_score: 0.0`: a zero claims the
+camera looked and saw calm, and at a 0.40 weight that caps the fused score below
+the alarm threshold, suppressing the alarm the microphone and the glove were
+raising between them.
 
 **Then the whole thing.** Trigger two signals together and let the countdown
 run to dispatch. Confirm: contacts notified, GPS attached, audio evidence

@@ -11,6 +11,17 @@ import '../domain/weapon_scorer.dart';
 /// worth testing — how often to infer, what to do when a frame is late, when
 /// to forget the window — is all on this side of it.
 abstract class WeaponDetector {
+  /// Loads whatever the detector needs before the first frame arrives.
+  ///
+  /// Optional, and a no-op by default. It exists because the camera is no
+  /// longer open for the whole journey: it is opened when the microphone or
+  /// the glove suggests something is happening. A detector that loads its
+  /// model on the first `detect()` call would therefore spend its start-up
+  /// time in the seconds immediately after a trigger — blind at the one moment
+  /// the camera was opened for. Calling this when the journey arms moves that
+  /// cost to a time when nothing is waiting on it.
+  Future<void> prepare() async {}
+
   Future<List<WeaponDetection>> detect(Uint8List jpegFrame);
   Future<void> dispose();
 }
@@ -24,6 +35,9 @@ abstract class WeaponDetector {
 /// this up as a live detector would report calm from a model that never ran.
 class NoopWeaponDetector implements WeaponDetector {
   const NoopWeaponDetector();
+
+  @override
+  Future<void> prepare() async {}
 
   @override
   Future<List<WeaponDetection>> detect(Uint8List jpegFrame) async => const [];
@@ -81,6 +95,15 @@ class WeaponDetectionService {
   bool _disposed = false;
 
   Stream<WeaponScore> get scores => _scores.stream;
+
+  /// Loads the detector's model before any frame arrives — see
+  /// [WeaponDetector.prepare].
+  ///
+  /// Called when a journey arms, while the camera is still shut. The camera is
+  /// now opened by a trigger rather than left running, so a model that loaded
+  /// on its first frame would spend its start-up time in the seconds right
+  /// after something happened — blind at the moment it was opened for.
+  Future<void> prepareDetector() => _detector.prepare();
 
   /// How many frames arrived while inference was already running.
   ///

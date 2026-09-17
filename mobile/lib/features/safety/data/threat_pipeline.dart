@@ -7,6 +7,8 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/audio/audio_threat_monitor.dart';
 import '../../../core/audio/microphone_arbiter.dart';
 import '../../../core/audio/threat_phrase_classifier.dart';
+import '../../../core/background/safety_foreground_service.dart';
+import '../../../core/background/safety_watch.dart';
 import '../../../core/local/app_preferences.dart';
 import '../../devices/data/glasses_dio.dart';
 import '../../devices/data/glasses_preview_providers.dart';
@@ -19,6 +21,7 @@ import '../../devices/data/ultralytics_weapon_detector.dart';
 import '../../devices/data/weapon_detection_service.dart';
 import '../../../shared/models/threat_level.dart';
 import '../../devices/domain/glove_protocol.dart';
+import '../domain/camera_activation_policy.dart';
 import 'safety_providers.dart';
 import 'threat_signal_aggregator.dart';
 
@@ -97,8 +100,25 @@ class ThreatPipeline extends _$ThreatPipeline {
   StreamSubscription<GlassesStreamStatus>? _videoStatusSub;
   StreamSubscription<Object>? _weaponSub;
 
+  /// Decides when the camera is worth opening. The microphone and the glove
+  /// run for the whole journey because they are cheap; the camera is not, so
+  /// it stays shut until one of them says something is happening.
+  final _policy = CameraActivationPolicy();
+
+  /// The policy is passive — it answers questions rather than firing events —
+  /// so something has to ask whether the dwell has elapsed.
+  Timer? _cameraTimer;
+
+  /// Keeps this process alive while a journey is armed.
+  ///
+  /// Resolved once and held rather than read where it is used: `_stop` runs
+  /// from `ref.onDispose`, and `ref.read` throws once disposal has begun.
+  late final SafetyWatch _watch;
+
   @override
   ThreatPipelineStatus build() {
+    _watch = ref.read(safetyWatchProvider.notifier);
+
     ref.listen<bool>(threatPipelineArmedProvider, (previous, armed) {
       unawaited(armed ? _start() : _stop());
     });
@@ -110,10 +130,15 @@ class ThreatPipeline extends _$ThreatPipeline {
     ref.listen<GloveLinkState>(gloveLinkProvider, (previous, next) {
       final classification = next.classification;
       if (classification == null || !next.isListening) return;
+      final score = gloveScore(classification);
       ref.read(threatSignalAggregatorProvider).reportGlove(
-            gloveScore(classification),
+            score,
             label: classification.label,
           );
+      // A fall, or force applied by someone else, is reason enough to look.
+      if (state.armed && _policy.reportGlove(score, now: DateTime.now())) {
+        _openCameraIfNeeded();
+      }
     });
 
     // Evidence recording outranks threat listening for the microphone. The
@@ -169,6 +194,15 @@ class ThreatPipeline extends _$ThreatPipeline {
     }
     _setStatus(state.copyWith(armed: true));
 
+    // Claimed before anything starts listening, because the thing it protects
+    // is the listening itself. Without a foreground service Android freezes
+    // this process when the screen goes off: the speech recogniser stops, the
+    // camera policy timer stops, and the once-a-second post of the fused score
+    // stops — while `armed` above goes on reporting all three as running. A
+    // journey armed with no glove connected used to have no service at all,
+    // because the only thing that ever started one was a connected glove.
+    await _claimWatch();
+
     // Started together, and each isolated from the other's failure.
     //
     // These used to run in sequence, `await _startAudio` then
@@ -185,10 +219,33 @@ class ThreatPipeline extends _$ThreatPipeline {
     await Future.wait<void>(
       [
         _guarded('audio', () => _startAudio(aggregator)),
-        _guarded('video', () => _startVideo(aggregator)),
+        _guarded('video', () => _prepareCamera(aggregator)),
       ],
       eagerError: false,
     );
+
+    // The camera is opened by a trigger, not by arming — but the dwell has to
+    // be checked by somebody, and the policy does not run itself.
+    _cameraTimer?.cancel();
+    _cameraTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _closeCameraIfDue(),
+    );
+  }
+
+  /// Opens the camera if a trigger has just asked for it and it is not already
+  /// streaming. Failure is isolated: a camera that will not open must not stop
+  /// the microphone and the glove, which are the signals that opened it.
+  void _openCameraIfNeeded() {
+    if (_video != null || _weapons == null) return;
+    unawaited(_guarded('video', _openCamera));
+  }
+
+  void _closeCameraIfDue() {
+    final now = DateTime.now();
+    if (!_policy.shouldClose(now: now)) return;
+    _policy.close(now: now);
+    unawaited(_closeCamera());
   }
 
   /// Runs one signal's start-up so that its failure cannot reach the others.
@@ -240,6 +297,12 @@ class ThreatPipeline extends _$ThreatPipeline {
 
     _audioSub = monitor.readings.listen((reading) {
       aggregator.reportAudio(reading.score, label: reading.label);
+      // A frightened sentence is not an emergency on its own — the fusion
+      // engine decides that — but it is reason enough to open the camera and
+      // find out whether anything is in view.
+      if (_policy.reportAudio(reading.score, now: DateTime.now())) {
+        _openCameraIfNeeded();
+      }
     });
 
     final started = await monitor.start();
@@ -253,8 +316,14 @@ class ThreatPipeline extends _$ThreatPipeline {
     ));
   }
 
-  Future<void> _startVideo(ThreatSignalAggregator aggregator) async {
-    if (_video != null) return;
+  /// Gets the detector ready while the camera stays shut.
+  ///
+  /// The model is loaded here, when a journey arms and nothing is waiting on
+  /// it. Loading it lazily on the first frame would spend that time in the
+  /// seconds immediately after a trigger — blind at the one moment the camera
+  /// was opened for.
+  Future<void> _prepareCamera(ThreatSignalAggregator aggregator) async {
+    if (_weapons != null) return;
 
     // No paired glasses means no stream, and no stream means the weapon signal
     // is absent rather than zero. Absent is the honest answer: a camera that
@@ -289,6 +358,33 @@ class ThreatPipeline extends _$ThreatPipeline {
       inferenceInterval:
           onDevice ? const Duration(milliseconds: 200) : const Duration(seconds: 2),
     );
+    _weapons = service;
+
+    _weaponSub = service.scores.listen((score) {
+      // A score computed from an empty window is not an observation. The
+      // scorer is reset whenever the camera closes, and `onStreamLost` then
+      // publishes its zero — forwarding that would tell the fusion engine the
+      // camera looked and saw calm, at a 0.40 weight, every time the camera
+      // shut. With the camera now cycling all journey, that would quietly cap
+      // the fused score and suppress the alarm the microphone and the glove
+      // were raising between them.
+      if (score.framesConsidered == 0) return;
+      aggregator.reportWeapon(score.value, label: score.strongestLabel);
+    });
+
+    // Loads the model now, with the camera shut and nothing waiting.
+    await service.prepareDetector();
+    _setStatus(state.copyWith(weaponAvailable: true, weaponOnDevice: onDevice));
+  }
+
+  /// Opens the glasses' video stream, because something asked for it.
+  Future<void> _openCamera() async {
+    final service = _weapons;
+    if (_video != null || service == null) return;
+
+    final uri = ref.read(appPreferencesProvider).glassesStreamUri;
+    if (uri == null) return;
+
     // The stream reaches the glasses through the same mDNS-resolving client
     // pairing uses, so `safeher-glasses.local` connects on Android too. The
     // resolver's cache is shared, so reconnects do not re-query.
@@ -296,17 +392,12 @@ class ThreatPipeline extends _$ThreatPipeline {
       streamUri: uri,
       dio: glassesDio(resolver: ref.read(glassesResolverProvider)),
     );
-    _weapons = service;
     _video = stream;
     // Published so the Devices screen's live preview can watch these frames
     // rather than opening a second connection: the glasses serve one video
     // client, and a second one would evict the detector. See
     // `activeGlassesVideoStreamProvider`.
     ref.read(activeGlassesVideoStreamProvider.notifier).state = stream;
-
-    _weaponSub = service.scores.listen((score) {
-      aggregator.reportWeapon(score.value, label: score.strongestLabel);
-    });
 
     _videoStatusSub = stream.statuses.listen((status) {
       if (status != GlassesStreamStatus.streaming) service.onStreamLost();
@@ -317,7 +408,34 @@ class ThreatPipeline extends _$ThreatPipeline {
 
     service.watch(stream.frames);
     await stream.start();
-    _setStatus(state.copyWith(weaponAvailable: true, weaponOnDevice: onDevice));
+    _setStatus(state.copyWith(cameraOpen: true));
+    debugPrint('SafeHer: camera opened by ${_policy.openedBy?.name}');
+  }
+
+  /// Closes the camera and withdraws the weapon signal.
+  ///
+  /// Both halves matter. Stopping the stream frees the glasses' single video
+  /// client and stops paying for a radio nobody is reading; retracting the
+  /// signal is what keeps a shut camera *absent* from the fusion payload
+  /// rather than reported as calm.
+  Future<void> _closeCamera() async {
+    final stream = _video;
+    if (stream == null) return;
+    _video = null;
+
+    await _videoStatusSub?.cancel();
+    _videoStatusSub = null;
+    await stream.stop();
+    ref.read(activeGlassesVideoStreamProvider.notifier).state = null;
+
+    // Frames from this opening must not vote alongside frames from the next
+    // one: a knife glimpsed in each is two glimpses of different moments, not
+    // one persistent threat. The zero this publishes is filtered above.
+    _weapons?.onStreamLost();
+    ref.read(threatSignalAggregatorProvider).retractWeapon();
+
+    _setStatus(state.copyWith(cameraOpen: false, glassesStreaming: false));
+    debugPrint('SafeHer: camera closed');
   }
 
   /// The detector is Android-only. On web the plugin has no implementation, and
@@ -327,6 +445,12 @@ class ThreatPipeline extends _$ThreatPipeline {
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   Future<void> _stop() async {
+    _cameraTimer?.cancel();
+    _cameraTimer = null;
+    // Cleared rather than left to expire: the next journey must not begin
+    // inside this one's dwell or cooldown.
+    _policy.reset();
+
     await _audioSub?.cancel();
     await _weaponSub?.cancel();
     await _videoStatusSub?.cancel();
@@ -346,7 +470,37 @@ class ThreatPipeline extends _$ThreatPipeline {
 
     ref.read(threatSignalAggregatorProvider).disarm();
     ref.read(microphoneArbiterProvider.notifier).releaseThreatListening();
+    await _releaseWatch();
     _setStatus(const ThreatPipelineStatus());
+  }
+
+  /// Claims the background watch, reporting failure rather than throwing.
+  ///
+  /// A phone that refuses the foreground service — notification permission
+  /// denied, or an OEM that kills background work — still detects perfectly
+  /// well while the app is on screen, so this must not take the pipeline down
+  /// with it. What it must not do is leave the app *claiming* the
+  /// phone-in-pocket case works: `SafetyWatch` publishes whether the service
+  /// is genuinely running, and the Profile screen reads that value.
+  Future<void> _claimWatch() async {
+    try {
+      await _watch.claim(WatchReason.journey);
+    } on Object catch (error) {
+      debugPrint('SafeHer: could not claim the background watch: $error');
+    }
+  }
+
+  /// Releases the journey's claim. The glove's claim, if it has one, keeps the
+  /// service alive — ending a journey must not stop the glove being watched.
+  Future<void> _releaseWatch() async {
+    try {
+      await _watch.release(WatchReason.journey);
+    } on Object catch (error) {
+      // Disposal is a routine caller here, and a notifier that has already
+      // been torn down cannot be told anything. `SafetyWatch`'s own teardown
+      // stops the service in that case, so nothing is left running.
+      debugPrint('SafeHer: could not release the background watch: $error');
+    }
   }
 
   /// Single place every status change goes through, so the mirror the UI reads
@@ -364,6 +518,7 @@ class ThreatPipelineStatus {
     this.armed = false,
     this.audioListening = false,
     this.audioUnavailable = false,
+    this.cameraOpen = false,
     this.glassesStreaming = false,
     this.weaponAvailable = false,
     this.weaponOnDevice = false,
@@ -379,6 +534,15 @@ class ThreatPipelineStatus {
   /// simply not listening, because the UI must not offer to turn on something
   /// that cannot be turned on.
   final bool audioUnavailable;
+
+  /// The camera has been asked to stream, because the microphone or the glove
+  /// suggested something is happening.
+  ///
+  /// Distinct from [glassesStreaming], and the difference is the honest part:
+  /// this says the app opened the camera, that one says video is actually
+  /// arriving. A pair of glasses that has gone flat leaves this true and that
+  /// false, which is precisely what the user needs to be told.
+  final bool cameraOpen;
 
   /// Video is genuinely arriving — the platform's answer, not this app's
   /// intention. A dead stream must never read as "watching and seeing nothing".
@@ -404,6 +568,7 @@ class ThreatPipelineStatus {
     bool? armed,
     bool? audioListening,
     bool? audioUnavailable,
+    bool? cameraOpen,
     bool? glassesStreaming,
     bool? weaponAvailable,
     bool? weaponOnDevice,
@@ -413,6 +578,7 @@ class ThreatPipelineStatus {
         armed: armed ?? this.armed,
         audioListening: audioListening ?? this.audioListening,
         audioUnavailable: audioUnavailable ?? this.audioUnavailable,
+        cameraOpen: cameraOpen ?? this.cameraOpen,
         glassesStreaming: glassesStreaming ?? this.glassesStreaming,
         weaponAvailable: weaponAvailable ?? this.weaponAvailable,
         weaponOnDevice: weaponOnDevice ?? this.weaponOnDevice,

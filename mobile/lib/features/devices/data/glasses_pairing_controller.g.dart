@@ -6,7 +6,7 @@ part of 'glasses_pairing_controller.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$glassesPairingHash() => r'cbf8e430954d21e04b9036f424b75cbe789849a4';
+String _$glassesPairingHash() => r'85a9a03a899adf4784c1a17d21ca87b747ac56eb';
 
 /// Pairs the glasses by address, and proves the address before saving it.
 ///

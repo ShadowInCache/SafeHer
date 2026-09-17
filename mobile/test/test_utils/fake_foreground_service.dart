@@ -19,12 +19,24 @@ class FakeForegroundService implements SafetyForegroundService {
   int stopCalls = 0;
   int bringToForegroundCalls = 0;
 
+  /// The reasons passed to the most recent [start].
+  ///
+  /// Recorded because the reasons decide the Android service types, and a
+  /// journey whose microphone type was never declared is the defect this fake
+  /// is used to pin.
+  Set<WatchReason> lastReasons = const {};
+
+  /// Every set of reasons [start] has been called with, in order.
+  final List<Set<WatchReason>> startedWith = [];
+
   @override
   Future<bool> isRunning() async => running;
 
   @override
-  Future<bool> start() async {
+  Future<bool> start({required Set<WatchReason> reasons}) async {
     startCalls++;
+    lastReasons = Set.of(reasons);
+    startedWith.add(Set.of(reasons));
     running = startSucceeds;
     return running;
   }

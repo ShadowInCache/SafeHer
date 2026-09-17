@@ -109,6 +109,28 @@ void main() {
       expect(yielded.audioListening, isFalse);
     });
 
+    test('the camera is shut when a journey arms', () {
+      // It is opened by a trigger, not by arming: the microphone and the glove
+      // run all journey because they are cheap, and they say when the camera
+      // is worth the battery.
+      const armed = ThreatPipelineStatus(armed: true, weaponAvailable: true);
+      expect(armed.cameraOpen, isFalse);
+    });
+
+    test('asking the camera to open is not the same as video arriving', () {
+      // Glasses that have gone flat leave the first true and the second false,
+      // and the user needs to be told that rather than shown "watching".
+      const asked = ThreatPipelineStatus(armed: true, cameraOpen: true);
+      expect(asked.cameraOpen, isTrue);
+      expect(asked.glassesStreaming, isFalse);
+    });
+
+    test('copyWith carries the camera flag', () {
+      const before = ThreatPipelineStatus(armed: true, cameraOpen: true);
+      expect(before.copyWith(glassesStreaming: true).cameraOpen, isTrue);
+      expect(before.copyWith(cameraOpen: false).cameraOpen, isFalse);
+    });
+
     test('copyWith leaves untouched fields alone', () {
       const before = ThreatPipelineStatus(
         armed: true,
