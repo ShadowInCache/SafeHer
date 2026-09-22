@@ -221,18 +221,43 @@ class FakeBleService implements BleService {
   /// path where a subscription throws rather than silently doing nothing.
   final Set<String> missingCharacteristics = {};
 
+  /// When set, the *next* [subscribeToCharacteristic] call returns a stream
+  /// whose cancellation never resolves -- reproducing, on the fake, the real
+  /// hang this regression guards against: on real hardware,
+  /// `FlutterBluePlusBleService`'s `subscribeToCharacteristic` cleanup awaits
+  /// a GATT descriptor write the already-disconnected peripheral never
+  /// answers, so `StreamSubscription.cancel()` never completed. GloveLink
+  /// used to `await` that cancellation before starting a fresh subscription
+  /// on reconnect, permanently blocking every future resubscription. Cleared
+  /// after one use.
+  bool hangNextCancellation = false;
+
   @override
   Stream<String> subscribeToCharacteristic(
     String deviceId, {
     required String serviceUuid,
     required String characteristicUuid,
-  }) async* {
+  }) {
     if (missingCharacteristics.contains(characteristicUuid)) {
-      throw StateError('Service $serviceUuid has no characteristic $characteristicUuid');
+      return Stream<String>.error(
+        StateError('Service $serviceUuid has no characteristic $characteristicUuid'),
+      );
     }
-    for (final message in notifications[characteristicUuid] ?? const <String>[]) {
-      yield message;
-    }
+    final hang = hangNextCancellation;
+    hangNextCancellation = false;
+    late StreamController<String> controller;
+    controller = StreamController<String>(
+      onListen: () {
+        for (final message in notifications[characteristicUuid] ?? const <String>[]) {
+          controller.add(message);
+        }
+      },
+      // A real subscription stays open waiting for more notifications
+      // rather than completing on its own -- matches that, and only ends
+      // via cancellation.
+      onCancel: hang ? () => Completer<void>().future : null,
+    );
+    return controller.stream;
   }
 
   @override

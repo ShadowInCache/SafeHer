@@ -6,8 +6,10 @@ import 'package:golden_toolkit/golden_toolkit.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
 import 'package:safeher_app/features/devices/data/ble_providers.dart';
 import 'package:safeher_app/features/devices/data/device_providers.dart';
+import 'package:safeher_app/features/devices/data/glove_link_providers.dart';
 import 'package:safeher_app/features/devices/domain/device_registration_repository.dart';
 import 'package:safeher_app/features/devices/domain/device_repository.dart';
+import 'package:safeher_app/features/devices/domain/glove_protocol.dart';
 import 'package:safeher_app/features/devices/domain/models/ble_models.dart';
 import 'package:safeher_app/features/devices/domain/models/device_detail.dart';
 import 'package:safeher_app/features/devices/domain/models/registered_device.dart';
@@ -178,21 +180,23 @@ void main() {
     });
 
     testWidgets(
-      'expanding the glove card shows Motion Risk Score alongside Accel/Gyro/Heart Rate',
+      'expanding the glove card shows live confidence alongside Accel/Gyro/Heart Rate',
       (tester) async {
         await tester.pumpWidget(_harness());
         await tester.pump(const Duration(milliseconds: 100));
 
         await tester.tap(find.text('Safety Glove'));
         await tester.pump(const Duration(milliseconds: 300));
-        // 3D visual shows a shimmer for 400ms before swapping to the viewer.
         await tester.pump(const Duration(milliseconds: 500));
 
-        // Motion Risk Score is glove-only, shown in addition to the
-        // sensor readouts — the merged design keeps Accel/Gyro/Heart Rate
-        // visible for every device type, glove included.
-        expect(find.text('MOTION RISK SCORE'), findsOneWidget);
-        expect(find.text('--'), findsOneWidget);
+        // The glove shows live classification confidence and the derived
+        // risk score in place of the 3D visual (which has no meaningful
+        // "live" state to show) — shown in addition to the sensor readouts,
+        // same as every other device type.
+        expect(find.text('CONFIDENCE'), findsOneWidget);
+        expect(find.text('RISK SCORE'), findsOneWidget);
+        // One placeholder for confidence, one for risk score.
+        expect(find.text('--'), findsNWidgets(2));
         expect(find.text('Accel'), findsOneWidget);
         expect(find.text('Gyro'), findsOneWidget);
         expect(find.text('Heart'), findsOneWidget);
@@ -202,38 +206,47 @@ void main() {
       },
     );
 
-    testWidgets('Motion Risk Score updates live as the glove sends BLE motion data', (tester) async {
+    testWidgets('live confidence updates as the glove sends BLE motion data', (tester) async {
       const deviceId = 'AA:BB:CC:DD:EE:FF';
-      final ble = FakeBleService();
-      // A live score requires an actual BLE link, not just the bridge
-      // provider pointing at an id — mirrors what BlePairingController
-      // does on a real connect.
-      await ble.connect(deviceId);
-
-      await tester.pumpWidget(
-        _harness(ble: ble, extraOverrides: [connectedGloveIdProvider.overrideWith((ref) => deviceId)]),
+      const glove = BleDiscoveredDevice(
+        id: deviceId,
+        advertisedName: 'SafeHer-Glove',
+        rssi: -50,
+        isConnectable: true,
       );
+      final ble = FakeBleService();
+      addTearDown(ble.dispose);
+
+      // Motion Risk Score reads GloveLink's state (see
+      // motion_data_providers.dart's doc comment on why it no longer opens
+      // its own BLE subscription), which subscribes on
+      // BlePairingController's connected stage — a real connect through the
+      // controller is required, not just connectedGloveIdProvider pointing
+      // at an id.
+      ble.notifications[GloveBle.classificationCharacteristicUuid] = ['FALL,0.9613'];
+
+      await tester.pumpWidget(_harness(ble: ble));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final container = ProviderScope.containerOf(tester.element(find.byType(MaterialApp)));
+      // Warm the link provider so its listener is attached before the
+      // pairing state moves — exactly as the app does by watching it on
+      // screen, and exactly why this is needed: blePairingControllerProvider
+      // is autoDispose, and nothing else in this test keeps it alive.
+      container.read(gloveLinkProvider);
+      container.read(blePairingControllerProvider.notifier).selectDeviceType(DeviceType.glove);
+      await container.read(blePairingControllerProvider.notifier).connect(glove);
+      await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 100));
 
       await tester.tap(find.text('Safety Glove'));
       await tester.pump(const Duration(milliseconds: 300));
-      // The 3D visual now renders for every device type, glove included —
-      // its loading shimmer resolves after 400ms; wait it out so no timer
-      // is left pending when the test tears down.
       await tester.pump(const Duration(milliseconds: 500));
-      expect(find.text('--'), findsOneWidget);
       expect(find.text('CONNECTED'), findsOneWidget);
-
-      ble.emitCharacteristicValue(deviceId, 'CLASS=NORMAL,CONFIDENCE=0.9990');
-      await tester.pump();
-      await tester.pump();
-      expect(find.text('0.0'), findsOneWidget);
-      expect(find.text('NORMAL'), findsOneWidget);
-
-      ble.emitCharacteristicValue(deviceId, 'CLASS=FALL,CONFIDENCE=0.9613');
-      await tester.pump();
-      await tester.pump();
-      expect(find.text('96.1'), findsOneWidget);
+      // 0.9613 confidence, shown rounded to the nearest whole percent — and
+      // FALL's severity is 1.0, so the risk score (severity * confidence *
+      // 100) numerically coincides with confidence here, giving two '96's.
+      expect(find.text('96'), findsNWidgets(2));
       expect(find.text('FALL'), findsOneWidget);
 
       // Power loss: the glove goes offline without ever sending a final
@@ -242,22 +255,25 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.text('OFFLINE'), findsOneWidget);
-      expect(find.text('--'), findsOneWidget);
-      expect(find.text('96.1'), findsNothing);
+      expect(find.text('--'), findsNWidgets(2));
+      expect(find.text('96'), findsNothing);
       expect(find.text('FALL'), findsNothing);
 
       // Power restored, same physical glove reconnects: a fresh packet
-      // updates the score again, with no duplicate device/card involved.
-      await ble.connect(deviceId);
-      await tester.pump();
-      await tester.pump();
-      expect(find.text('CONNECTED'), findsOneWidget);
-      expect(find.text('--'), findsOneWidget);
+      // updates the display again, and the old FALL reading is not replayed.
+      ble.notifications[GloveBle.classificationCharacteristicUuid] = ['SUDDEN_MOVEMENT,0.8000'];
+      await tester.runAsync(() async {
+        await container.read(blePairingControllerProvider.notifier).connect(glove);
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
 
-      ble.emitCharacteristicValue(deviceId, 'CLASS=SUDDEN_MOVEMENT,CONFIDENCE=0.8000');
-      await tester.pump();
-      await tester.pump();
-      expect(find.text('40.0'), findsOneWidget);
+      expect(find.text('CONNECTED'), findsOneWidget);
+      // Confidence 80, and SUDDEN_MOVEMENT's severity is 0.5, so the risk
+      // score (40) is distinct this time.
+      expect(find.text('80'), findsOneWidget);
+      expect(find.text('40'), findsOneWidget);
       expect(find.text('SUDDEN_MOVEMENT'), findsOneWidget);
       expect(find.text('Devices (2)'), findsOneWidget);
     });

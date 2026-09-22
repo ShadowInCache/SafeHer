@@ -525,7 +525,16 @@ void main() {
       expect(ble.connectCalls, 2);
     });
 
-    testWidgets('reconnection gives up after a bounded number of attempts', (tester) async {
+    testWidgets('reconnection keeps retrying indefinitely, e.g. through a long power cycle', (
+      tester,
+    ) async {
+      // This controller is the only thing that reconnects a dropped glove
+      // now (a separate GloveConnectionManager provider used to also do
+      // this on its own timer, racing this one — see BlePairingController's
+      // doc comment for why that was removed). Losing the ability to
+      // retry for longer than a handful of seconds would leave a glove
+      // whose battery died mid-charge stuck until the user reopened the
+      // pairing sheet by hand.
       await tester.pumpWidget(_harness(ble: ble));
       await _settle(tester);
       await _connect(tester, ble);
@@ -534,15 +543,21 @@ void main() {
       ble.dropConnection(_named.id);
       await _settle(tester);
 
-      for (var attempt = 0; attempt < BlePairingController.maxReconnectAttempts; attempt++) {
+      // Many backoff cycles elapse — far more than the old 3-attempt cap —
+      // and it must still be trying, not stuck on a terminal failure.
+      for (var attempt = 0; attempt < 10; attempt++) {
         await tester.pump(BlePairingController.reconnectBackoff);
         await _settle(tester);
       }
+      expect(find.text('Connection Failed'), findsNothing);
+      expect(ble.connectCalls, greaterThan(10));
 
-      expect(find.text('Connection Failed'), findsOneWidget);
-      expect(find.textContaining('could not reconnect'), findsOneWidget);
-      // 1 initial + exactly maxReconnectAttempts retries, never an endless loop.
-      expect(ble.connectCalls, 1 + BlePairingController.maxReconnectAttempts);
+      // The glove comes back; the next attempt in the still-running loop
+      // succeeds with no user action.
+      ble.connectFailure = null;
+      await tester.pump(BlePairingController.reconnectBackoff);
+      await _settle(tester);
+      expect(find.text('Connected'), findsOneWidget);
     });
 
     testWidgets('manual disconnect really disconnects and returns to scanning', (tester) async {

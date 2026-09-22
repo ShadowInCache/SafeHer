@@ -47,61 +47,33 @@ final deviceRegistrationRepositoryProvider =
 // ignore: unused_element
 typedef DeviceRegistrationRepositoryRef =
     ProviderRef<DeviceRegistrationRepository>;
-String _$gloveConnectionManagerHash() =>
-    r'dd84df5070e35c258944c90b746787c6aaaf9bfe';
-
-/// Keeps retrying [BleService.connect] for the glove at
-/// [connectedGloveIdProvider] whenever [gloveConnectionStateProvider]
-/// reports it disconnected — e.g. the ESP32's power was cut and later
-/// restored — so the user is never required to open the pairing sheet and
-/// register it again to pick the same physical device back up.
-///
-/// [BlePairingController] already has bounded auto-reconnect, but it is
-/// `autoDispose` and tied to the pairing sheet: closing the sheet after a
-/// successful registration (the normal flow) disposes it, cancelling that
-/// reconnect logic entirely, even though the GATT link itself is left
-/// running (see that controller's own doc comment on this gap — "a
-/// device-connection manager, which does not exist yet"). This is that
-/// manager: `keepAlive`, so once started it outlives any one screen, and
-/// unbounded, because unlike a mid-session drop (a real failure worth
-/// giving up on after a few tries) a power cycle ends whenever the user
-/// flips the glove back on, which this app has no way to predict.
-///
-/// Reconnecting only calls [BleService.connect] again — it does not touch
-/// [motionDataProvider] or open a second notification subscription.
-/// [LiveMotionDataNotifier] already reacts to
-/// [gloveConnectionStateProvider]'s real connected/disconnected edges
-/// (regardless of what triggered them) to invalidate and cleanly
-/// re-subscribe exactly once; this provider only needs to make that edge
-/// happen again.
-///
-/// Copied from [GloveConnectionManager].
-@ProviderFor(GloveConnectionManager)
-final gloveConnectionManagerProvider =
-    NotifierProvider<GloveConnectionManager, void>.internal(
-      GloveConnectionManager.new,
-      name: r'gloveConnectionManagerProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$gloveConnectionManagerHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$GloveConnectionManager = Notifier<void>;
 String _$blePairingControllerHash() =>
-    r'3eb71e7872f1f662df3ac30bc3bf54a382e1214a';
+    r'f8366534fdcc035261f7dc9b80c350a934ace699';
 
 /// Drives the BLE pairing sheet: permissions → adapter state → live scan →
-/// connect + service discovery → backend registration, plus bounded
-/// automatic reconnection when a real link drops.
+/// connect + service discovery → backend registration, plus automatic
+/// reconnection when a real link drops (including a power cycle — the ESP32
+/// losing power and coming back).
 ///
-/// Auto-disposed with the sheet. On dispose it cancels its subscriptions
-/// and stops any running scan, but deliberately does **not** drop an
-/// established GATT link — tearing down a connection the user just made
-/// because they swiped a sheet away would be the wrong call. Owning that
-/// connection for the rest of the session is a separate concern that
-/// belongs to a device-connection manager, which does not exist yet.
+/// Auto-disposed *with the sheet*, in the Riverpod sense of "nothing left
+/// watching or listening" — closing the sheet after a successful pairing
+/// does not actually tear this down, because [GloveLink] (`keepAlive`,
+/// watched from `main.dart`) holds a `ref.listen` on this provider for the
+/// whole app session. That is deliberate and load-bearing: it is what lets
+/// the reconnect loop below outlive the sheet at all.
+///
+/// This controller used to be one of *two* independent things reconnecting
+/// a dropped glove — a `GloveConnectionManager` provider called
+/// `BleService.connect` directly on its own timer, racing this controller's
+/// own reconnect for the same device. Whichever one happened to win left
+/// the *other* signal wrong: `GloveConnectionManager` never touched
+/// [BlePairingState.stage], so when it won the race the radio came back up
+/// but [GloveLink] — which resubscribes on *this* controller reaching
+/// [BlePairingStage.connected], not on the raw GATT state — never saw a
+/// transition to react to. That reproduced as "shows Connected, no data"
+/// after every power cycle, deterministically, because the tighter-interval
+/// `GloveConnectionManager` almost always won. `GloveConnectionManager` is
+/// gone now; this is the one and only place a reconnect happens.
 ///
 /// Copied from [BlePairingController].
 @ProviderFor(BlePairingController)

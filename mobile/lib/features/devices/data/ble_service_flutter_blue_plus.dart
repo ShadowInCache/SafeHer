@@ -8,6 +8,10 @@ import 'package:permission_handler/permission_handler.dart';
 import '../domain/ble_service.dart';
 import '../domain/models/ble_models.dart';
 
+void _bleLog(String message) {
+  if (kDebugMode) debugPrint('[BLE] $message');
+}
+
 /// The real [BleService], backed by `flutter_blue_plus`.
 ///
 /// This is the only file in the app allowed to import `flutter_blue_plus`
@@ -148,7 +152,15 @@ class FlutterBluePlusBleService implements BleService {
     required String characteristicUuid,
   }) async* {
     final device = BluetoothDevice.fromId(deviceId);
+    _bleLog('discovering services ($deviceId)');
+    // Always a real round-trip to the peripheral's GATT server — this
+    // package does not cache/short-circuit discoverServices() across calls,
+    // so every subscribeToCharacteristic() call (including a reconnect
+    // within the same app session) gets services/characteristics off the
+    // *current* GATT session rather than reusing objects tied to a
+    // previous, possibly now-invalid one.
     final services = await device.discoverServices();
+    _bleLog('services discovered (${services.length}, $deviceId)');
 
     // UUID comparison is case-insensitive and format-sensitive: the platform
     // may hand back a short 16-bit form or different casing than the constant
@@ -159,20 +171,27 @@ class FlutterBluePlusBleService implements BleService {
 
     final service = services.where((s) => sameUuid(s.uuid.str, serviceUuid)).firstOrNull;
     if (service == null) {
+      _bleLog('SafeHer service NOT found ($serviceUuid on $deviceId)');
       throw StateError('Device $deviceId does not expose service $serviceUuid');
     }
+    _bleLog('SafeHer service found ($serviceUuid)');
 
     final characteristic = service.characteristics
         .where((c) => sameUuid(c.uuid.str, characteristicUuid))
         .firstOrNull;
     if (characteristic == null) {
+      _bleLog('characteristic NOT found ($characteristicUuid on $deviceId)');
       throw StateError(
         'Service $serviceUuid has no characteristic $characteristicUuid',
       );
     }
+    _bleLog('result characteristic found ($characteristicUuid)');
 
+    _bleLog('subscribing to notifications ($characteristicUuid)');
     await characteristic.setNotifyValue(true);
+    _bleLog('notifications enabled ($characteristicUuid)');
     try {
+      _bleLog('notification listener attached ($characteristicUuid)');
       await for (final bytes in characteristic.onValueReceived) {
         if (bytes.isEmpty) continue;
         // Malformed bytes are dropped, not thrown: a truncated notification
@@ -185,13 +204,23 @@ class FlutterBluePlusBleService implements BleService {
         }
       }
     } finally {
-      // The link may already be gone, which is the usual way this stream
-      // ends; unsubscribing then is expected to fail and is not an error.
-      try {
-        await characteristic.setNotifyValue(false);
-      } on Exception {
-        // Nothing to unsubscribe from.
-      }
+      // Deliberately does NOT call characteristic.setNotifyValue(false)
+      // here. It looks like the polite thing to do, and it used to be here,
+      // but it caused a worse bug than the one it was guarding against:
+      // there is exactly one CCCD (notification-enable flag) per physical
+      // characteristic on the real device, not one per Dart object, and
+      // GloveLink never awaits this generator's cancellation (see its own
+      // doc comment on why: that cancellation can hang indefinitely on a
+      // disconnected peripheral). That means this cleanup can still run
+      // *after* a fresh reconnect has already started a brand-new
+      // subscription on the same characteristic — and calling
+      // setNotifyValue(false) at that point disables notifications for the
+      // new subscription too, out from under it, after exactly one packet.
+      // On a real disconnect there is nothing to clean up anyway: the
+      // peripheral's own BLE stack drops its subscriber state when the GATT
+      // link drops, and this app re-enables notifications explicitly
+      // (setNotifyValue(true) above) on every fresh subscribe regardless.
+      _bleLog('old subscription cancelled ($characteristicUuid, $deviceId)');
     }
   }
 
@@ -244,15 +273,22 @@ class FlutterBluePlusBleService implements BleService {
     StreamSubscription<List<int>>? valueSub;
     BluetoothCharacteristic? characteristic;
 
+    // UUID comparison is case-insensitive and format-sensitive: the platform
+    // may hand back a short 16-bit form or different casing than the constant
+    // written in the firmware, and `==` on the raw strings quietly never
+    // matches. See the identical guard in subscribeToCharacteristic above.
+    bool sameUuid(String a, String b) =>
+        a.toLowerCase().replaceAll('-', '') == b.toLowerCase().replaceAll('-', '');
+
     Future<void> start() async {
       try {
         final services = await device.discoverServices();
         final service = services.firstWhere(
-          (candidate) => candidate.uuid.str.toLowerCase() == serviceUuid.toLowerCase(),
+          (candidate) => sameUuid(candidate.uuid.str, serviceUuid),
           orElse: () => throw BleFailure('Service $serviceUuid not found on $deviceId.'),
         );
         characteristic = service.characteristics.firstWhere(
-          (candidate) => candidate.uuid.str.toLowerCase() == characteristicUuid.toLowerCase(),
+          (candidate) => sameUuid(candidate.uuid.str, characteristicUuid),
           orElse: () => throw BleFailure('Characteristic $characteristicUuid not found on $deviceId.'),
         );
         await characteristic!.setNotifyValue(true);
@@ -275,12 +311,12 @@ class FlutterBluePlusBleService implements BleService {
       onCancel: () async {
         await valueSub?.cancel();
         valueSub = null;
-        try {
-          await characteristic?.setNotifyValue(false);
-        } on Exception {
-          // Best-effort - the link may already be gone, which is fine: the
-          // peripheral drops its subscriber list on disconnect anyway.
-        }
+        // Deliberately does not call setNotifyValue(false) here — see the
+        // identical, more detailed reasoning in subscribeToCharacteristic's
+        // own cleanup above: there is one CCCD per physical characteristic,
+        // not one per Dart object, so disabling it here can turn off
+        // notifications for an unrelated, newer subscription to the same
+        // characteristic. Nothing to clean up on a real disconnect anyway.
       },
     );
     return controller.stream;

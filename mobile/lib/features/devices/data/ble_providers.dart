@@ -20,6 +20,10 @@ import 'device_registration_repository_remote.dart';
 
 part 'ble_providers.g.dart';
 
+void _bleLog(String message) {
+  if (kDebugMode) debugPrint('[BLE] $message');
+}
+
 /// The real radio. Widget tests override this with a fake [BleService] —
 /// there is no mock variant behind `AppConfig.useMockApi`, because a fake
 /// scan result is exactly the thing this feature exists to stop shipping.
@@ -63,111 +67,40 @@ final gloveConnectionStateProvider = StreamProvider.autoDispose.family<BleConnec
   return ref.watch(bleServiceProvider).connectionState(deviceId);
 });
 
-/// Keeps retrying [BleService.connect] for the glove at
-/// [connectedGloveIdProvider] whenever [gloveConnectionStateProvider]
-/// reports it disconnected — e.g. the ESP32's power was cut and later
-/// restored — so the user is never required to open the pairing sheet and
-/// register it again to pick the same physical device back up.
-///
-/// [BlePairingController] already has bounded auto-reconnect, but it is
-/// `autoDispose` and tied to the pairing sheet: closing the sheet after a
-/// successful registration (the normal flow) disposes it, cancelling that
-/// reconnect logic entirely, even though the GATT link itself is left
-/// running (see that controller's own doc comment on this gap — "a
-/// device-connection manager, which does not exist yet"). This is that
-/// manager: `keepAlive`, so once started it outlives any one screen, and
-/// unbounded, because unlike a mid-session drop (a real failure worth
-/// giving up on after a few tries) a power cycle ends whenever the user
-/// flips the glove back on, which this app has no way to predict.
-///
-/// Reconnecting only calls [BleService.connect] again — it does not touch
-/// [motionDataProvider] or open a second notification subscription.
-/// [LiveMotionDataNotifier] already reacts to
-/// [gloveConnectionStateProvider]'s real connected/disconnected edges
-/// (regardless of what triggered them) to invalidate and cleanly
-/// re-subscribe exactly once; this provider only needs to make that edge
-/// happen again.
-@Riverpod(keepAlive: true)
-class GloveConnectionManager extends _$GloveConnectionManager {
-  static const _retryDelay = Duration(milliseconds: 1500);
-
-  Timer? _retryTimer;
-
-  /// Bumped on every [build] so a reconnect attempt in flight from a
-  /// superseded build (e.g. the glove came back and `build` already reran
-  /// for that) does not schedule a second, redundant retry alongside the
-  /// current one.
-  int _generation = 0;
-
-  @override
-  void build() {
-    final myGeneration = ++_generation;
-    ref.onDispose(() {
-      // A plain `Future.delayed` cannot be cancelled once started — using
-      // a real `Timer` here, and cancelling it, is what lets a rebuild (or
-      // this provider's own disposal) actually stop a pending retry rather
-      // than merely ignoring its result. `flutter_test` fails a widget test
-      // outright over a `Future.delayed` left ticking after teardown for
-      // exactly this reason.
-      _retryTimer?.cancel();
-      _retryTimer = null;
-    });
-
-    final deviceId = ref.watch(connectedGloveIdProvider);
-    if (deviceId == null) return;
-
-    final status = ref.watch(gloveConnectionStateProvider(deviceId)).valueOrNull;
-    // Only a *confirmed* disconnect starts retrying — not the brief
-    // `AsyncLoading` gap before the first real status arrives, which would
-    // otherwise race an in-flight connect attempt from elsewhere (e.g. the
-    // pairing sheet's own initial connect).
-    if (status != BleConnectionStatus.disconnected) return;
-
-    _scheduleRetry(deviceId, myGeneration);
-  }
-
-  void _scheduleRetry(String deviceId, int generation) {
-    _retryTimer?.cancel();
-    _retryTimer = Timer(_retryDelay, () => unawaited(_attemptReconnect(deviceId, generation)));
-  }
-
-  Future<void> _attemptReconnect(String deviceId, int generation) async {
-    if (generation != _generation) return; // superseded — nothing to do
-    try {
-      await ref.read(bleServiceProvider).connect(deviceId);
-      // Success: `gloveConnectionStateProvider`'s real stream will report
-      // `connected` on its own, which reruns `build` — tearing down this
-      // retry cycle via the `onDispose` above — rather than this method
-      // declaring victory itself.
-    } on BleFailure {
-      // Peripheral still not back yet (still powered off, out of range,
-      // or mid-boot) — try again after the next delay.
-    } catch (_) {
-      // Same reasoning as elsewhere in this file: a non-`BleFailure` throw
-      // from the platform channel should not kill the retry loop.
-    }
-    if (generation == _generation) _scheduleRetry(deviceId, generation);
-  }
-}
-
 /// Drives the BLE pairing sheet: permissions → adapter state → live scan →
-/// connect + service discovery → backend registration, plus bounded
-/// automatic reconnection when a real link drops.
+/// connect + service discovery → backend registration, plus automatic
+/// reconnection when a real link drops (including a power cycle — the ESP32
+/// losing power and coming back).
 ///
-/// Auto-disposed with the sheet. On dispose it cancels its subscriptions
-/// and stops any running scan, but deliberately does **not** drop an
-/// established GATT link — tearing down a connection the user just made
-/// because they swiped a sheet away would be the wrong call. Owning that
-/// connection for the rest of the session is a separate concern that
-/// belongs to a device-connection manager, which does not exist yet.
+/// Auto-disposed *with the sheet*, in the Riverpod sense of "nothing left
+/// watching or listening" — closing the sheet after a successful pairing
+/// does not actually tear this down, because [GloveLink] (`keepAlive`,
+/// watched from `main.dart`) holds a `ref.listen` on this provider for the
+/// whole app session. That is deliberate and load-bearing: it is what lets
+/// the reconnect loop below outlive the sheet at all.
+///
+/// This controller used to be one of *two* independent things reconnecting
+/// a dropped glove — a `GloveConnectionManager` provider called
+/// `BleService.connect` directly on its own timer, racing this controller's
+/// own reconnect for the same device. Whichever one happened to win left
+/// the *other* signal wrong: `GloveConnectionManager` never touched
+/// [BlePairingState.stage], so when it won the race the radio came back up
+/// but [GloveLink] — which resubscribes on *this* controller reaching
+/// [BlePairingStage.connected], not on the raw GATT state — never saw a
+/// transition to react to. That reproduced as "shows Connected, no data"
+/// after every power cycle, deterministically, because the tighter-interval
+/// `GloveConnectionManager` almost always won. `GloveConnectionManager` is
+/// gone now; this is the one and only place a reconnect happens.
 @riverpod
 class BlePairingController extends _$BlePairingController {
-  /// Reconnect attempts allowed per disconnection episode. Bounded on
-  /// purpose: an unbounded retry loop drains the battery of the phone a
-  /// user may be relying on in an emergency.
-  static const maxReconnectAttempts = 3;
-
-  /// Delay before each automatic reconnect attempt.
+  /// Delay before each automatic reconnect attempt. Fixed, not growing —
+  /// this now has to cover an ordinary power cycle (the ESP32 off for
+  /// anywhere from seconds to minutes), so it retries for as long as the
+  /// device stays disconnected rather than giving up after a handful of
+  /// tries; a plain BLE connect attempt every couple of seconds is cheap
+  /// enough on the phone's battery for a safety wearable to justify not
+  /// stopping on its own. [disconnect] (the user's own unpair action) is
+  /// still the only thing that stops it for good.
   static const reconnectBackoff = Duration(seconds: 2);
 
   StreamSubscription<List<BleDiscoveredDevice>>? _scanResultsSub;
@@ -176,6 +109,17 @@ class BlePairingController extends _$BlePairingController {
   StreamSubscription<BleConnectionStatus>? _connectionSub;
   Timer? _reconnectTimer;
   bool _disposed = false;
+
+  /// True from the moment [connect]/[retryConnection] starts a GATT attempt
+  /// until it resolves. [GloveAutoConnect] runs in the background on every
+  /// launch and drives this same controller; without this guard, a manual
+  /// pairing-sheet tap landing while an auto-connect attempt is mid-flight
+  /// (or the reverse) would let two `_attemptConnect` calls interleave their
+  /// `_emit`s on the shared [state] — the controller ends up reporting
+  /// `connected` from whichever call finished last while the actual GATT
+  /// link / notification setup belongs to a discarded call, exactly the
+  /// "shows Connected, streams nothing" bug this guard exists to rule out.
+  bool _connecting = false;
 
   /// Bumped every time the scan subscriptions are dropped, so late events
   /// from a previous scan can be told apart from the current one's.
@@ -352,17 +296,29 @@ class BlePairingController extends _$BlePairingController {
     _listenToAdapter(service);
 
     await service.startScan();
+    _bleLog('scan started');
 
     // Subscribed after startScan so the first `isScanning` value we see is
     // `true` rather than the pre-scan `false`.
     final generation = _scanGeneration;
+    _seenDeviceIds.clear();
     _scanResultsSub = service.scanResults.listen((devices) => _onScanResults(generation, devices));
     _isScanningSub = service.isScanning.listen((scanning) => _onScanningChanged(generation, scanning));
   }
 
+  /// Logged once per device id per scan, not once per re-emission — the
+  /// scan stream re-emits the whole growing list on every advertisement,
+  /// including ones already seen.
+  final Set<String> _seenDeviceIds = {};
+
   void _onScanResults(int generation, List<BleDiscoveredDevice> devices) {
     if (generation != _scanGeneration) return;
     if (state.stage != BlePairingStage.scanning) return;
+    for (final device in devices) {
+      if (_seenDeviceIds.add(device.id)) {
+        _bleLog('device discovered (${device.displayName}, ${device.id})');
+      }
+    }
     final sorted = [...devices]..sort((a, b) => b.rssi.compareTo(a.rssi));
     _emit(state.copyWith(devices: sorted));
   }
@@ -439,8 +395,8 @@ class BlePairingController extends _$BlePairingController {
   /// can be tapped (and change the answer) *after* connecting. Setting
   /// [connectedGloveIdProvider] unconditionally on every successful
   /// connect, regardless of [BlePairingState.selectedType], would wrongly
-  /// point the glove-only motion pipeline — [GloveConnectionManager],
-  /// [motionDataProvider], the device screen's Motion Risk Score — at
+  /// point the glove-only motion pipeline — GloveLink, the device
+  /// screen's Motion Risk Score — at
   /// whatever non-glove peripheral the user most recently paired.
   void _syncConnectedGloveId() {
     final target = state.target;
@@ -453,32 +409,50 @@ class BlePairingController extends _$BlePairingController {
   }
 
   Future<void> connect(BleDiscoveredDevice device) async {
-    _cancelScanSubscriptions();
-    await _stopScanQuietly();
-    _emit(
-      state.copyWith(
-        stage: BlePairingStage.connecting,
-        target: device,
-        clearError: true,
-        clearRegisteredDevice: true,
-        serviceCount: 0,
-        reconnectAttempt: 0,
-      ),
-    );
-    await _attemptConnect(device);
+    if (_connecting) {
+      _bleLog('connect ignored: already connecting (${device.id})');
+      return;
+    }
+    _connecting = true;
+    try {
+      _cancelScanSubscriptions();
+      await _stopScanQuietly();
+      _emit(
+        state.copyWith(
+          stage: BlePairingStage.connecting,
+          target: device,
+          clearError: true,
+          clearRegisteredDevice: true,
+          serviceCount: 0,
+          reconnectAttempt: 0,
+        ),
+      );
+      await _attemptConnect(device);
+    } finally {
+      _connecting = false;
+    }
   }
 
   /// Retries the last failed connection against the same device.
   Future<void> retryConnection() async {
+    if (_connecting) return;
     final target = state.target;
     if (target == null) return;
-    _emit(state.copyWith(stage: BlePairingStage.connecting, clearError: true, reconnectAttempt: 0));
-    await _attemptConnect(target);
+    _connecting = true;
+    try {
+      _emit(state.copyWith(stage: BlePairingStage.connecting, clearError: true, reconnectAttempt: 0));
+      await _attemptConnect(target);
+    } finally {
+      _connecting = false;
+    }
   }
 
   Future<void> _attemptConnect(BleDiscoveredDevice device) async {
+    _bleLog('connecting (${device.displayName}, ${device.id})');
     try {
       final info = await _service.connect(device.id);
+      _bleLog('connected (${device.id})');
+      _bleLog('services discovered (${info.serviceCount})');
       _emit(
         state.copyWith(
           stage: BlePairingStage.connected,
@@ -515,35 +489,29 @@ class BlePairingController extends _$BlePairingController {
   }
 
   void _onUnexpectedDisconnect(BleDiscoveredDevice device) {
+    _bleLog('disconnected (${device.id})');
     _emit(state.copyWith(stage: BlePairingStage.disconnected));
     _scheduleReconnect(device);
   }
 
+  /// Schedules the next reconnect attempt. Never gives up on its own — see
+  /// the class doc for why: this is the only reconnect path left, and a
+  /// power cycle can legitimately take far longer than a handful of quick
+  /// retries. [disconnect] (an explicit user unpair) is the only thing that
+  /// stops this loop.
   void _scheduleReconnect(BleDiscoveredDevice device) {
     if (_disposed) return;
-    if (state.reconnectAttempt >= maxReconnectAttempts) {
-      if (ref.read(connectedGloveIdProvider) == device.id) {
-        ref.read(connectedGloveIdProvider.notifier).state = null;
-      }
-      _emit(
-        state.copyWith(
-          stage: BlePairingStage.connectionFailed,
-          errorMessage:
-              'Lost connection to ${device.displayName} and could not reconnect '
-              'after $maxReconnectAttempts attempts.',
-        ),
-      );
-      return;
-    }
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(reconnectBackoff, () => unawaited(_reconnect(device)));
   }
 
   Future<void> _reconnect(BleDiscoveredDevice device) async {
     if (_disposed) return;
+    _bleLog('reconnect attempt ${state.reconnectAttempt + 1} (${device.id})');
     _emit(state.copyWith(stage: BlePairingStage.reconnecting, reconnectAttempt: state.reconnectAttempt + 1));
     try {
       final info = await _service.connect(device.id);
+      _bleLog('reconnect successful (${device.id})');
       _emit(
         state.copyWith(
           stage: BlePairingStage.connected,
@@ -556,6 +524,13 @@ class BlePairingController extends _$BlePairingController {
       _listenToConnectionState(device);
     } on BleFailure catch (failure) {
       _emit(state.copyWith(stage: BlePairingStage.disconnected, errorMessage: failure.message));
+      _scheduleReconnect(device);
+    } catch (error) {
+      // Same reasoning as _attemptConnect: a non-BleFailure platform-channel
+      // throw must not silently kill the retry loop — this is now the only
+      // thing standing between a power cycle and a glove that never comes
+      // back without the user manually reopening the pairing sheet.
+      _emit(state.copyWith(stage: BlePairingStage.disconnected, errorMessage: _describeUnexpected(error)));
       _scheduleReconnect(device);
     }
   }

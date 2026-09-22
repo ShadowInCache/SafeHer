@@ -100,7 +100,7 @@ final journeyDetectionStatusProvider =
     );
 
 typedef _$JourneyDetectionStatus = Notifier<ThreatPipelineStatus>;
-String _$threatPipelineHash() => r'5a506efdd0bf73b337a4cdfee064c6fd55709320';
+String _$threatPipelineHash() => r'dd28c10d602aebe98b3049ee6cb342e155a9440e';
 
 /// Starts and stops the three signals together, and feeds their scores out.
 ///

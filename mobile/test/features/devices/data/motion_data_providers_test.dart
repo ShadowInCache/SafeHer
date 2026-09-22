@@ -1,88 +1,83 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safeher_app/features/devices/data/ble_providers.dart';
+import 'package:safeher_app/features/devices/data/glove_link_providers.dart';
 import 'package:safeher_app/features/devices/data/motion_data_providers.dart';
-import 'package:safeher_app/features/devices/domain/models/motion_data.dart';
+import 'package:safeher_app/features/devices/domain/glove_protocol.dart';
+import 'package:safeher_app/features/devices/domain/models/ble_models.dart';
 
 import '../../../test_utils/fake_ble_service.dart';
 
+/// [motionRiskScoreProvider] and [liveMotionClassificationProvider] derive
+/// from [gloveLinkProvider]'s state rather than opening their own BLE
+/// subscription -- an earlier version subscribed to the classification
+/// characteristic independently, which raced [GloveLink]'s own subscription
+/// to the same characteristic and, in practice, silently lost that race on
+/// real hardware (classification never arrived; telemetry, a different
+/// characteristic, did). These tests exist so a regression back to a second
+/// subscription is caught here rather than on a physical glove.
+BleDiscoveredDevice _glove({String id = 'glove-1', String name = 'SafeHer-Glove'}) =>
+    BleDiscoveredDevice(id: id, advertisedName: name, rssi: -50, isConnectable: true);
+
 void main() {
-  group('motionDataProvider', () {
-    late FakeBleService fakeBle;
-    late ProviderContainer container;
+  late FakeBleService ble;
+  late ProviderContainer container;
 
-    setUp(() {
-      fakeBle = FakeBleService();
-      container = ProviderContainer(overrides: [bleServiceProvider.overrideWithValue(fakeBle)]);
+  setUp(() {
+    ble = FakeBleService();
+    container = ProviderContainer(overrides: [bleServiceProvider.overrideWithValue(ble)]);
+    addTearDown(container.dispose);
+  });
+
+  Future<void> connectGlove() async {
+    container.read(gloveLinkProvider);
+    await container.read(blePairingControllerProvider.notifier).connect(_glove());
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+
+  group('motionRiskScoreProvider', () {
+    test('is null before any classification has arrived', () {
+      expect(container.read(motionRiskScoreProvider('glove-1')), isNull);
     });
 
-    tearDown(() async {
-      container.dispose();
-      await fakeBle.dispose();
+    test('FALL at 0.9613 confidence scores 96.13', () async {
+      ble.notifications[GloveBle.classificationCharacteristicUuid] = ['FALL,0.9613'];
+      await connectGlove();
+
+      expect(container.read(motionRiskScoreProvider('glove-1')), closeTo(96.13, 0.01));
     });
 
-    test('subscribes via the exact glove service/characteristic UUIDs', () async {
-      const deviceId = 'glove-1';
-      final sub = container.listen(motionDataProvider(deviceId), (_, _) {});
-      addTearDown(sub.close);
+    test('NORMAL is always 0 regardless of confidence', () async {
+      ble.notifications[GloveBle.classificationCharacteristicUuid] = ['NORMAL,0.99'];
+      await connectGlove();
 
-      // Let the async subscription set up.
-      await Future<void>.delayed(Duration.zero);
-
-      expect(fakeBle.characteristicNotificationsCalls, 1);
+      expect(container.read(motionRiskScoreProvider('glove-1')), 0.0);
     });
 
-    test('CLASS=FALL,CONFIDENCE=0.9613 arrives as motionClass=FALL, motionConfidence=0.9613', () async {
-      const deviceId = 'glove-1';
-      final emitted = <MotionData>[];
-      final sub = container.listen(motionDataProvider(deviceId), (_, next) {
-        next.whenData(emitted.add);
-      });
-      addTearDown(sub.close);
-      await Future<void>.delayed(Duration.zero);
+    test('does not open a second subscription to the classification characteristic', () async {
+      ble.notifications[GloveBle.classificationCharacteristicUuid] = ['SUDDEN_MOVEMENT,0.81'];
+      await connectGlove();
 
-      fakeBle.emitCharacteristicValue(deviceId, 'CLASS=FALL,CONFIDENCE=0.9613');
-      await Future<void>.delayed(Duration.zero);
+      // Just reading the derived providers must not trigger any BLE call of
+      // their own -- GloveLink's subscription (already exercised by
+      // connectGlove) is the only one.
+      container.read(motionRiskScoreProvider('glove-1'));
+      container.read(liveMotionClassificationProvider('glove-1'));
 
-      expect(emitted, [const MotionData(classification: 'FALL', confidence: 0.9613)]);
+      expect(ble.characteristicNotificationsCalls, 0);
+    });
+  });
+
+  group('liveMotionClassificationProvider', () {
+    test('is null before any classification has arrived', () {
+      expect(container.read(liveMotionClassificationProvider('glove-1')), isNull);
     });
 
-    test('a malformed packet is dropped, not surfaced as an error, and does not stop later valid ones', () async {
-      const deviceId = 'glove-1';
-      final emitted = <MotionData>[];
-      final sub = container.listen(motionDataProvider(deviceId), (_, next) {
-        next.whenData(emitted.add);
-      });
-      addTearDown(sub.close);
-      await Future<void>.delayed(Duration.zero);
+    test('reports the raw label from the glove', () async {
+      ble.notifications[GloveBle.classificationCharacteristicUuid] = ['SUDDEN_MOVEMENT,0.81'];
+      await connectGlove();
 
-      fakeBle.emitCharacteristicValue(deviceId, 'CLASS=FALL,CONFIDENCE=abc'); // malformed
-      fakeBle.emitCharacteristicValue(deviceId, 'CLASS=NORMAL,CONFIDENCE=0.9726'); // valid
-      await Future<void>.delayed(Duration.zero);
-
-      expect(emitted, [const MotionData(classification: 'NORMAL', confidence: 0.9726)]);
-      expect(container.read(motionDataProvider(deviceId)).hasError, isFalse);
-    });
-
-    test('different device ids get independent subscriptions', () async {
-      final subA = container.listen(motionDataProvider('glove-A'), (_, _) {});
-      final subB = container.listen(motionDataProvider('glove-B'), (_, _) {});
-      addTearDown(subA.close);
-      addTearDown(subB.close);
-      await Future<void>.delayed(Duration.zero);
-
-      fakeBle.emitCharacteristicValue('glove-A', 'CLASS=SUDDEN_MOVEMENT,CONFIDENCE=0.8124');
-      fakeBle.emitCharacteristicValue('glove-B', 'CLASS=SHAKING,CONFIDENCE=0.7341');
-      await Future<void>.delayed(Duration.zero);
-
-      expect(
-        container.read(motionDataProvider('glove-A')).value,
-        const MotionData(classification: 'SUDDEN_MOVEMENT', confidence: 0.8124),
-      );
-      expect(
-        container.read(motionDataProvider('glove-B')).value,
-        const MotionData(classification: 'SHAKING', confidence: 0.7341),
-      );
+      expect(container.read(liveMotionClassificationProvider('glove-1')), 'SUDDEN_MOVEMENT');
     });
   });
 }

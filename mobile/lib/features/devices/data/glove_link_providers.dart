@@ -1,12 +1,16 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../domain/glove_protocol.dart';
-import '../domain/models/ble_pairing_state.dart';
 import 'ble_providers.dart';
 
 part 'glove_link_providers.g.dart';
+
+void _bleLog(String message) {
+  if (kDebugMode) debugPrint('[BLE] $message');
+}
 
 /// What the glove is currently saying.
 class GloveLinkState {
@@ -76,15 +80,23 @@ class GloveLink extends _$GloveLink {
   StreamSubscription<String>? _classificationSub;
   StreamSubscription<String>? _telemetrySub;
   String? _listeningTo;
+  bool _gotFirstClassification = false;
 
   @override
   GloveLinkState build() {
     ref.listen(blePairingControllerProvider, (previous, next) {
-      final connected = next.stage == BlePairingStage.connected ||
-          next.stage == BlePairingStage.registering;
+      // `registered` must count: registration finishing is not a link drop,
+      // and treating it as one cancelled the live subscription right after
+      // pairing, leaving "Connected" with no data.
+      final connected = next.holdsConnection;
       final deviceId = next.target?.id;
+      _bleLog(
+        'pairing state changed: ${previous?.stage} -> ${next.stage} '
+        '(deviceId=$deviceId, listeningTo=$_listeningTo)',
+      );
 
       if (!connected || deviceId == null) {
+        if (_listeningTo != null) _bleLog('disconnected');
         _stop();
         return;
       }
@@ -97,8 +109,9 @@ class GloveLink extends _$GloveLink {
   }
 
   Future<void> _listen(String deviceId, String? advertisedName) async {
-    await _cancelSubscriptions();
+    _cancelSubscriptions();
     _listeningTo = deviceId;
+    _gotFirstClassification = false;
 
     // Only SafeHer gloves speak this protocol. Subscribing to a stranger's
     // peripheral would either throw or feed nonsense into the threat display.
@@ -114,6 +127,7 @@ class GloveLink extends _$GloveLink {
     // Classification is the characteristic that matters; a glove that cannot
     // provide it is not usable as a sensor, so a failure here clears the
     // state rather than leaving a stale reading on screen.
+    _bleLog('notification subscription started ($deviceId)');
     try {
       _classificationSub = service
           .subscribeToCharacteristic(
@@ -121,13 +135,17 @@ class GloveLink extends _$GloveLink {
             serviceUuid: GloveBle.serviceUuid,
             characteristicUuid: GloveBle.classificationCharacteristicUuid,
           )
-          .listen(_onClassification, onError: (_) => _stop());
+          .listen(_onClassification, onError: (error) {
+            _bleLog('classification subscription error: $error');
+            _stop();
+          });
       state = state.copyWith(isListening: true);
       // Note the error is handled in `onError` above as well as here.
       // `subscribeToCharacteristic` is an `async*` generator, so a missing
       // characteristic throws when the stream is *listened to*, not when the
       // method is called -- a try/catch around `.listen()` alone never fires.
-    } on Object {
+    } on Object catch (error) {
+      _bleLog('failed to subscribe to classification characteristic: $error');
       _listeningTo = null;
       state = const GloveLinkState();
       return;
@@ -163,6 +181,12 @@ class GloveLink extends _$GloveLink {
     // screen: a truncated packet is a lost reading, not evidence that the
     // last real one was wrong.
     if (parsed == null) return;
+    if (!_gotFirstClassification) {
+      _gotFirstClassification = true;
+      _bleLog('first notification received (${parsed.label}, ${parsed.confidence})');
+    } else {
+      _bleLog('notification received (${parsed.label}, ${parsed.confidence})');
+    }
     state = state.copyWith(classification: parsed, lastUpdate: DateTime.now());
   }
 
@@ -172,15 +196,37 @@ class GloveLink extends _$GloveLink {
     state = state.copyWith(telemetry: parsed, lastUpdate: DateTime.now());
   }
 
-  Future<void> _cancelSubscriptions() async {
-    await _classificationSub?.cancel();
-    await _telemetrySub?.cancel();
+  /// Drops the old subscriptions without awaiting their cancellation.
+  ///
+  /// THE ROOT CAUSE of "reconnect shows Connected but no data": the old
+  /// subscription is on `subscribeToCharacteristic`'s `async*` generator,
+  /// and its `.cancel()` only resolves once that generator's own `finally`
+  /// block finishes — which, live on-device, was never observed to happen
+  /// at all when the peripheral had already disconnected (confirmed by
+  /// logging every step: the generator's cleanup log never printed, even
+  /// tens of seconds later). Awaiting that cancel() here, as this used to,
+  /// permanently blocked `_listen` on a cleanup from the *previous*
+  /// connection that would never complete — nulling `_listeningTo` never
+  /// advanced, so no reconnect ever resubscribed. An app restart "fixed" it
+  /// only because a fresh `GloveLink` has no stuck subscription to wait on.
+  ///
+  /// This mirrors `BlePairingController._cancelScanSubscriptions`'s own
+  /// documented reasoning for the same non-awaited pattern: a third-party
+  /// SDK's stream must never be given the power to wedge this flow. Fields
+  /// are cleared *immediately* (not after the cancel resolves) specifically
+  /// so a stray, still-pending old cancel() cannot later null out a
+  /// brand-new subscription that has since replaced it.
+  void _cancelSubscriptions() {
+    final classificationSub = _classificationSub;
+    final telemetrySub = _telemetrySub;
     _classificationSub = null;
     _telemetrySub = null;
+    unawaited(classificationSub?.cancel());
+    unawaited(telemetrySub?.cancel());
   }
 
   void _stop() {
-    unawaited(_cancelSubscriptions());
+    _cancelSubscriptions();
     _listeningTo = null;
     if (state.hasData || state.isListening) state = const GloveLinkState();
   }

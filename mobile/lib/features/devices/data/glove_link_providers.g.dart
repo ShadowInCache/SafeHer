@@ -6,7 +6,7 @@ part of 'glove_link_providers.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$gloveLinkHash() => r'df0b3fcee97773c26447fafdd2390ee8bfaf13d6';
+String _$gloveLinkHash() => r'b6f042cba0ba4f94e9964c45ee126cc3a97256cc';
 
 /// Listens to a connected SafeHer glove and holds what it reports.
 ///

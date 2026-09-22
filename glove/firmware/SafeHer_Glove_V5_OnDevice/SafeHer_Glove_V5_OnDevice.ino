@@ -22,8 +22,8 @@
 #define SUDDEN_MOVEMENT_CONFIRMATION_WINDOWS 2  // consecutive windows required before it is notified over BLE
 #define FEATURE_COUNT 51
 #define FALL_CONFIDENCE_THRESHOLD 0.65f
-#define DEBUG_FEATURES 1
-#define DATA_COLLECTION_MODE 1
+#define DEBUG_FEATURES 0
+#define DATA_COLLECTION_MODE 0
 
 #define BLE_DEVICE_NAME "SafeHer-Glove"
 #define BLE_SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
@@ -68,6 +68,7 @@ int16_t diagnosticGzRaw = 0;
 
 BLECharacteristic* bleResultCharacteristic = nullptr;
 BLECharacteristic* bleTelemetryCharacteristic = nullptr;
+BLEServer* bleServer = nullptr;
 volatile bool blePhoneConnected = false;
 unsigned long lastTelemetryMs = 0;
 
@@ -91,7 +92,7 @@ void initializeBLE() {
   BLEDevice::init(BLE_DEVICE_NAME);
   Serial.println("BLE: Device name = SafeHer-Glove");
 
-  BLEServer* bleServer = BLEDevice::createServer();
+  bleServer = BLEDevice::createServer();
   bleServer->setCallbacks(new SafeHerBleServerCallbacks());
 
   BLEService* bleService = bleServer->createService(BLE_SERVICE_UUID);
@@ -404,16 +405,6 @@ void runInference() {
 #if DEBUG_FEATURES
   printDebugFeatures(features, predictedClass, confidence);
 #endif
-  // TEMP_SENSOR_DIAGNOSTIC
-  Serial.printf("TEMP_SENSOR_DIAGNOSTIC raw_signed: ax_raw=%d ay_raw=%d az_raw=%d gx_raw=%d gy_raw=%d gz_raw=%d\n",
-                diagnosticAxRaw, diagnosticAyRaw, diagnosticAzRaw,
-                diagnosticGxRaw, diagnosticGyRaw, diagnosticGzRaw);
-  Serial.printf("TEMP_SENSOR_DIAGNOSTIC converted_float: ax=%.1f ay=%.1f az=%.1f gx=%.1f gy=%.1f gz=%.1f\n",
-                (float)diagnosticAxRaw, (float)diagnosticAyRaw, (float)diagnosticAzRaw,
-                (float)diagnosticGxRaw, (float)diagnosticGyRaw, (float)diagnosticGzRaw);
-  Serial.printf("TEMP_SENSOR_DIAGNOSTIC window_minmax: Ax=[%.1f,%.1f] Ay=[%.1f,%.1f] Az=[%.1f,%.1f] Gx=[%.1f,%.1f] Gy=[%.1f,%.1f] Gz=[%.1f,%.1f]\n",
-                features[2], features[3], features[8], features[9], features[14], features[15],
-                features[20], features[21], features[26], features[27], features[32], features[33]);
   uint32_t heapAfter = ESP.getFreeHeap();
 
   const char* safetyText = applyFallConfirmation(predictedClass, confidence);

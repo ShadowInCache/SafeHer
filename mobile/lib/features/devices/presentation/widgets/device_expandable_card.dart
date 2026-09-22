@@ -4,7 +4,6 @@ import '../../../../shared/utils/user_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../../../shared/models/threat_level.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -199,10 +198,12 @@ class DeviceExpandableCardState extends ConsumerState<DeviceExpandableCard> {
         children: [
           const Divider(),
           const SizedBox(height: AppSpacing.space3),
-          _Device3DVisual(type: device.type),
-          const SizedBox(height: AppSpacing.space4),
-          if (link.classification != null) ...[
-            _GloveClassificationRow(classification: link.classification!),
+          // The glove has no meaningful 3D visual to show live state through
+          // — its real-time signal is the classification confidence, shown
+          // directly below instead. Every other device type keeps the
+          // model viewer.
+          if (device.type != DeviceType.glove) ...[
+            _Device3DVisual(type: device.type),
             const SizedBox(height: AppSpacing.space4),
           ],
           if (device.type == DeviceType.glove) ...[
@@ -336,18 +337,20 @@ class _Device3DVisualState extends State<_Device3DVisual> {
   }
 }
 
-/// Replaces the 3D visual + Accel/Gyro/Flex row for a glove: the live
-/// Motion Risk Score derived from the glove's own BLE motion
-/// classification, via [motionRiskScoreProvider] — same underlying
-/// [motionDataProvider] stream the pairing screen reads, no second BLE
-/// connection or listener. Distinct from, and not fed into, the app's
-/// overall Threat Score.
+/// Replaces the 3D visual for a glove: the live classification confidence
+/// straight off the glove's on-device model, read from [gloveLinkProvider]
+/// — the single subscription to the classification characteristic (see
+/// that provider's doc comment on why nothing else opens a second one).
+///
+/// Confidence, not the derived Motion Risk Score, is the primary number
+/// here on purpose — this is the raw signal a future Threat Score
+/// integration would consume, and [motionRiskScoreProvider] remains
+/// available separately for anything that still wants the 0-100 score.
 ///
 /// Gates on the real BLE connection state ([gloveConnectionStateProvider]),
-/// not just on whether a packet has arrived recently — see
-/// [LiveMotionDataNotifier]'s doc comment for why the two are not the same
-/// thing. A glove that has gone offline (power cut, out of range) shows
-/// `-- / 100`, never its last live reading frozen in place.
+/// not just on whether a packet has arrived recently. A glove that has gone
+/// offline (power cut, out of range) shows `--`, never its last live
+/// reading frozen in place.
 class _MotionRiskDisplay extends ConsumerWidget {
   const _MotionRiskDisplay();
 
@@ -356,30 +359,34 @@ class _MotionRiskDisplay extends ConsumerWidget {
     final onSurface = Theme.of(context).colorScheme.onSurface;
     final deviceId = ref.watch(connectedGloveIdProvider);
 
-    final double? score;
-    final String? classification;
+    final GloveClassification? classification;
     final bool? connected;
+    final double? riskScore;
     if (deviceId == null) {
       // No live BLE session this app session at all — distinct from a
       // session that connected and then went offline.
-      score = null;
       classification = null;
       connected = null;
+      riskScore = null;
     } else {
-      score = ref.watch(motionRiskScoreProvider(deviceId));
-      classification = ref.watch(liveMotionDataProvider(deviceId))?.classification;
+      classification = ref.watch(gloveLinkProvider).classification;
       connected = ref.watch(gloveConnectionStateProvider(deviceId)).valueOrNull == BleConnectionStatus.connected;
+      // severity * confidence * 100 — NORMAL is always 0, FALL scores
+      // highest, everything else lands in between. See motion_risk_score.dart.
+      riskScore = ref.watch(motionRiskScoreProvider(deviceId));
     }
 
-    final Color scoreColor;
-    if (score == null) {
-      scoreColor = onSurface.withValues(alpha: 0.4);
-    } else if (score == 0) {
-      scoreColor = AppColors.success500;
-    } else if (classification == 'FALL') {
-      scoreColor = AppColors.coral500;
+    final confidencePct = classification == null ? null : classification.confidence * 100;
+
+    final Color confidenceColor;
+    if (confidencePct == null) {
+      confidenceColor = onSurface.withValues(alpha: 0.4);
+    } else if (classification!.label == 'NORMAL') {
+      confidenceColor = AppColors.success500;
+    } else if (classification.label == 'FALL') {
+      confidenceColor = AppColors.coral500;
     } else {
-      scoreColor = AppColors.warning500;
+      confidenceColor = AppColors.warning500;
     }
 
     final statusLabel = connected == null ? null : (connected ? 'CONNECTED' : 'OFFLINE');
@@ -389,14 +396,15 @@ class _MotionRiskDisplay extends ConsumerWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.space5),
       decoration: BoxDecoration(
-        color: scoreColor.withValues(alpha: 0.08),
+        color: confidenceColor.withValues(alpha: 0.08),
         borderRadius: AppRadius.lgRadius,
       ),
       child: Semantics(
         liveRegion: true,
         label:
             '${statusLabel ?? ''} '
-            '${score == null ? 'Motion Risk Score: no data' : 'Motion Risk Score: ${score.toStringAsFixed(1)} of 100, ${classification ?? ''}'}'
+            '${confidencePct == null ? 'Confidence: no data' : '${classification!.label} confidence: ${confidencePct.toStringAsFixed(0)} percent'} '
+            '${riskScore == null ? '' : 'Risk score: ${riskScore.toStringAsFixed(0)} of 100'}'
                 .trim(),
         child: ExcludeSemantics(
           child: Column(
@@ -416,70 +424,32 @@ class _MotionRiskDisplay extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.space3),
               ],
               Text(
-                'MOTION RISK SCORE',
+                classification == null ? 'CONFIDENCE' : classification.label,
                 style: AppTypography.eyebrow.copyWith(color: onSurface.withValues(alpha: 0.5)),
               ),
               const SizedBox(height: AppSpacing.space2),
               Text(
-                score == null ? '--' : score.toStringAsFixed(1),
-                style: AppTypography.displayM.copyWith(color: scoreColor),
+                confidencePct == null ? '--' : confidencePct.toStringAsFixed(0),
+                style: AppTypography.displayM.copyWith(color: confidenceColor),
               ),
               Text(
-                '/ 100',
+                '%',
                 style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.5)),
               ),
-              if (classification != null) ...[
-                const SizedBox(height: AppSpacing.space2),
-                Text(
-                  classification,
-                  style: AppTypography.headingS.copyWith(color: onSurface),
-                ),
-              ],
+              const SizedBox(height: AppSpacing.space3),
+              Text(
+                'RISK SCORE',
+                style: AppTypography.eyebrow.copyWith(color: onSurface.withValues(alpha: 0.5)),
+              ),
+              const SizedBox(height: AppSpacing.space1),
+              Text(
+                riskScore == null ? '--' : riskScore.toStringAsFixed(0),
+                style: AppTypography.headingM.copyWith(color: confidenceColor),
+              ),
             ],
           ),
         ),
       ),
-    );
-  }
-}
-
-/// What the on-device model last reported.
-///
-/// Shown as a label and a confidence, not as a verdict: the model says what
-/// the movement looked like, and whether that becomes an alert is the
-/// threshold's decision. Presenting it as "FALL DETECTED" would claim an
-/// authority this reading does not have.
-class _GloveClassificationRow extends StatelessWidget {
-  const _GloveClassificationRow({required this.classification});
-
-  final GloveClassification classification;
-
-  @override
-  Widget build(BuildContext context) {
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-    final level = classification.threatLevel;
-    final tint = switch (level) {
-      ThreatLevel.danger => AppColors.danger500,
-      ThreatLevel.elevated => AppColors.threatElevated,
-      ThreatLevel.caution => AppColors.warning500,
-      ThreatLevel.safe => AppColors.success500,
-    };
-
-    return Row(
-      children: [
-        Container(width: 8, height: 8, decoration: BoxDecoration(shape: BoxShape.circle, color: tint)),
-        const SizedBox(width: AppSpacing.space3),
-        Expanded(
-          child: Text(
-            classification.displayLabel,
-            style: AppTypography.labelL.copyWith(color: onSurface),
-          ),
-        ),
-        Text(
-          '${(classification.confidence * 100).round()}%',
-          style: AppTypography.monoDataS.copyWith(color: onSurface.withValues(alpha: 0.6)),
-        ),
-      ],
     );
   }
 }

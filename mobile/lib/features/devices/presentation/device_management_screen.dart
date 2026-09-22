@@ -8,7 +8,6 @@ import '../../../shared/components/feedback/sa_empty_state.dart';
 import '../../../shared/components/feedback/sa_loading_shimmer.dart';
 import '../../../shared/components/icons/sa_icon.dart';
 import '../../../shared/components/navigation/sa_bottom_nav_bar.dart';
-import '../data/ble_providers.dart';
 import '../data/device_providers.dart';
 import 'widgets/ble_pairing_sheet.dart';
 import 'widgets/glasses_status_card.dart';
@@ -39,11 +38,6 @@ class DeviceManagementScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final devicesAsync = ref.watch(devicesProvider);
-    // Starts (once) the keep-alive watcher that reconnects a registered
-    // glove automatically after its BLE link drops — e.g. an ESP32 power
-    // cycle — so it keeps working even after this screen is left. See
-    // GloveConnectionManager's doc comment in ble_providers.dart.
-    ref.watch(gloveConnectionManagerProvider);
 
     return Scaffold(
       body: Stack(
