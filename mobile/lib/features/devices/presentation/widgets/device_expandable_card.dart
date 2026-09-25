@@ -184,12 +184,17 @@ class DeviceExpandableCardState extends ConsumerState<DeviceExpandableCard> {
     // real has to arrive here.
     final link = ref.watch(gloveLinkProvider);
     final live = link.telemetry;
-    final sensors = live == null
+    // The dedicated heart-rate characteristic wins over the legacy telemetry
+    // field, so the "Heart" readout below and the Heart Rate section in
+    // [_MotionRiskDisplay] can never disagree. Non-positive values are "no
+    // reading", never shown as 0.
+    final heartRate = link.heartRateBpm?.toDouble() ?? live?.heartRateBpm ?? device.sensors.heartRateBpm;
+    final sensors = (live == null && link.heartRateBpm == null)
         ? device.sensors
         : SensorReading(
-            accelG: live.accelG ?? device.sensors.accelG,
-            gyroDps: live.gyroDps ?? device.sensors.gyroDps,
-            heartRateBpm: live.heartRateBpm ?? device.sensors.heartRateBpm,
+            accelG: live?.accelG ?? device.sensors.accelG,
+            gyroDps: live?.gyroDps ?? device.sensors.gyroDps,
+            heartRateBpm: heartRate,
           );
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.space4),
@@ -233,7 +238,7 @@ class DeviceExpandableCardState extends ConsumerState<DeviceExpandableCard> {
               Expanded(
                 child: _SensorReadout(
                   label: 'Heart',
-                  value: sensors.heartRateBpm == null
+                  value: (sensors.heartRateBpm == null || sensors.heartRateBpm! <= 0)
                       ? '—'
                       : '${sensors.heartRateBpm!.round()} bpm',
                 ),
@@ -362,14 +367,20 @@ class _MotionRiskDisplay extends ConsumerWidget {
     final GloveClassification? classification;
     final bool? connected;
     final double? riskScore;
+    final int? heartRateBpm;
     if (deviceId == null) {
       // No live BLE session this app session at all — distinct from a
       // session that connected and then went offline.
       classification = null;
       connected = null;
       riskScore = null;
+      heartRateBpm = null;
     } else {
-      classification = ref.watch(gloveLinkProvider).classification;
+      final link = ref.watch(gloveLinkProvider);
+      classification = link.classification;
+      // Null (shown as `-- BPM`) whenever the glove has no valid reading; the
+      // link clears it on disconnect, so a stale value cannot linger. Never 0.
+      heartRateBpm = link.heartRateBpm;
       connected = ref.watch(gloveConnectionStateProvider(deviceId)).valueOrNull == BleConnectionStatus.connected;
       // severity * confidence * 100 — NORMAL is always 0, FALL scores
       // highest, everything else lands in between. See motion_risk_score.dart.
@@ -404,7 +415,8 @@ class _MotionRiskDisplay extends ConsumerWidget {
         label:
             '${statusLabel ?? ''} '
             '${confidencePct == null ? 'Confidence: no data' : '${classification!.label} confidence: ${confidencePct.toStringAsFixed(0)} percent'} '
-            '${riskScore == null ? '' : 'Risk score: ${riskScore.toStringAsFixed(0)} of 100'}'
+            '${riskScore == null ? '' : 'Risk score: ${riskScore.toStringAsFixed(0)} of 100 '}'
+            '${heartRateBpm == null ? 'Heart rate: no reading' : 'Heart rate: $heartRateBpm beats per minute, an estimate'}'
                 .trim(),
         child: ExcludeSemantics(
           child: Column(
@@ -446,6 +458,25 @@ class _MotionRiskDisplay extends ConsumerWidget {
                 riskScore == null ? '--' : riskScore.toStringAsFixed(0),
                 style: AppTypography.headingM.copyWith(color: confidenceColor),
               ),
+              const SizedBox(height: AppSpacing.space3),
+              Text(
+                'HEART RATE',
+                style: AppTypography.eyebrow.copyWith(color: onSurface.withValues(alpha: 0.5)),
+              ),
+              const SizedBox(height: AppSpacing.space1),
+              // `-- BPM` when there is no valid reading -- never `0 BPM`, which
+              // would be a claim about a heart. See GloveHeartRate.
+              Text(
+                heartRateBpm == null ? '-- BPM' : '$heartRateBpm BPM',
+                style: AppTypography.headingM.copyWith(color: onSurface),
+              ),
+              if (heartRateBpm != null) ...[
+                const SizedBox(height: AppSpacing.space1),
+                Text(
+                  'Estimate, not a medical reading',
+                  style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.5)),
+                ),
+              ],
             ],
           ),
         ),

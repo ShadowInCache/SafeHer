@@ -232,12 +232,18 @@ class FakeBleService implements BleService {
   /// after one use.
   bool hangNextCancellation = false;
 
+  /// How many times [subscribeToCharacteristic] was called for each
+  /// characteristic UUID -- lets a test assert "exactly one subscription per
+  /// characteristic per connection" rather than assuming it.
+  final subscribeCallsByCharacteristic = <String, int>{};
+
   @override
   Stream<String> subscribeToCharacteristic(
     String deviceId, {
     required String serviceUuid,
     required String characteristicUuid,
   }) {
+    subscribeCallsByCharacteristic.update(characteristicUuid, (count) => count + 1, ifAbsent: () => 1);
     if (missingCharacteristics.contains(characteristicUuid)) {
       return Stream<String>.error(
         StateError('Service $serviceUuid has no characteristic $characteristicUuid'),

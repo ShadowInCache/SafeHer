@@ -5,6 +5,8 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 #include "safeher_v5_model.h"
+#include "safeher_heart_rate.h"
+#include "safeher_max30102.h"
 
 #define MPU_ADDR 0x68
 #define WHO_AM_I_REG 0x75
@@ -22,6 +24,12 @@
 #define SUDDEN_MOVEMENT_CONFIRMATION_WINDOWS 2  // consecutive windows required before it is notified over BLE
 #define FEATURE_COUNT 51
 #define FALL_CONFIDENCE_THRESHOLD 0.65f
+// A quick, ordinary hand movement (reaching, adjusting a bag) can score as
+// SUDDEN_MOVEMENT at low confidence -- the model is genuinely unsure, not
+// confidently wrong. Below this bar, treat the window as NORMAL instead of
+// counting it toward an alert. Does not touch FALL_CONFIDENCE_THRESHOLD or
+// FALL confirmation logic.
+#define SUDDEN_MOVEMENT_CONFIDENCE_THRESHOLD 0.65f
 #define DEBUG_FEATURES 0
 #define DATA_COLLECTION_MODE 0
 
@@ -29,8 +37,25 @@
 #define BLE_SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define BLE_CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 #define BLE_TELEMETRY_CHAR_UUID "33b4fb00-9c17-4ad2-8fc9-89ad6dbc76bd"
+// Heart rate (MAX30102). Third characteristic on the same service; the
+// classification and telemetry characteristics above are unchanged.
+#define BLE_HEART_RATE_CHAR_UUID "7805c91e-4a04-4c87-91df-bc711e39107e"
 
 #define TELEMETRY_INTERVAL_MS 500UL
+
+// MAX30102 is read in bursts, not per sample: every HEART_RATE_POLL_INTERVAL_MS
+// the FIFO holds a handful of 50 Hz samples, and one short I2C burst drains
+// them. BPM is notified once per HEART_RATE_NOTIFY_INTERVAL_MS - raw samples
+// never go over BLE. If the sensor delivers nothing for HEART_RATE_STALL_MS the
+// BPM is reported unavailable rather than held.
+#define HEART_RATE_POLL_INTERVAL_MS 100UL
+#define HEART_RATE_NOTIFY_INTERVAL_MS 1000UL
+#define HEART_RATE_STALL_MS 2000UL
+#define HEART_RATE_LOG 1  // one status line per notify interval on Serial
+// 1 = also print every raw IR sample as "IR,<counts>" (50 lines/s). Only for
+// recording a real finger signal so the beat detector can be tuned against it;
+// leave 0 in normal use.
+#define HEART_RATE_RAW_DEBUG 0
 
 const char* const CLASS_NAMES[NUM_CLASSES] = {
   "NORMAL", "SUDDEN_MOVEMENT", "SHAKING", "TWISTING", "FALL"
@@ -68,9 +93,16 @@ int16_t diagnosticGzRaw = 0;
 
 BLECharacteristic* bleResultCharacteristic = nullptr;
 BLECharacteristic* bleTelemetryCharacteristic = nullptr;
+BLECharacteristic* bleHeartRateCharacteristic = nullptr;
 BLEServer* bleServer = nullptr;
 volatile bool blePhoneConnected = false;
 unsigned long lastTelemetryMs = 0;
+
+SafeHer::HeartRate::HeartRateEstimator heartRateEstimator;
+bool heartSensorPresent = false;
+unsigned long lastHeartPollMs = 0;
+unsigned long lastHeartNotifyMs = 0;
+unsigned long lastHeartSampleMs = 0;
 
 class SafeHerBleServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer* server) override {
@@ -108,6 +140,14 @@ void initializeBLE() {
   bleTelemetryCharacteristic->addDescriptor(new BLE2902());
   bleTelemetryCharacteristic->setValue("0.00,0.0");
 
+  // Heart rate: "BPM,<bpm>" while a valid reading exists, "BPM,NONE" when not
+  // (no finger, weak signal, or no recent beat). Never a zero or invented BPM.
+  bleHeartRateCharacteristic = bleService->createCharacteristic(
+      BLE_HEART_RATE_CHAR_UUID,
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  bleHeartRateCharacteristic->addDescriptor(new BLE2902());
+  bleHeartRateCharacteristic->setValue("BPM,NONE");
+
   bleService->start();
 
   BLEAdvertising* bleAdvertising = BLEDevice::getAdvertising();
@@ -142,6 +182,78 @@ void sendTelemetry(float accelMagnitudeG, float gyroMagnitudeDps) {
            gyroMagnitudeDps);
   bleTelemetryCharacteristic->setValue(telem);
   bleTelemetryCharacteristic->notify();
+}
+
+// ---------------------------------------------------------------------------
+// Heart rate (MAX30102). STUDENT PROTOTYPE - not a medical device. The value
+// is an optical estimate and must not be presented as medically accurate.
+// ---------------------------------------------------------------------------
+
+void initializeHeartRateSensor() {
+  heartSensorPresent = SafeHer::Max30102::begin();
+  heartRateEstimator.reset();
+  lastHeartSampleMs = millis();
+  if (heartSensorPresent) {
+    Serial.println("MAX30102 detected and initialized.");
+  } else {
+    // Not fatal, unlike the motion sensor: everything else keeps working and
+    // heart rate is simply reported unavailable.
+    Serial.println("MAX30102 not detected - heart rate disabled.");
+  }
+}
+
+// Latest valid BPM, or 0 when there is none. Zero is never sent to the phone.
+int currentHeartRateBpm(unsigned long now) {
+  if (!heartSensorPresent) return 0;
+  if ((now - lastHeartSampleMs) > HEART_RATE_STALL_MS) return 0;  // sensor went quiet
+  return heartRateEstimator.bpm();
+}
+
+void notifyHeartRate(int bpm) {
+  if (bleHeartRateCharacteristic == nullptr) return;
+
+  char message[16];
+  if (bpm > 0) {
+    snprintf(message, sizeof(message), "BPM,%d", bpm);
+  } else {
+    snprintf(message, sizeof(message), "BPM,NONE");
+  }
+  bleHeartRateCharacteristic->setValue(message);  // keeps READ current too
+  if (blePhoneConnected) {
+    bleHeartRateCharacteristic->notify();
+  }
+#if HEART_RATE_LOG
+  Serial.printf("HEART_RATE: %s (finger=%d)\n", message,
+                heartRateEstimator.fingerPresent() ? 1 : 0);
+#endif
+}
+
+// Called from loop(). Drains the MAX30102 FIFO every HEART_RATE_POLL_INTERVAL_MS
+// and publishes the latest BPM once per HEART_RATE_NOTIFY_INTERVAL_MS.
+void serviceHeartRate(unsigned long now) {
+  if (!heartSensorPresent) return;
+
+  if ((now - lastHeartPollMs) >= HEART_RATE_POLL_INTERVAL_MS) {
+    lastHeartPollMs = now;
+    uint32_t irSamples[32];
+    int lost = 0;
+    const int count = SafeHer::Max30102::readIrSamples(irSamples, 32, lost);
+    if (count > 0) {
+      if (lost > 0) heartRateEstimator.skip(lost);
+      for (int i = 0; i < count; ++i) {
+        heartRateEstimator.addSample(irSamples[i]);
+#if HEART_RATE_RAW_DEBUG
+        Serial.printf("IR,%u\n", (unsigned)irSamples[i]);
+#endif
+      }
+      lastHeartSampleMs = now;
+    }
+  }
+
+  if ((now - lastHeartNotifyMs) >= HEART_RATE_NOTIFY_INTERVAL_MS) {
+    lastHeartNotifyMs = now;
+    notifyHeartRate(currentHeartRateBpm(now));
+  }
 }
 
 #if DATA_COLLECTION_MODE
@@ -399,8 +511,28 @@ void runInference() {
   extractWindowFeatures(features);
   SafeHer::V5Embedded::evaluate_forest(features, scores);
 
-  const int predictedClass = SafeHer::V5Embedded::predict_class(scores);
+  int predictedClass = SafeHer::V5Embedded::predict_class(scores);
   const float confidence = SafeHer::V5Embedded::predict_confidence(scores);
+  if (predictedClass == SUDDEN_MOVEMENT_CLASS_INDEX &&
+      confidence < SUDDEN_MOVEMENT_CONFIDENCE_THRESHOLD) {
+    Serial.printf("SUDDEN_MOVEMENT_LOW_CONFIDENCE: %.2f < %.2f threshold, treating as NORMAL\n",
+                  confidence, SUDDEN_MOVEMENT_CONFIDENCE_THRESHOLD);
+    predictedClass = 0;  // NORMAL
+  }
+  // Explicit, user-requested trade-off: a FALL prediction below
+  // FALL_CONFIDENCE_THRESHOLD is now reported to the phone as NORMAL
+  // instead of FALL. This cuts false FALL alerts, but a real fall the
+  // model is unsure about (roughly 1 in 4 real falls score below 0.65
+  // confidence, per cross-validation) will no longer reach the phone at
+  // all. Previously, a low-confidence FALL was still sent as "FALL" with
+  // its true confidence attached, and applyFallConfirmation() below only
+  // downgraded the local Serial-log safety text (ABNORMAL vs HIGH_RISK) --
+  // the phone always saw the real reading. This override removes that.
+  if (predictedClass == FALL_CLASS_INDEX && confidence < FALL_CONFIDENCE_THRESHOLD) {
+    Serial.printf("FALL_LOW_CONFIDENCE: %.2f < %.2f threshold, treating as NORMAL\n",
+                  confidence, FALL_CONFIDENCE_THRESHOLD);
+    predictedClass = 0;  // NORMAL
+  }
   uint32_t endMicros = micros();
 #if DEBUG_FEATURES
   printDebugFeatures(features, predictedClass, confidence);
@@ -530,6 +662,10 @@ void setup() {
 
   initializeMPU6500();
   Serial.println("MPU-6500 detected and initialized.");
+
+  // MAX30102 shares the MPU's I2C bus (already started above). Optional: the
+  // glove runs without it.
+  initializeHeartRateSensor();
 #endif
 
   nextSampleTime = micros();
@@ -570,6 +706,10 @@ void loop() {
       lastTelemetryMs = millis();
       sendTelemetry(accelMagnitudeG, gyroMagnitudeDps);
     }
+
+    // Heart rate runs after the motion sample so a short MAX30102 burst never
+    // delays the 100 Hz motion path; it only does work every 100 ms.
+    serviceHeartRate(millis());
 #endif
   }
 }

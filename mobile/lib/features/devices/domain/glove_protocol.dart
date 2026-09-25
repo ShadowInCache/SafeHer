@@ -12,14 +12,17 @@ import '../../../shared/models/threat_level.dart';
 ///
 /// ## The wire format
 ///
-/// Two notify characteristics on one service, because the two streams have
+/// Three notify characteristics on one service, because the streams have
 /// different rates and different meanings. Classification fires per inference
 /// window; telemetry ticks steadily so the UI has something live to show even
-/// when nothing is happening.
+/// when nothing is happening; heart rate updates about once a second.
 ///
 /// * classification — `"<LABEL>,<confidence>"`   e.g. `FALL,0.93`
 /// * telemetry      — `"<accelG>,<gyroDps>,<bpm>,<batteryPct>"`
 ///                     e.g. `1.02,4.3,78,86`
+/// * heart rate     — `"BPM,<bpm>"` or `"BPM,NONE"`   e.g. `BPM,74`
+///                     (its own characteristic; the `<bpm>` field in
+///                     telemetry is legacy and not sent by current firmware)
 ///
 /// Plain CSV rather than JSON: an ESP32 building a string with `snprintf` has
 /// no room for a parser, and the payload has to fit in a single 20-byte BLE
@@ -50,6 +53,15 @@ abstract final class GloveBle {
   /// older firmware simply never notifies here and the readings stay unknown,
   /// rather than the connection failing.
   static const telemetryCharacteristicUuid = '33b4fb00-9c17-4ad2-8fc9-89ad6dbc76bd';
+
+  /// Notifies `"BPM,<bpm>"` (e.g. `BPM,74`) about once a second while the
+  /// glove's pulse sensor has a valid reading, and `"BPM,NONE"` while it does
+  /// not (no finger, weak signal, or no recent beat). See [GloveHeartRate].
+  ///
+  /// Optional, like [telemetryCharacteristicUuid]: firmware without a pulse
+  /// sensor simply does not expose it, and the app shows no heart rate rather
+  /// than failing.
+  static const heartRateCharacteristicUuid = '7805c91e-4a04-4c87-91df-bc711e39107e';
 
   /// Replacements for the stock example UUIDs, for a future firmware flash.
   static const suggestedPrivateServiceUuid = '2f56491c-849f-48f5-9355-35bc69dca64b';
@@ -143,6 +155,60 @@ class GloveClassification {
 
   @override
   String toString() => 'GloveClassification($label, $confidence)';
+}
+
+/// One heart-rate update from the glove's pulse sensor.
+///
+/// **Student prototype, not a medical device.** The value is an optical
+/// estimate: it depends on finger pressure, ambient light and movement, and
+/// must never be presented as medically accurate.
+///
+/// [bpm] is null when the glove is saying "no valid reading" -- an explicit
+/// `BPM,NONE`, or a number outside the plausible human range. It is never
+/// zero: 0 bpm is a claim about a heart, and "the sensor has no signal" is not
+/// that claim.
+///
+/// The two states a parse can end in are deliberately different:
+///
+/// * a [GloveHeartRate] with a null [bpm] -- the glove *told us* there is no
+///   reading. The app should clear whatever it was showing.
+/// * `null` from [tryParse] -- the packet was garbled. Drop it and keep what
+///   is already on screen, like every other characteristic here.
+class GloveHeartRate {
+  const GloveHeartRate({this.bpm});
+
+  /// Beats per minute, or null when there is no valid reading.
+  final int? bpm;
+
+  /// The plausible range for a live human reading. Outside it the value is
+  /// treated as "no reading", not clamped: a clamped 300 would still be a
+  /// fabricated number.
+  static const minBpm = 30;
+  static const maxBpm = 220;
+
+  /// Parses `"BPM,<bpm>"` or `"BPM,NONE"`.
+  ///
+  /// Returns null (drop the packet) for anything malformed -- a wrong label, a
+  /// missing value, or text that is neither a number nor `NONE`. Never throws:
+  /// truncated BLE payloads are routine.
+  static GloveHeartRate? tryParse(String raw) {
+    final parts = raw.trim().split(',');
+    if (parts.length < 2) return null;
+    if (parts[0].trim().toUpperCase() != 'BPM') return null;
+
+    final value = parts[1].trim();
+    if (value.toUpperCase() == 'NONE') return const GloveHeartRate();
+
+    final parsed = double.tryParse(value);
+    if (parsed == null || parsed.isNaN || parsed.isInfinite) return null;
+
+    final bpm = parsed.round();
+    if (bpm < minBpm || bpm > maxBpm) return const GloveHeartRate();
+    return GloveHeartRate(bpm: bpm);
+  }
+
+  @override
+  String toString() => 'GloveHeartRate(${bpm ?? 'none'})';
 }
 
 /// One telemetry tick from the glove.

@@ -278,6 +278,54 @@ void main() {
       expect(find.text('Devices (2)'), findsOneWidget);
     });
 
+    testWidgets('glove card shows heart rate next to the motion classification', (tester) async {
+      const deviceId = 'AA:BB:CC:DD:EE:FF';
+      const glove = BleDiscoveredDevice(
+        id: deviceId,
+        advertisedName: 'SafeHer-Glove',
+        rssi: -50,
+        isConnectable: true,
+      );
+      final ble = FakeBleService();
+      addTearDown(ble.dispose);
+      ble.notifications[GloveBle.classificationCharacteristicUuid] = ['NORMAL,0.9200'];
+      ble.notifications[GloveBle.heartRateCharacteristicUuid] = ['BPM,76'];
+
+      await tester.pumpWidget(_harness(ble: ble));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final container = ProviderScope.containerOf(tester.element(find.byType(MaterialApp)));
+      container.read(gloveLinkProvider);
+      container.read(blePairingControllerProvider.notifier).selectDeviceType(DeviceType.glove);
+      await container.read(blePairingControllerProvider.notifier).connect(glove);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.text('Safety Glove'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Motion classification is still there, undisturbed...
+      expect(find.text('NORMAL'), findsOneWidget);
+      expect(find.text('92'), findsOneWidget);
+      expect(find.text('RISK SCORE'), findsOneWidget);
+      // ...with heart rate alongside it, and honestly labelled as an estimate.
+      expect(find.text('HEART RATE'), findsOneWidget);
+      expect(find.text('76 BPM'), findsOneWidget);
+      expect(find.text('Estimate, not a medical reading'), findsOneWidget);
+      expect(find.text('-- BPM'), findsNothing);
+
+      // Power loss: the reading is erased with the connection, and the card
+      // says so -- it never falls back to "0 BPM" or the old number.
+      ble.dropConnection(deviceId);
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('OFFLINE'), findsOneWidget);
+      expect(find.text('76 BPM'), findsNothing, reason: 'a stale BPM must not outlive the connection');
+      expect(find.text('-- BPM'), findsOneWidget);
+      expect(find.text('0 BPM'), findsNothing);
+    });
+
     testWidgets('deep link with initialExpandedId auto-expands that device', (tester) async {
       await tester.pumpWidget(_harness(initialLocation: '/devices/glove'));
       await tester.pump(const Duration(milliseconds: 100));

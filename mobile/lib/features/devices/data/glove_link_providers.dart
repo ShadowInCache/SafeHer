@@ -19,6 +19,8 @@ class GloveLinkState {
     this.telemetry,
     this.isListening = false,
     this.telemetryUnsupported = false,
+    this.heartRateBpm,
+    this.heartRateUnsupported = false,
     this.lastUpdate,
   });
 
@@ -27,6 +29,19 @@ class GloveLinkState {
 
   /// The most recent telemetry tick, if any.
   final GloveTelemetry? telemetry;
+
+  /// The glove's latest valid heart rate in beats per minute, or null when it
+  /// has none -- no finger, weak signal, no recent beat, or firmware without a
+  /// pulse sensor. Never zero. Cleared the moment the link drops, so a stale
+  /// reading cannot outlive the connection that produced it.
+  ///
+  /// Student prototype: an optical estimate, not medically accurate.
+  final int? heartRateBpm;
+
+  /// The glove connected but has no heart-rate characteristic -- firmware
+  /// without the pulse sensor. Lets the UI say so instead of showing a blank
+  /// that looks like a fault.
+  final bool heartRateUnsupported;
 
   /// Subscribed to at least the classification characteristic.
   final bool isListening;
@@ -39,13 +54,19 @@ class GloveLinkState {
 
   final DateTime? lastUpdate;
 
-  bool get hasData => classification != null || telemetry != null;
+  bool get hasData => classification != null || telemetry != null || heartRateBpm != null;
 
+  /// [clearHeartRate] exists because the null-coalescing merge below cannot
+  /// express "set the heart rate back to none": the glove saying `BPM,NONE`
+  /// has to erase the last reading, not leave it on screen.
   GloveLinkState copyWith({
     GloveClassification? classification,
     GloveTelemetry? telemetry,
     bool? isListening,
     bool? telemetryUnsupported,
+    int? heartRateBpm,
+    bool clearHeartRate = false,
+    bool? heartRateUnsupported,
     DateTime? lastUpdate,
   }) {
     return GloveLinkState(
@@ -53,6 +74,8 @@ class GloveLinkState {
       telemetry: telemetry ?? this.telemetry,
       isListening: isListening ?? this.isListening,
       telemetryUnsupported: telemetryUnsupported ?? this.telemetryUnsupported,
+      heartRateBpm: clearHeartRate ? null : (heartRateBpm ?? this.heartRateBpm),
+      heartRateUnsupported: heartRateUnsupported ?? this.heartRateUnsupported,
       lastUpdate: lastUpdate ?? this.lastUpdate,
     );
   }
@@ -79,8 +102,10 @@ class GloveLinkState {
 class GloveLink extends _$GloveLink {
   StreamSubscription<String>? _classificationSub;
   StreamSubscription<String>? _telemetrySub;
+  StreamSubscription<String>? _heartRateSub;
   String? _listeningTo;
   bool _gotFirstClassification = false;
+  bool _heartRateAvailable = false;
 
   @override
   GloveLinkState build() {
@@ -112,6 +137,7 @@ class GloveLink extends _$GloveLink {
     _cancelSubscriptions();
     _listeningTo = deviceId;
     _gotFirstClassification = false;
+    _heartRateAvailable = false;
 
     // Only SafeHer gloves speak this protocol. Subscribing to a stranger's
     // peripheral would either throw or feed nonsense into the threat display.
@@ -173,6 +199,47 @@ class GloveLink extends _$GloveLink {
     } on Object {
       state = state.copyWith(telemetryUnsupported: true);
     }
+
+    // Heart rate is optional in the same way: a glove without the pulse sensor
+    // (or older firmware) has no such characteristic, which must not disturb
+    // the classification stream. Same single-subscription rule as the other
+    // two -- this is the only place that ever subscribes to it, and
+    // `_cancelSubscriptions` drops it together with them on every disconnect,
+    // so a reconnect starts a fresh one and never a second.
+    try {
+      _heartRateSub = service
+          .subscribeToCharacteristic(
+            deviceId,
+            serviceUuid: GloveBle.serviceUuid,
+            characteristicUuid: GloveBle.heartRateCharacteristicUuid,
+          )
+          .listen(
+            _onHeartRate,
+            onError: (error) {
+              _bleLog('heart rate characteristic unavailable: $error');
+              state = state.copyWith(heartRateUnsupported: true);
+            },
+          );
+    } on Object {
+      state = state.copyWith(heartRateUnsupported: true);
+    }
+  }
+
+  void _onHeartRate(String raw) {
+    final parsed = GloveHeartRate.tryParse(raw);
+    // Garbled packet: keep what is on screen, like the other characteristics.
+    if (parsed == null) return;
+
+    final bpm = parsed.bpm;
+    final available = bpm != null;
+    // Log on availability changes only -- this ticks once a second.
+    if (available != _heartRateAvailable) {
+      _heartRateAvailable = available;
+      _bleLog(available ? 'heart rate available ($bpm bpm)' : 'heart rate unavailable (no valid reading)');
+    }
+    state = bpm == null
+        ? state.copyWith(clearHeartRate: true, lastUpdate: DateTime.now())
+        : state.copyWith(heartRateBpm: bpm, lastUpdate: DateTime.now());
   }
 
   void _onClassification(String raw) {
@@ -219,10 +286,13 @@ class GloveLink extends _$GloveLink {
   void _cancelSubscriptions() {
     final classificationSub = _classificationSub;
     final telemetrySub = _telemetrySub;
+    final heartRateSub = _heartRateSub;
     _classificationSub = null;
     _telemetrySub = null;
+    _heartRateSub = null;
     unawaited(classificationSub?.cancel());
     unawaited(telemetrySub?.cancel());
+    unawaited(heartRateSub?.cancel());
   }
 
   void _stop() {

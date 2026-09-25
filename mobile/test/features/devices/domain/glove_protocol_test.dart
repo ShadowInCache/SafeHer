@@ -9,6 +9,54 @@ import 'package:safeher_app/shared/models/threat_level.dart';
 /// notified into nothing, and the app showed hardcoded zeros. These tests are
 /// the thing that turns a future disagreement into a red build.
 void main() {
+  group('GloveHeartRate.tryParse', () {
+    test('parses what the firmware sends', () {
+      expect(GloveHeartRate.tryParse('BPM,74')!.bpm, 74);
+      expect(GloveHeartRate.tryParse('BPM,120')!.bpm, 120);
+    });
+
+    test('BPM,NONE is an explicit "no reading", distinct from a garbled packet', () {
+      final none = GloveHeartRate.tryParse('BPM,NONE');
+      expect(none, isNotNull, reason: 'the glove told us there is no reading');
+      expect(none!.bpm, isNull);
+    });
+
+    test('is tolerant of case and surrounding whitespace', () {
+      expect(GloveHeartRate.tryParse('  bpm , 74 \n')!.bpm, 74);
+      expect(GloveHeartRate.tryParse('BPM,none')!.bpm, isNull);
+    });
+
+    test('never reports zero: 0 bpm is a claim about a heart, not "no signal"', () {
+      final zero = GloveHeartRate.tryParse('BPM,0');
+      expect(zero, isNotNull);
+      expect(zero!.bpm, isNull);
+    });
+
+    test('an implausible number is "no reading", not clamped into a fabricated one', () {
+      expect(GloveHeartRate.tryParse('BPM,5')!.bpm, isNull);
+      expect(GloveHeartRate.tryParse('BPM,300')!.bpm, isNull);
+      expect(GloveHeartRate.tryParse('BPM,-40')!.bpm, isNull);
+      // The edges of the plausible range are still readings.
+      expect(GloveHeartRate.tryParse('BPM,${GloveHeartRate.minBpm}')!.bpm, GloveHeartRate.minBpm);
+      expect(GloveHeartRate.tryParse('BPM,${GloveHeartRate.maxBpm}')!.bpm, GloveHeartRate.maxBpm);
+    });
+
+    test('a garbled packet is dropped (null), never thrown', () {
+      for (final raw in ['', 'BPM', 'BPM,', 'BPM,abc', 'BPM,NaN', 'BPM,Infinity', '74', 'HR,74', ',74']) {
+        expect(GloveHeartRate.tryParse(raw), isNull, reason: 'input: "$raw"');
+      }
+    });
+
+    test('uses its own characteristic, distinct from the existing three UUIDs', () {
+      const others = {
+        GloveBle.serviceUuid,
+        GloveBle.classificationCharacteristicUuid,
+        GloveBle.telemetryCharacteristicUuid,
+      };
+      expect(others.contains(GloveBle.heartRateCharacteristicUuid), isFalse);
+    });
+  });
+
   group('GloveClassification.tryParse', () {
     test('parses what the firmware sends', () {
       final result = GloveClassification.tryParse('FALL,0.93')!;

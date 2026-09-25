@@ -686,7 +686,7 @@ class _LiveMonitoringSummaryCard extends ConsumerWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              _describeGloveTelemetry(glove.telemetry, glove.telemetryUnsupported),
+              _describeGloveTelemetry(glove.telemetry, glove.telemetryUnsupported, glove.heartRateBpm),
               style: AppTypography.labelM.copyWith(color: onSurface.withValues(alpha: 0.5)),
             ),
           ] else if (latest == null)
@@ -717,13 +717,17 @@ class _LiveMonitoringSummaryCard extends ConsumerWidget {
 }
 
 /// One line of glove telemetry, or an honest reason there is none.
-String _describeGloveTelemetry(GloveTelemetry? telemetry, bool unsupported) {
-  if (unsupported) return 'This glove reports classifications only.';
-  if (telemetry == null) return 'No sensor readings yet.';
+///
+/// [heartRateBpm] is the glove's dedicated pulse-sensor reading; it wins over
+/// any legacy heart-rate field in [telemetry] and is omitted when null.
+String _describeGloveTelemetry(GloveTelemetry? telemetry, bool unsupported, int? heartRateBpm) {
+  if (unsupported && heartRateBpm == null) return 'This glove reports classifications only.';
+  if (telemetry == null && heartRateBpm == null) return 'No sensor readings yet.';
+  final bpm = heartRateBpm ?? telemetry?.heartRateBpm?.round();
   final parts = <String>[
-    if (telemetry.accelG != null) '${telemetry.accelG!.toStringAsFixed(2)}g',
-    if (telemetry.gyroDps != null) '${telemetry.gyroDps!.toStringAsFixed(1)}°/s',
-    if (telemetry.heartRateBpm != null) '${telemetry.heartRateBpm!.round()} bpm',
+    if (telemetry?.accelG != null) '${telemetry!.accelG!.toStringAsFixed(2)}g',
+    if (telemetry?.gyroDps != null) '${telemetry!.gyroDps!.toStringAsFixed(1)}°/s',
+    if (bpm != null) '$bpm bpm',
   ];
   return parts.isEmpty ? 'No sensor readings yet.' : parts.join(' · ');
 }

@@ -181,6 +181,124 @@ void main() {
     }, timeout: const Timeout(Duration(seconds: 10)));
   });
 
+  group('heart rate', () {
+    // The glove's MAX30102 reports on its own characteristic. It rides the same
+    // single connection and the same GloveLink lifecycle as classification and
+    // telemetry: one subscription per characteristic, dropped on disconnect,
+    // recreated on reconnect, and never a second connection or reconnect loop.
+    const hrUuid = GloveBle.heartRateCharacteristicUuid;
+
+    test('receives BPM alongside the classification, without disturbing it', () async {
+      ble.notifications[GloveBle.classificationCharacteristicUuid] = ['NORMAL,0.99'];
+      ble.notifications[hrUuid] = ['BPM,74'];
+
+      await connectGlove();
+
+      final state = container.read(gloveLinkProvider);
+      expect(state.heartRateBpm, 74);
+      expect(state.classification?.label, 'NORMAL');
+      expect(state.classification?.confidence, closeTo(0.99, 1e-9));
+      expect(state.heartRateUnsupported, isFalse);
+    });
+
+    test('keeps the latest valid BPM as new readings arrive', () async {
+      ble.notifications[hrUuid] = ['BPM,70', 'BPM,72', 'BPM,75'];
+      await connectGlove();
+      expect(container.read(gloveLinkProvider).heartRateBpm, 75);
+    });
+
+    test('BPM,NONE clears the reading instead of leaving the last one on screen', () async {
+      ble.notifications[hrUuid] = ['BPM,74', 'BPM,NONE'];
+      await connectGlove();
+      expect(container.read(gloveLinkProvider).heartRateBpm, isNull);
+    });
+
+    test('a garbled packet is dropped and the last valid BPM stays', () async {
+      ble.notifications[hrUuid] = ['BPM,74', 'BPM,', 'garbage'];
+      await connectGlove();
+      expect(container.read(gloveLinkProvider).heartRateBpm, 74);
+    });
+
+    test('zero and implausible values are never shown as a BPM', () async {
+      ble.notifications[hrUuid] = ['BPM,0'];
+      await connectGlove();
+      expect(container.read(gloveLinkProvider).heartRateBpm, isNull);
+    });
+
+    test('firmware without a pulse sensor: classification works, heart rate is unsupported', () async {
+      ble.missingCharacteristics.add(hrUuid);
+      ble.notifications[GloveBle.classificationCharacteristicUuid] = ['FALL,0.90'];
+
+      await connectGlove();
+
+      final state = container.read(gloveLinkProvider);
+      expect(state.classification?.label, 'FALL');
+      expect(state.isListening, isTrue, reason: 'a missing optional characteristic must not drop the link');
+      expect(state.heartRateBpm, isNull);
+      expect(state.heartRateUnsupported, isTrue);
+    });
+
+    test('exactly one subscription per characteristic on a single connection', () async {
+      ble.notifications[hrUuid] = ['BPM,74'];
+      await connectGlove();
+
+      expect(ble.connectCalls, 1, reason: 'heart rate must not open a second connection');
+      expect(ble.subscribeCallsByCharacteristic[GloveBle.classificationCharacteristicUuid], 1);
+      expect(ble.subscribeCallsByCharacteristic[GloveBle.telemetryCharacteristicUuid], 1);
+      expect(ble.subscribeCallsByCharacteristic[hrUuid], 1);
+    });
+
+    test('disconnect clears BPM; reconnect resubscribes all three, once each, and BPM resumes', () async {
+      ble.notifications[GloveBle.classificationCharacteristicUuid] = ['NORMAL,0.99'];
+      ble.notifications[hrUuid] = ['BPM,74'];
+      await connectGlove();
+      expect(container.read(gloveLinkProvider).heartRateBpm, 74);
+
+      // Power cut. A reading from before the drop must not survive it.
+      ble.dropConnection('glove-1');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      var state = container.read(gloveLinkProvider);
+      expect(state.isListening, isFalse);
+      expect(state.heartRateBpm, isNull, reason: 'a stale BPM must not outlive the connection');
+
+      // Power back on: the existing reconnect path runs and GloveLink
+      // resubscribes from scratch. New readings are what the glove sends now.
+      ble.notifications[GloveBle.classificationCharacteristicUuid] = ['SHAKING,0.80'];
+      ble.notifications[hrUuid] = ['BPM,88'];
+      await Future<void>.delayed(
+        BlePairingController.reconnectBackoff + const Duration(milliseconds: 300),
+      );
+
+      state = container.read(gloveLinkProvider);
+      expect(state.isListening, isTrue);
+      expect(state.classification?.label, 'SHAKING');
+      expect(state.heartRateBpm, 88);
+
+      expect(ble.subscribeCallsByCharacteristic[GloveBle.classificationCharacteristicUuid], 2);
+      expect(ble.subscribeCallsByCharacteristic[GloveBle.telemetryCharacteristicUuid], 2);
+      expect(ble.subscribeCallsByCharacteristic[hrUuid], 2,
+          reason: 'one per connection -- a second listener would double this');
+    }, timeout: const Timeout(Duration(seconds: 10)));
+
+    test('BPM resumes on reconnect even when the previous subscription can never be cancelled', () async {
+      // The real deadlock from the field: the old subscription's cancel() never
+      // completes on a dead link. The heart-rate subscription is created with
+      // the same non-awaiting cancellation as the others, so it must not block.
+      ble.notifications[hrUuid] = ['BPM,74'];
+      await connectGlove();
+
+      ble.hangNextCancellation = true;
+      ble.dropConnection('glove-1');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      ble.notifications[hrUuid] = ['BPM,91'];
+      await Future<void>.delayed(
+        BlePairingController.reconnectBackoff + const Duration(milliseconds: 300),
+      );
+
+      expect(container.read(gloveLinkProvider).heartRateBpm, 91);
+    }, timeout: const Timeout(Duration(seconds: 10)));
+  });
+
   group('robustness', () {
     test('a malformed notification does not clear the last good reading', () async {
       // A truncated BLE packet is a lost reading, not evidence that the
