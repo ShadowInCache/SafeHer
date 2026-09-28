@@ -11,6 +11,7 @@ import '../../../../shared/components/feedback/sa_signal_bars.dart';
 import '../../../../shared/components/icons/sa_icon.dart';
 import '../../../../shared/components/overlays/sa_bottom_sheet.dart';
 import '../../data/ble_providers.dart';
+import '../../data/glove_link_providers.dart';
 import '../../data/motion_data_providers.dart';
 import '../../domain/models/ble_models.dart';
 import '../../domain/models/ble_pairing_state.dart';
@@ -143,9 +144,11 @@ class _BlePairingSheetContentState extends ConsumerState<BlePairingSheetContent>
         glyph: SaIconGlyph.bluetooth,
         tint: AppColors.warning500,
         title: 'Reconnecting',
-        body:
-            'Attempt ${state.reconnectAttempt} of ${BlePairingController.maxReconnectAttempts} to reach '
-            '${state.target?.displayName ?? 'the device'}.',
+        // No attempt counter: reconnecting no longer gives up on its own
+        // (see BlePairingController's doc comment) — a power cycle can take
+        // anywhere from seconds to minutes, and this keeps trying for as
+        // long as the device stays away.
+        body: 'Reconnecting to ${state.target?.displayName ?? 'the device'}…',
         showProgress: true,
       ),
       BlePairingStage.disconnected => _MessageView(
@@ -411,14 +414,15 @@ class _ConnectedView extends ConsumerWidget {
     final registered = state.stage == BlePairingStage.registered;
     final device = state.target;
 
-    // Temporary: subscribe so [SAFEHER MOTION] debug logs fire, and show
-    // the live reading, while connected during end-to-end BLE verification.
+    // Reads the same single classification subscription GloveLink already
+    // owns (see its doc comment) rather than opening a second one — two
+    // independent notify subscriptions on the same characteristic is what
+    // was silently starving the device card's Motion Risk Score before.
     // Glove-only: the glove is the only wearable that speaks this GATT
     // service, and this must never appear while pairing an unrelated
     // device type (glasses, ring, pendant) — those are owned elsewhere.
     final isGlove = state.selectedType == DeviceType.glove;
-    final motionAsync = device != null && isGlove ? ref.watch(motionDataProvider(device.id)) : null;
-    final motion = motionAsync?.value;
+    final motion = device != null && isGlove ? ref.watch(gloveLinkProvider).classification : null;
     final motionRiskScore = device != null && isGlove ? ref.watch(motionRiskScoreProvider(device.id)) : null;
 
     return Column(
@@ -461,7 +465,7 @@ class _ConnectedView extends ConsumerWidget {
           Semantics(
             liveRegion: true,
             child: Text(
-              'Motion: ${motion.classification} (${(motion.confidence * 100).toStringAsFixed(1)}%)',
+              'Motion: ${motion.label} (${(motion.confidence * 100).toStringAsFixed(1)}%)',
               textAlign: TextAlign.center,
               style: AppTypography.bodyM.copyWith(
                 color: AppColors.violet500,
