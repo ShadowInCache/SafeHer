@@ -151,7 +151,7 @@ flowchart TB
     subgraph Primary["Primary signals -- these and only these decide the score"]
         G["Smart Glove\nXGBoost"] --> GS["glove score"]
         C["Glasses camera\nYOLOv8-nano"] --> WS["weapon score"]
-        M["Glasses mic\nCNN + LSTM"] --> AS["audio score"]
+        M["Phone mic\nASR + TF-IDF"] --> AS["audio score"]
     end
 
     GS & WS & AS --> F["Threat Fusion Engine\nweighted + solo floor + corroboration"]
@@ -163,6 +163,7 @@ flowchart TB
         FE["Facial expression"]
         HR["Heart rate"]
         NT["Time of day"]
+        GM["Glasses mic\nevidence only"]
         VID["Video / audio recording"]
     end
 

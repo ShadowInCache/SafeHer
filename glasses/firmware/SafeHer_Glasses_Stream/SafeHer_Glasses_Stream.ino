@@ -10,6 +10,7 @@
 //   GET /stream   MJPEG video, multipart/x-mixed-replace
 //   GET /status   JSON identity — the app refuses to pair without it
 //   GET /audio    streaming WAV, recorded as evidence during an emergency
+//   GET /level    JSON loudness in dBFS, measured continuously
 //   ws://:81      raw PCM, kept for the standalone demo
 //
 // The board runs no model. YOLOv8n needs roughly two orders of magnitude more
@@ -17,6 +18,7 @@
 // the video never leaves it. See docs/WEAPON_INFERENCE_PLACEMENT.md.
 
 #include <Arduino.h>
+#include <math.h>
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include "esp_camera.h"
@@ -90,6 +92,28 @@ WebSocketsServer audioServer(81);
 i2s_chan_handle_t rx_handle = NULL;
 
 int16_t audioBuffer[AUDIO_SAMPLES];
+
+// =====================================================
+// SafeHer app: MICROPHONE LEVEL
+// =====================================================
+//
+// Written by streamAudio() on core 1, read by the HTTP task on core 0, with no
+// lock. Each value is a naturally aligned 32-bit store, which is atomic on this
+// part, so a reader sees either the previous figure or the next one and never a
+// torn mixture. A mutex here would put the audio loop behind the network.
+//
+// Stored as hundredths of a decibel because the point of this endpoint is to be
+// cheap: an integer compare beats a float parse at both ends.
+//
+// `audioLevelValid` stays false until a read actually succeeds. A microphone
+// whose ribbon is unseated must report *unknown*, never a convincing -120 dB --
+// silence and a dead sensor are opposite claims, and this is the only code that
+// can tell them apart.
+static const int32_t AUDIO_LEVEL_FLOOR_CENTI_DB = -12000;  // -120.00 dBFS
+
+volatile int32_t audioLevelCentiDb = AUDIO_LEVEL_FLOOR_CENTI_DB;
+volatile int32_t audioPeakCentiDb  = AUDIO_LEVEL_FLOOR_CENTI_DB;
+volatile bool    audioLevelValid   = false;
 
 // =====================================================
 // CLIENTS
@@ -298,6 +322,45 @@ void sendStatus(WiFiClient &client) {
 }
 
 // =====================================================
+// SafeHer app: LEVEL -- loudness without the bandwidth
+// =====================================================
+//
+// /audio costs about 32 kB/s of continuous radio, which is the most expensive
+// thing this board can do. This endpoint answers the one question a safety app
+// wants to ask continuously -- "has it suddenly got loud in here" -- for a few
+// dozen bytes, computed from samples the microphone loop already reads.
+//
+// `available` is false when no successful read has happened yet. The app must
+// read that as unknown rather than quiet: a disconnected microphone reporting a
+// convincing -120 dB would look exactly like a calm room.
+
+void sendLevel(WiFiClient &client) {
+
+  const bool valid = audioLevelValid;
+  const int32_t level = audioLevelCentiDb;
+  const int32_t peak = audioPeakCentiDb;
+
+  char body[128];
+  if (valid) {
+    snprintf(body, sizeof(body),
+             "{\"level_dbfs\":%.2f,\"peak_dbfs\":%.2f,\"available\":true}",
+             level / 100.0, peak / 100.0);
+  } else {
+    snprintf(body, sizeof(body), "{\"available\":false}");
+  }
+
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: application/json");
+  client.println("Access-Control-Allow-Origin: *");
+  client.print  ("Content-Length: ");
+  client.println(strlen(body));
+  client.println("Connection: close");
+  client.println();
+  client.print(body);
+  client.flush();
+}
+
+// =====================================================
 // SafeHer app: AUDIO over HTTP as streaming WAV
 // =====================================================
 //
@@ -341,9 +404,18 @@ void sendWavHeader(WiFiClient &client) {
 String readRequestPath(WiFiClient &client) {
     unsigned long start = millis();
 
-    // Wait briefly for the HTTP request to arrive
+    // Wait briefly for the HTTP request to arrive.
+    //
+    // 300 ms, not the 2000 ms this used to allow. This runs inside
+    // videoStreamTask -- the same loop that captures and sends frames -- so
+    // every millisecond spent here is a millisecond the video is not being
+    // served. A client on the same LAN that has completed a TCP handshake sends
+    // its request line within single-digit milliseconds; the old budget bought
+    // nothing, and let one half-open connection freeze the stream for two
+    // seconds. That cost little while connections were rare. It costs a great
+    // deal now that /level invites polling.
     while (client.connected() && !client.available()) {
-        if (millis() - start > 2000) {
+        if (millis() - start > 300) {
             return "";
         }
         delay(1);
@@ -427,6 +499,11 @@ Serial.println("]");
       if (path == "/status") {
 
     sendStatus(newClient);
+    newClient.stop();
+
+} else if (path == "/level") {
+
+    sendLevel(newClient);
     newClient.stop();
 
 } else if (path == "/audio") {
@@ -586,6 +663,9 @@ void streamAudio() {
   static float dcEstimate = 0.0f;
   static float filteredSample = 0.0f;
 
+  // SafeHer app: accumulated for /level, before the voice gain below.
+  double sumSquares = 0.0;
+
   for (int i = 0; i < samples; i++) {
 
     float sample = (float)audioBuffer[i];
@@ -593,6 +673,12 @@ void streamAudio() {
     // Remove DC
     dcEstimate = 0.995f * dcEstimate + 0.005f * sample;
     sample -= dcEstimate;
+
+    // SafeHer app: the level is taken here -- DC removed, but before the 12x
+    // gain and the clipping that follow. Measured after them it would describe
+    // the amplifier rather than the room, and would sit pinned near full scale
+    // through any ordinary conversation.
+    sumSquares += (double)sample * (double)sample;
 
     // Voice gain
     sample *= 12.0f;
@@ -604,6 +690,33 @@ void streamAudio() {
     if (filteredSample < -30000.0f) filteredSample = -30000.0f;
 
     audioBuffer[i] = (int16_t)filteredSample;
+  }
+
+  // SafeHer app: publish the level for /level.
+  //
+  // A shout is over in a fraction of a second while the app polls every couple
+  // of seconds, so the instantaneous figure alone would miss almost every one.
+  // The peak decays by about 8% per buffer -- roughly two seconds back to the
+  // noise floor at this buffer size -- which is long enough to be caught and
+  // short enough not to still be describing a car door that slammed a minute
+  // ago.
+  if (samples > 0) {
+    const double floorDb = (double)AUDIO_LEVEL_FLOOR_CENTI_DB / 100.0;
+    const double meanSquare = sumSquares / (double)samples;
+    const double rms = sqrt(meanSquare);
+    double dbfs = (rms > 0.0) ? 20.0 * log10(rms / 32768.0) : floorDb;
+    if (dbfs < floorDb) dbfs = floorDb;
+
+    const int32_t centiDb = (int32_t)lround(dbfs * 100.0);
+    const int32_t decayedPeak =
+        audioLevelValid
+            ? (int32_t)lround((double)audioPeakCentiDb * 0.92 +
+                              (double)AUDIO_LEVEL_FLOOR_CENTI_DB * 0.08)
+            : AUDIO_LEVEL_FLOOR_CENTI_DB;
+
+    audioLevelCentiDb = centiDb;
+    audioPeakCentiDb = (centiDb > decayedPeak) ? centiDb : decayedPeak;
+    audioLevelValid = true;
   }
 
   // WebSocket — the standalone demo.

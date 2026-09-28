@@ -49,11 +49,20 @@ This exercises the same contract the phone does, in the same order, and names
 the step that failed. It checks mDNS resolution, that `/status` identifies
 itself as `safeher-glasses`, that **every** MJPEG part carries a
 `Content-Length`, the frame rate, that each frame is a complete JPEG, the
-resolution, and the audio stream's data rate.
+resolution, the audio stream's data rate, and the `/level` loudness reading.
 
 | It says | Do this |
 |---|---|
 | `FAIL resolve safeher-glasses.local` | mDNS is blocked — router multicast filtering or AP/client isolation. Pass `--host <ip>` to keep going; the app pairs by IP too, release builds included |
+| `FAIL identifies as safeher-glasses` | Something else answered on that address. The app will refuse it too |
+| `FAIL Content-Length on every part` | The phone's parser cannot find frame boundaries — firmware bug, see the protocol doc |
+| `warn frame rate 3 fps` | PSRAM is off in Tools, or WiFi is weak/5 GHz |
+| `warn audio stream: header only` | Mic ribbon not seated. Video still works; only the second evidence recording is lost |
+| `warn GET /level: 404` | Firmware predates the loudness endpoint. Reflash from `SafeHer_Glasses_Stream` |
+| `warn microphone level: available=false` | The mic has never returned a sample. Same ribbon cable as the row above |
+| `FAIL microphone level` | `/level` answered but the figure is impossible. Firmware bug |
+
+### Why the phone can still fail after this passes
 
 This script runs on a laptop, whose OS resolves `.local` itself. **The phone is
 a different test**, and it can fail for two independent reasons:
@@ -69,10 +78,6 @@ a different test**, and it can fail for two independent reasons:
 So a phone that pairs by IP but not by name has one of those two, not a broken
 camera. Turning mobile data off is the quickest way to tell them apart:
 if the name then resolves, it was the second.
-| `FAIL identifies as safeher-glasses` | Something else answered on that address. The app will refuse it too |
-| `FAIL Content-Length on every part` | The phone's parser cannot find frame boundaries — firmware bug, see the protocol doc |
-| `warn frame rate 3 fps` | PSRAM is off in Tools, or WiFi is weak/5 GHz |
-| `warn audio stream: header only` | Mic ribbon not seated. Video still works; only the second evidence recording is lost |
 
 When it passes, run it again with the model in the loop:
 

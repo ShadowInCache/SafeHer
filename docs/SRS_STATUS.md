@@ -229,8 +229,13 @@ Changed 2026-08-30 on the product owner's instruction. §6.2 fuses motion,
 audio and vision and then applies additive context boosters: +0.10 at
 night, +0.05 in a high-risk zone, +0.15 for a confident weapon. The score
 is now decided by exactly three primary signals — the glove's XGBoost
-output, YOLOv8 weapon detection, and the CNN+LSTM audio classifier — and
-the boosters are gone from it.
+output, YOLOv8 weapon detection, and the audio classifier — and the boosters
+are gone from it.
+
+(The audio classifier was a CNN+LSTM when this was written. It was retired on
+2026-09-02 for scoring 54.5% on unseen phrasings, below a fuzzy string match,
+and replaced by platform ASR into a TF-IDF classifier. The count of three, and
+the removal of the boosters, are unchanged.)
 
 The reasoning: night, location and heart rate are context, not evidence
 that an assault is happening, and acting on them raises alarms during

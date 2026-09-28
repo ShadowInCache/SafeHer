@@ -224,6 +224,61 @@ def check_audio(base: str, seconds: float) -> None:
     record(PASS if 20 <= kbps <= 45 else WARN, "audio stream", detail)
 
 
+def check_level(base: str) -> None:
+    """The loudness endpoint.
+
+    Cheap enough to poll continuously, which is what makes it the only part of
+    the microphone a phone can afford to watch all journey. A 404 means older
+    firmware and is a warning, not a failure — everything else still works.
+    """
+    import requests
+
+    try:
+        response = requests.get(f"{base}/level", timeout=5)
+    except Exception as error:
+        record(WARN, "GET /level", f"{str(error)[:70]}")
+        return
+
+    if response.status_code == 404:
+        record(WARN, "GET /level",
+               "404 — firmware predates the loudness endpoint, reflash to add it")
+        return
+    if response.status_code != 200:
+        record(FAIL, "GET /level", f"HTTP {response.status_code}")
+        return
+
+    try:
+        body = response.json()
+    except Exception:
+        record(FAIL, "GET /level", "not JSON")
+        return
+
+    # available=false is the firmware saying "no microphone read has succeeded".
+    # That is deliberately distinct from a quiet room, and must not be reported
+    # as one: an unseated ribbon would otherwise look like silence.
+    if not body.get("available"):
+        record(WARN, "microphone level",
+               "available=false — no successful mic read; check the ribbon")
+        return
+
+    level = body.get("level_dbfs")
+    peak = body.get("peak_dbfs")
+    if not isinstance(level, (int, float)) or not isinstance(peak, (int, float)):
+        record(FAIL, "microphone level",
+               "available=true but level_dbfs/peak_dbfs are missing")
+        return
+    if not -120.0 <= float(level) <= 0.0:
+        record(FAIL, "microphone level", f"{level} dBFS is outside the possible range")
+        return
+    if float(peak) < float(level) - 0.01:
+        record(FAIL, "microphone level", f"peak {peak} is below the current level {level}")
+        return
+
+    record(PASS, "microphone level",
+           f"{float(level):.1f} dBFS now, {float(peak):.1f} peak — "
+           "clap and re-run to see it rise")
+
+
 def check_detection() -> None:
     """Run the real weapon model over the frames just captured."""
     frames = globals().get("_frames")
@@ -286,6 +341,7 @@ def main() -> None:
 
     check_stream(base, args.seconds)
     check_audio(base, min(args.seconds, 4.0))
+    check_level(base)
     if args.detect:
         check_detection()
 

@@ -34,7 +34,7 @@ Full flashing instructions, board settings and troubleshooting are in
 |---|---|
 | **Board** | Seeed XIAO ESP32-S3 **Sense** — the plain S3 has no camera or mic |
 | **Camera** | OV series, JPEG straight from the sensor |
-| **Video** | 640×480 (VGA), quality 12, 2 frame buffers in PSRAM, 10–15 fps |
+| **Video** | 320×240 (QVGA), quality 20, 1 frame buffer — frame rate not yet measured on hardware |
 | **Microphone** | PDM over I²S, pins 42 (clock) and 41 (data) |
 | **Audio** | 16 kHz, 16-bit, mono |
 | **Link** | WiFi 2.4 GHz only — the S3 has no 5 GHz radio |
@@ -47,7 +47,7 @@ Full flashing instructions, board settings and troubleshooting are in
 | `GET /stream` | MJPEG, `multipart/x-mixed-replace` | **Yes** — weapon detection |
 | `GET /status` | JSON identity, firmware, battery | **Yes** — pairing |
 | `GET /audio` | Streaming WAV, 16 kHz mono | **Yes** — evidence only |
-| `GET /level` | JSON loudness in dBFS | No — see *Not built* below |
+| `GET /level` | JSON loudness in dBFS, `{level_dbfs, peak_dbfs, available}` | No — served, but nothing polls it yet |
 
 ---
 
@@ -174,11 +174,17 @@ involved at all.
 
 ## Not built
 
-**A loudness cue from `/level`.** A shout is loud long before it is
-intelligible, and loudness survives wind, distance and a mouth turned away
-where a transcript does not. It would be *supporting context* on an incident,
-never a fusion input — the threat score has exactly three signals by design,
-and adding a fourth is the change the architecture test exists to prevent.
+**A loudness cue from `/level`.** The endpoint itself now exists — the
+firmware measures RMS continuously and serves it — but **nothing on the phone
+reads it**. A shout is loud long before it is intelligible, and loudness
+survives wind, distance and a mouth turned away where a transcript does not,
+so the natural use is a fourth way to open the camera.
+
+It would be *supporting context* and a camera trigger, never a fusion input:
+the threat score has exactly three signals by design, and adding a fourth is
+the change `tests/test_fusion_architecture.py` exists to prevent. The dBFS
+threshold also cannot be chosen from a desk — it depends on the microphone's
+sensitivity and the enclosure, and has to be calibrated against a real room.
 
 **Battery reporting.** `batteryPercent()` returns −1 unless `BATTERY_ADC_PIN`
 is defined, and no divider is fitted. Battery life, weight and continuous

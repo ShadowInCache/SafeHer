@@ -693,11 +693,18 @@ async def analyze_model_scores(
 ):
     """Run SRS §6.2 over one synchronised read from the wearables.
 
-    This is the entry point the three models feed once they are trained:
-    XGBoost over the glove's IMU, CNN+LSTM over the glasses' microphone and
-    YOLOv8 over its camera. It takes scores rather than frames so a model
-    can move between firmware, phone and server without this contract
-    changing (SRS §6.3 splits them across exactly that boundary).
+    This is the entry point the three models feed: XGBoost over the glove's
+    IMU (on the ESP32), a TF-IDF phrase classifier over transcripts from the
+    *phone's* microphone, and YOLOv8n over the glasses' camera (on the phone).
+    It takes scores rather than frames so a model can move between firmware,
+    phone and server without this contract changing (SRS §6.3 splits them
+    across exactly that boundary).
+
+    The audio half was a CNN+LSTM over raw waveform when this was written. It
+    was retired: it scored 54.5% on unseen phrasings, below the 70.5% fuzzy
+    string-match baseline it was meant to beat. What ships is ASR followed by
+    TF-IDF over the transcript, which reaches 0.831 on realistically degraded
+    audio. The glasses' microphone feeds none of it — it is evidence only.
 
     A read with no modality at all is rejected. Scoring it would mean
     inventing a number for a moment nothing observed, and that number would
@@ -721,7 +728,7 @@ async def analyze_model_scores(
 
     # The wire names predate the three-signal architecture and are kept so
     # the API does not break: motion is the glove's XGBoost output, vision is
-    # YOLOv8 weapon detection, audio is the CNN+LSTM threat/help classifier.
+    # YOLOv8n weapon detection, audio is the TF-IDF transcript classifier.
     fused = threat_fusion.fuse(
         threat_fusion.ThreatSignals(
             glove=scores.motion, weapon=scores.vision, audio=scores.audio

@@ -53,12 +53,22 @@ written from scratch.
 
 ### Settings that match what the app expects
 
-| Setting | Value | Why |
+These are the values the **shipped firmware actually uses**, which are not the
+values this table gave until 2026-09-28. It specified VGA at quality 12 with two
+buffers; the sketch has been QVGA at quality 20 with one buffer, and a comment in
+it records why. The table was describing an intention, not the build.
+
+| Setting | Value in firmware | Why |
 |---|---|---|
-| `frame_size` | `FRAMESIZE_VGA` (640×480) | The model's input is 640×640; sending more resolution costs WiFi bandwidth and is thrown away on resize |
-| `jpeg_quality` | ~12 | Lower numbers are higher quality on this driver. Around 12 keeps frames near 30–60 kB |
-| `fb_count` | 2 | Requires PSRAM. One buffer stalls the capture loop while the previous frame is still being sent |
+| `frame_size` | `FRAMESIZE_QVGA` (320×240) | Chosen for stream stability: at VGA the stream stuttered. **The cost is unmeasured** — the model's input is 640×640, so these frames are upscaled, and upscaling is precisely what loses a thin blade |
+| `jpeg_quality` | 20 | Lower numbers are higher quality on this driver. 20 is **above the ~18 where the detector begins losing thin objects**, and was chosen for stability rather than accuracy |
+| `fb_count` | 1 | Two requires PSRAM and avoids stalling the capture loop while the previous frame is still going out. One was chosen alongside QVGA |
 | `pixel_format` | `PIXFORMAT_JPEG` | The app expects JPEG bytes; anything else means decoding on the phone for no gain |
+
+**This combination has never been evaluated against the weapon model.** Detection
+was validated at 640×640 on clean images; nothing has measured what QVGA at
+quality 20, upscaled, does to mAP. That measurement is worth more than any other
+item in this document.
 
 **Target 10–15 fps.** The app tolerates less. It deliberately runs inference at
 about 5 fps regardless of how fast frames arrive, because the scorer votes over
@@ -75,9 +85,12 @@ GET /status
 Returning JSON, used for pairing and for showing battery in the app:
 
 ```json
-{ "device": "safeher-glasses", "firmware": "1.1.0",
+{ "device": "safeher-glasses", "firmware": "1.2.0",
   "video": true, "audio": true, "battery": 87 }
 ```
+
+The shipped firmware reports `1.2.0` and omits `battery`, because no divider is
+fitted. Omission is the contract, not an oversight — see below.
 
 `video` and `audio` report which streams actually came up. `audio: false` is an
 ordinary outcome — the expansion board may be absent, and the app does not use
@@ -88,19 +101,23 @@ glasses audio regardless.
 the glove's heart rate, because "no reading" and "flat battery" must not look
 alike.
 
-## The change needed to the current firmware
+## Historical note — the sketch this replaced
 
-`glasses/firmware/legacy_noise_alarm/` currently does this after
-cloud setup:
+`glasses/firmware/legacy_noise_alarm/` did this after cloud setup:
 
 ```c
 WiFi.disconnect(true);
 WiFi.mode(WIFI_OFF);
 ```
 
-It then emails stills over SMTP. For streaming, **WiFi has to stay up** and an
-HTTP server has to serve `/stream`. Email can stay or go; it is independent of
-this interface.
+and then emailed stills over SMTP. With WiFi off there is no stream at all, so
+it could not be extended into this contract. **That work is done**:
+`SafeHer_Glasses_Stream` keeps WiFi up and serves the endpoints above. This
+section is kept only so the change is traceable — it is no longer a task.
+
+The legacy sketch also has a Gmail app password and an Arduino IoT device key
+written into its source, and it is still tracked in this repository. Treat both
+as compromised.
 
 ## mDNS name — how the app is meant to find the glasses
 
@@ -166,20 +183,44 @@ she is covered when she is not.
 
 ## Audio endpoints
 
-The firmware also serves `GET /audio` (16 kHz mono WAV, streaming PCM) and
-`GET /level` (a single RMS figure in dBFS). **Neither is read by the app
-today**, and `/status` advertises `"audio": true|false` so a future client can
-tell whether the microphone came up.
+The firmware serves two, and `/status` advertises `"audio": true|false` so a
+client can tell whether the microphone came up at all.
 
-`/audio` **is** now consumed, for one purpose: evidence. During an emergency the
-app records it alongside the phone's own microphone, capped at two minutes or
-4 MB, and uploads it as a second `audio/wav` file on the incident. A microphone
-on the wearer's head is better placed than one in a bag, and because this is a
-network socket rather than the device microphone, it contends with nothing —
-the phone recording and threat listening both continue.
+### `GET /audio`
 
-It is still **not** a threat signal and feeds nothing into the fusion. `/level`
-remains unconsumed.
+16 kHz mono WAV, streaming PCM, declared length `0xFFFFFFFF` because a live
+microphone has no length in advance — readers take bytes until the connection
+closes.
+
+**Consumed, for one purpose: evidence.** During an emergency the app records it
+alongside the phone's own microphone, capped at two minutes or 4 MB, and uploads
+it as a second `audio/wav` file on the incident. A microphone on the wearer's
+head is better placed than one in a bag, and because this is a network socket
+rather than the device microphone it contends with nothing — the phone recording
+and threat listening both continue.
+
+It is **not** a threat signal and feeds nothing into the fusion.
+
+### `GET /level`
+
+```json
+{ "level_dbfs": -42.30, "peak_dbfs": -31.00, "available": true }
+```
+
+RMS of the current buffer in dBFS, plus a peak that decays to the noise floor
+over roughly two seconds so a shout survives until the next poll. Measured on
+the DC-removed sample **before** the firmware's 12× voice gain: taken after it,
+the figure would describe the amplifier rather than the room and would sit
+pinned near full scale through any ordinary conversation.
+
+`{"available": false}` — with no level fields at all — until a microphone read
+has actually succeeded. A client must read that as *unknown*, never as quiet: an
+unseated ribbon cable reporting a convincing −120 dB would look exactly like a
+calm room.
+
+It costs a few dozen bytes per request, against roughly 32 kB/s for `/audio`,
+which makes it the only part of the microphone affordable to consult
+continuously. **Nothing on the phone polls it yet.**
 
 ## Not part of this contract
 

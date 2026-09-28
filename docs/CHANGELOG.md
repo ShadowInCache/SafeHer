@@ -7,6 +7,87 @@ until the first tagged release.
 
 ## [Unreleased]
 
+### 2026-09-28 — the documented endpoint becomes a real one, and the docs stop contradicting the code
+
+#### Added
+- **`GET /level` on the glasses.** RMS of the microphone in dBFS plus a peak
+  that decays to the noise floor over roughly two seconds, served as
+  `{"level_dbfs": -42.30, "peak_dbfs": -31.00, "available": true}`.
+  `glasses/SETUP.md` has been telling people to open this endpoint and clap at
+  it since it was written; until now it returned 404.
+- The level is measured on the DC-removed sample **before** the firmware's 12×
+  voice gain. Taken after it, the figure would describe the amplifier rather
+  than the room and would sit pinned near full scale through any ordinary
+  conversation.
+- It is published as two `int32` centi-decibel values written without a lock.
+  An aligned 32-bit store is atomic on this part, so the audio loop on core 1
+  never waits on the HTTP task on core 0, and a reader sees the previous figure
+  or the next one but never a torn mixture.
+- `{"available": false}`, with no level fields at all, until a microphone read
+  has actually succeeded — so an unseated ribbon cable reads as *unknown*
+  rather than as a calm room. Silence and a dead sensor are opposite claims.
+- `scripts/check_glasses.py` gained a `/level` check covering both. A 404 is a
+  warning rather than a failure, so the script still passes against firmware
+  that predates the endpoint.
+
+#### Changed
+- **`readRequestPath` now waits 300 ms for a request line, not 2000 ms.** It
+  runs inside `videoStreamTask` — the same loop that captures and sends frames
+  — so every millisecond spent there is a millisecond video is not being
+  served, and a single half-open connection could freeze the stream for two
+  seconds. That cost little while connections were rare. It would cost a great
+  deal now that `/level` invites polling.
+
+#### Fixed — documentation that contradicted the code
+- `glasses/README.md`, `glasses/SETUP.md` and `docs/GLASSES_STREAM_PROTOCOL.md`
+  all specified **VGA 640×480, quality 12, two frame buffers**. The firmware is
+  **QVGA 320×240, quality 20, one buffer**, and a comment in the sketch records
+  the deliberate downgrade for stream stability. The docs were describing an
+  intention, not the build.
+- **The trade-off is now stated rather than hidden.** Quality 20 is above the
+  ~18 at which the tuning table's own note says the detector starts losing thin
+  objects like knife blades, and QVGA is upscaled to the model's 640×640 input.
+  **Nothing has measured what this does to mAP**, and that measurement is worth
+  more than anything else in those documents.
+- `POST /alerts/analyze`'s docstring and its wire-name comment both described a
+  **CNN+LSTM over the glasses' microphone**. That model was retired on
+  2026-09-02 for scoring 54.5% on unseen phrasings, below a fuzzy string match.
+  What ships is platform ASR into a TF-IDF classifier, fed by the **phone's**
+  microphone; the glasses microphone feeds none of it.
+- `docs/ARCHITECTURE.md`'s primary-signal diagram showed
+  `Glasses mic → CNN + LSTM → audio score`. Both halves were wrong. The glasses
+  microphone now appears where it belongs, under supporting evidence.
+- `docs/SRS_STATUS.md` described the third primary signal as the CNN+LSTM
+  classifier in its deviations entry. The 2026-08-17 session-log entries say the
+  same thing and were **deliberately left untouched**: that log is append-only
+  by its own stated rule, and correcting history there would be a worse fault
+  than the stale sentence.
+- `docs/GLASSES_STREAM_PROTOCOL.md` still carried a section headed "the change
+  needed to the current firmware", describing the retired noise-alarm sketch as
+  what was running. That work shipped long ago. It is now a historical note,
+  which also records that the legacy sketch's committed Gmail app password and
+  Arduino IoT key are still in this repository and should be treated as
+  compromised.
+- The same document's `/status` example reported firmware `1.1.0`; the firmware
+  reports `1.2.0`.
+- `docs/HARDWARE_BRINGUP.md`'s Stage 1 troubleshooting table had a prose block
+  inserted between its rows, so it rendered as two broken fragments with four
+  rows orphaned below the prose. The table is whole again and gained rows for
+  the `/level` outcomes.
+
+#### Not verified
+- **The firmware has not been compiled.** `arduino-cli` is not installed on this
+  machine, so the sketch has not been built, flashed, or run, and `/level` has
+  never answered a real request from real hardware. Every claim above about its
+  behaviour is a claim about source code.
+- The dBFS scale is **uncalibrated**. It depends on the PDM microphone's
+  sensitivity and the enclosure, and no threshold should be derived from it
+  until it has been measured against a real room — quiet, conversation, raised
+  voice, shout, and street noise.
+- Nothing on the phone polls `/level` yet. The endpoint exists; the loudness
+  cue that would use it does not.
+
+
 ### 2026-09-18 — the background watch covers the journey, not just the glove
 
 #### Fixed

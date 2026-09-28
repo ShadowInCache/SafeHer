@@ -91,7 +91,7 @@ From a computer on the same WiFi:
 |---|---|
 | `http://safeher-glasses.local/status` | `{"device":"safeher-glasses","firmware":"1.2.0","video":true,"audio":true}` |
 | `http://safeher-glasses.local/stream` in a browser | Live video |
-| `http://safeher-glasses.local/level` | `{"level_db":-42.3,"available":true}` — clap and watch it rise |
+| `http://safeher-glasses.local/level` | `{"level_dbfs":-42.30,"peak_dbfs":-31.00,"available":true}` — clap and watch it rise |
 | `http://safeher-glasses.local/audio` | Downloads/plays a WAV stream |
 
 **If `safeher-glasses.local` does not resolve but the raw IP works**, mDNS is
@@ -130,7 +130,7 @@ app touches, and they stay tied to a boundary the user set herself.
 | `/stream` | **Yes** | Scored on the phone at ~5 fps. Video never leaves the phone; only a score is sent onward. |
 | `/status` | **Yes** | Pairing and battery. |
 | `/audio` | **Yes — evidence only** | Recorded during an emergency and uploaded with the incident. Not a threat signal. |
-| `/level` | No | Served and working. |
+| `/level` | No | Served by the firmware and measured continuously. Nothing on the phone polls it yet. |
 
 **Why glasses audio is not the audio signal.** The phone's microphone is better
 placed and its speech recogniser is already installed and better than anything
@@ -143,9 +143,12 @@ for up to two minutes and uploads it with the incident, alongside the phone's
 own recording. It needs no microphone permission and contends with nothing,
 because it is a network socket rather than the device microphone.
 
-The remaining unbuilt use is a **loudness cue** from `/level` — a shout is loud
-long before it is intelligible, and loudness survives wind and distance where a
-transcript does not. It would be supporting context, never a fusion input.
+The remaining unbuilt use is a **loudness cue** from `/level`. The firmware
+serves it; the app does not read it. A shout is loud long before it is
+intelligible, and loudness survives wind and distance where a transcript does
+not, so the natural use is a fourth way to open the camera — supporting
+context, never a fusion input. The dBFS threshold has to be calibrated against
+a real room before anything can depend on it.
 
 ## Tuning
 
@@ -153,8 +156,9 @@ Everything worth changing is a named constant at the top of the sketch.
 
 | Constant | Default | Effect |
 |---|---|---|
-| `config.frame_size` | `FRAMESIZE_VGA` | The model input is 640×640. Larger is discarded at the resize. |
-| `config.jpeg_quality` | `12` | Lower = better quality, bigger frames. Above ~18 the detector starts losing thin objects like knife blades. |
+| `config.frame_size` | `FRAMESIZE_QVGA` | 320×240. Raised to VGA the stream stuttered, and the sketch comment records the decision: a stable QVGA stream beats a stuttering VGA one. **The trade is real and unmeasured** — the weapon model's input is 640×640, so QVGA is upscaled, and thin objects like a knife blade are exactly what upscaling loses. |
+| `config.jpeg_quality` | `20` | Lower = better quality, bigger frames. **This is above the ~18 at which the detector starts losing thin blades**, and was chosen for stream stability rather than detection accuracy. Worth re-measuring with a real knife before the demo. |
+| `config.fb_count` | `1` | Two buffers need PSRAM and stop the capture loop stalling while the previous frame is still going out. One was chosen alongside QVGA for stability. |
 | `AUDIO_SAMPLE_RATE` | `16000` | Every speech model here expects 16 kHz. Raising it costs bandwidth and buys nothing. |
 | `s->set_vflip` | `1` | Set to `0` if your camera is mounted the other way up. |
 
