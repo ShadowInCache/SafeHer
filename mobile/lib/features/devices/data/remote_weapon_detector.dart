@@ -53,6 +53,12 @@ class RemoteWeaponDetector implements WeaponDetector {
   /// told the same thing.
   bool get unavailable => _serverHasNoModel;
 
+  /// Nothing to pre-load: the model lives on the server, so there is no
+  /// start-up cost on this side to move out of the way of a trigger. Declared
+  /// rather than inherited because `implements` requires every member.
+  @override
+  Future<void> prepare() async {}
+
   @override
   Future<List<WeaponDetection>> detect(Uint8List jpegFrame) async {
     if (_serverHasNoModel) {

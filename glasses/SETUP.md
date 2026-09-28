@@ -96,8 +96,20 @@ From a computer on the same WiFi:
 
 **If `safeher-glasses.local` does not resolve but the raw IP works**, mDNS is
 being blocked — some routers filter multicast, and "client isolation" or "AP
-isolation" on a guest network blocks it outright. Fix that before pairing: the
-release Android build **cannot use a raw IP** (see below).
+isolation" on a guest network blocks it outright. Worth fixing, because the
+name is what the app is built around — but **the IP is a real fallback, in
+release builds too** (see below).
+
+**On a phone, that same symptom has a second cause.** Android's Wi-Fi chip
+discards multicast not addressed to the phone unless the app holds a
+`WifiManager.MulticastLock` — so the query goes out, the camera answers, and
+the reply is dropped before the app sees it. The name fails while the raw IP
+streams video perfectly. SafeHer takes that lock around every lookup
+(`android/.../network/MulticastLockPlugin.kt`, with
+`CHANGE_WIFI_MULTICAST_STATE` in the manifest), so a phone still failing by
+name after a reinstall points at the router, not the app. A computer on the
+same network is not a valid test of this: its OS resolves `.local` itself and
+needs no such lock.
 
 ## 6. Pair with the app
 
@@ -156,7 +168,7 @@ Everything worth changing is a named constant at the top of the sketch.
 | Sketch too big | Partition Scheme is not Huge APP |
 | Stream stutters, ~3 fps | PSRAM off, or 5 GHz/weak WiFi, or `WiFi.setSleep` re-enabled |
 | App says "not a SafeHer camera" | Something else answered on that address — check the IP |
-| Works in debug, fails in release | Using a raw IP. Release builds permit cleartext only for `safeher-glasses.local` |
+| Works in debug, fails in release | **Not** the raw IP — Dart's HTTP stack never consults Android's cleartext policy, so an IP pairs in release too (verified 2026-09-16 on a signed release APK). Look at signing, permissions, or R8 instead |
 | `microphone: UNAVAILABLE` | Expansion board not attached. Video and weapon detection still work; only the second evidence recording is lost |
 
 ## The contract
@@ -165,6 +177,7 @@ Everything worth changing is a named constant at the top of the sketch.
 Three things there are load-bearing and easy to break:
 
 1. **`Content-Length` on every MJPEG part** — the phone's parser needs it.
-2. **mDNS `safeher-glasses`** — release builds cannot reach a raw IP.
+2. **mDNS `safeher-glasses`** — so pairing never requires reading an IP off a
+   serial monitor, and survives the camera getting a new lease.
 3. **Omit battery rather than sending `0`** — the app treats zero as absent, so
    a fabricated zero and a flat battery must not look alike.

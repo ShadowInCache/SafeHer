@@ -9,6 +9,7 @@ import '../../../../shared/components/buttons/sa_button.dart';
 import '../../../../shared/components/icons/sa_icon.dart';
 import '../../../../shared/components/overlays/sa_bottom_sheet.dart';
 import '../../data/glasses_pairing_controller.dart';
+import 'glasses_live_preview.dart';
 
 /// Pairs the SafeHer camera by network address.
 ///
@@ -124,6 +125,11 @@ class _GlassesPairingSheetContentState
               if (state.battery != null) 'Battery ${state.battery}%',
             ].join('  ·  '),
           ),
+          const SizedBox(height: AppSpacing.space4),
+        ],
+
+        if (state.isPaired) ...[
+          const GlassesLivePreview(),
           const SizedBox(height: AppSpacing.space4),
         ],
 

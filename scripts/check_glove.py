@@ -27,7 +27,28 @@ SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 CLASSIFICATION_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 TELEMETRY_UUID = "33b4fb00-9c17-4ad2-8fc9-89ad6dbc76bd"
 
-KNOWN_LABELS = {"NORMAL", "JERK", "PUSH", "PULL", "SHAKING", "TWISTING", "FALL"}
+# The 5-class v7 model. PUSH, PULL and JERK were merged into SUDDEN_MOVEMENT;
+# a glove still reporting those three is running the retired 7-class model.
+KNOWN_LABELS = {"NORMAL", "SUDDEN_MOVEMENT", "SHAKING", "TWISTING", "FALL"}
+RETIRED_LABELS = {"JERK", "PUSH", "PULL"}
+
+
+def parse_classification(raw: str) -> tuple[str, float] | None:
+    """Accept both payloads the repo's firmware sends.
+
+    `SafeHer_Glove_V5_OnDevice` sends `FALL,0.93`; `SafeHer_Glove_Final` sends
+    `CLASS=FALL,CONFIDENCE=0.9300`. Only a check that reads both can say which
+    one is flashed, which is the question when readings go missing.
+    """
+    parts = [p.strip() for p in raw.split(",")]
+    if len(parts) < 2:
+        return None
+    label = parts[0].split("=", 1)[-1].strip().upper()
+    try:
+        confidence = float(parts[1].split("=", 1)[-1])
+    except ValueError:
+        return None
+    return (label, confidence) if label else None
 
 # The app's rule, from GloveThreatDetector.
 REQUIRED_HITS = 2
@@ -99,22 +120,19 @@ async def main() -> None:
         classifications: list[tuple[float, str, float]] = []
         telemetry: list[str] = []
         malformed = 0
+        keyed_format = 0
 
         def on_classification(_, data: bytearray) -> None:
-            nonlocal malformed
+            nonlocal malformed, keyed_format
             raw = data.decode("utf-8", "replace").strip()
-            parts = raw.split(",")
-            if len(parts) < 2:
+            parsed = parse_classification(raw)
+            if parsed is None:
                 malformed += 1
                 print(f"        malformed: {raw!r}")
                 return
-            try:
-                confidence = float(parts[1])
-            except ValueError:
-                malformed += 1
-                print(f"        malformed confidence: {raw!r}")
-                return
-            label = parts[0].strip().upper()
+            if raw.upper().startswith("CLASS="):
+                keyed_format += 1
+            label, confidence = parsed
             classifications.append((asyncio.get_event_loop().time(), label, confidence))
             flag = "  <-- would count toward an alarm" if (
                 label == "FALL" and confidence >= THRESHOLD) else ""
@@ -147,11 +165,23 @@ async def main() -> None:
 
     if malformed:
         record(FAIL, "payload format", f"{malformed} malformed — expected '<LABEL>,<confidence>'")
+    elif keyed_format:
+        # The app reads both formats, so this is not a fault on its own — but
+        # the keyed payload means SafeHer_Glove_Final is flashed, and that
+        # sketch still carries the retired 7-class model.
+        record(WARN, "payload format",
+               "'CLASS=..,CONFIDENCE=..' — SafeHer_Glove_Final is flashed; the app "
+               "reads it, but flash SafeHer_Glove_V5_OnDevice for the 5-class model")
     else:
         record(PASS, "payload format", "every notification parsed")
 
     labels = Counter(label for _, label, _ in classifications)
-    unknown = set(labels) - KNOWN_LABELS
+    retired = set(labels) & RETIRED_LABELS
+    if retired:
+        record(WARN, "model version",
+               f"saw {sorted(retired)} — this is the retired 7-class model; "
+               "flash SafeHer_Glove_V5_OnDevice (5-class)")
+    unknown = set(labels) - KNOWN_LABELS - RETIRED_LABELS
     if unknown:
         record(WARN, "labels are known classes",
                f"unrecognised: {sorted(unknown)} — the app shows these as unknown")

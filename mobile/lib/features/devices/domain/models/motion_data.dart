@@ -41,8 +41,12 @@ class MotionData {
 /// membership tests. `PUSH`/`PULL`/`JERK` were merged into `SUDDEN_MOVEMENT`.
 const kKnownMotionClasses = {'NORMAL', 'SUDDEN_MOVEMENT', 'SHAKING', 'TWISTING', 'FALL'};
 
-/// Parses one `CLASS=<name>,CONFIDENCE=<0.0-1.0>` notification payload from
-/// the glove's BLE result characteristic (see [MotionData]).
+/// Parses one notification payload from the glove's BLE result characteristic
+/// (see [MotionData]). Both firmware formats are accepted:
+/// `FALL,0.93` from `SafeHer_Glove_V5_OnDevice` (the sketch to flash) and
+/// `CLASS=FALL,CONFIDENCE=0.9300` from `SafeHer_Glove_Final`. Accepting only
+/// the second left this card reading `--` against the current firmware while
+/// the alarm path, which reads the first, worked.
 ///
 /// Returns `null` — never throws — for anything that does not cleanly
 /// match: a missing field, a class outside [kKnownMotionClasses], or a
@@ -67,6 +71,13 @@ MotionData? parseMotionPacket(String raw) {
     } else if (piece.startsWith('CONFIDENCE=')) {
       confidence = double.tryParse(piece.substring('CONFIDENCE='.length).trim());
     }
+  }
+
+  // Bare `FALL,0.93`. Only when no field is keyed at all, so a half-keyed
+  // packet like `CLASS=,CONFIDENCE=0.9` is still rejected rather than guessed.
+  if (classification == null && confidence == null && !trimmed.contains('=')) {
+    classification = parts[0].trim();
+    confidence = double.tryParse(parts[1].trim());
   }
 
   if (classification == null || !kKnownMotionClasses.contains(classification)) return null;

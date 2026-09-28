@@ -1,6 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Lets the app hold a WifiManager.MulticastLock while it resolves
+         safeher-glasses.local. Android's Wi-Fi chip discards multicast not
+         addressed to the phone unless this lock is held, so without it the
+         mDNS query goes out and the reply is silently dropped — the camera
+         works by raw IP and fails by name. Normal permission: granted at
+         install, never prompts. See network/MulticastLockPlugin.kt. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
@@ -17,6 +24,12 @@
          14 checks the declared type against the permissions actually held,
          and BLUETOOTH_CONNECT above is granted by the time a glove is paired. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Continuous threat listening during a Safe Journey happens with the app
+         backgrounded and the screen off. Without this, and without `microphone`
+         in the service type below, Android 14+ stops delivering audio to the
+         process and the audio signal silently dies mid-journey while the app
+         goes on reporting itself as armed. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
@@ -73,7 +86,7 @@
              Warning: the service name is the plugin's and must not change. -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
-            android:foregroundServiceType="connectedDevice|location"
+            android:foregroundServiceType="connectedDevice|location|microphone"
             android:exported="false" />
 
         <!-- Don't delete the meta-data below.

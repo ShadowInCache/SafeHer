@@ -88,7 +88,7 @@ void main() {
     test('everyday motions never fire, however confident', () {
       // These are the classes most likely to come from ordinary handling.
       // Auto-dispatching them is a product decision to be made with data.
-      for (final label in ['NORMAL', 'JERK', 'SHAKING', 'TWISTING']) {
+      for (final label in ['NORMAL', 'SHAKING', 'TWISTING']) {
         final d = GloveThreatDetector();
         for (var i = 0; i < 6; i++) {
           expect(
@@ -100,8 +100,10 @@ void main() {
       }
     });
 
-    test('PUSH and PULL do not auto-trigger on their own', () {
-      for (final label in ['PUSH', 'PULL']) {
+    test('SUDDEN_MOVEMENT does not auto-trigger on its own', () {
+      // Elevated, not danger. This used to test PUSH and PULL, which after the
+      // 5-class merge are unknown labels — so it passed without testing anything.
+      for (final label in ['SUDDEN_MOVEMENT']) {
         final d = GloveThreatDetector();
         for (var i = 0; i < 6; i++) {
           expect(

@@ -103,7 +103,7 @@ corresponding import in `mobile/lib/`.
 |---|---|
 | `numpy`, `pandas`, `scipy` | Feature extraction over the raw IMU recordings |
 | `scikit-learn`, `joblib` | Metrics, the train/test split, serialization |
-| `xgboost` | The 7-class model that runs on the ESP32 |
+| `xgboost` | The 5-class model that runs on the ESP32 |
 | `matplotlib`, `seaborn` | Evaluation plots |
 
 **`pyserial` is missing from this file and is required.**

@@ -6,27 +6,6 @@ part of 'glove_auto_trigger.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$safetyForegroundServiceHash() =>
-    r'd253f2348bc70ab20a897b71dbcaa08977010da2';
-
-/// The platform's foreground service, or a no-op where there isn't one.
-///
-/// Copied from [safetyForegroundService].
-@ProviderFor(safetyForegroundService)
-final safetyForegroundServiceProvider =
-    Provider<SafetyForegroundService>.internal(
-      safetyForegroundService,
-      name: r'safetyForegroundServiceProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$safetyForegroundServiceHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef SafetyForegroundServiceRef = ProviderRef<SafetyForegroundService>;
 String _$gloveAutoTriggerHash() => r'b74f88bdf05956c751d0a7cb919fc1e0ed5c9d5f';
 
 /// Votes on the glove's classifications and publishes the decision to alarm.
@@ -60,20 +39,26 @@ final gloveAutoTriggerProvider =
     );
 
 typedef _$GloveAutoTrigger = Notifier<GloveAlarmRequest?>;
-String _$gloveWatchServiceHash() => r'04ba217775f699553e0705f31474a229eac87e0b';
+String _$gloveWatchServiceHash() => r'9e44bea55e8a4a1173dc00cb6f3d1a4f81bb109d';
 
-/// Runs the foreground service for exactly as long as a glove is being
+/// Claims the background watch for exactly as long as a glove is being
 /// listened to.
 ///
-/// Tied to the glove rather than to a switch of its own, because the service
-/// has one job — keep the BLE stream and the vote alive — and there is nothing
-/// for it to keep alive when no glove is connected. A persistent "SafeHer is
-/// watching your glove" notification sitting over no glove would be the same
-/// lie this file exists to remove, in the opposite direction.
+/// Tied to the glove rather than to a switch of its own, because there is
+/// nothing here for the service to keep alive when no glove is connected. A
+/// persistent "watching your glove" notification sitting over no glove would
+/// be the same lie this file exists to remove, in the opposite direction.
 ///
-/// Whether it is actually running is asked of the platform and published here,
-/// so the UI can distinguish "the glove is connected" from "the glove will
-/// still be watching when the screen goes off". They are not the same promise.
+/// **It no longer starts and stops the service directly.** [SafetyWatch] owns
+/// that, because the glove is not the only thing that needs the process kept
+/// alive — an armed journey needs it for the microphone — and two owners
+/// calling `start` and `stop` on one operating-system object means whichever
+/// finished first switched the other one off.
+///
+/// The published value is whether the background watch is genuinely running,
+/// which is what the Profile screen turns into "you can put your phone in
+/// your pocket". It is asked of the platform rather than remembered, so a
+/// service the system quietly stopped is not reported as active.
 ///
 /// Copied from [GloveWatchService].
 @ProviderFor(GloveWatchService)

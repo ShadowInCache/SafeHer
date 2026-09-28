@@ -53,7 +53,22 @@ resolution, and the audio stream's data rate.
 
 | It says | Do this |
 |---|---|
-| `FAIL resolve safeher-glasses.local` | mDNS is blocked — router multicast filtering or AP/client isolation. **Fix before pairing**: the release build cannot use a raw IP. To keep going meanwhile, pass `--host <ip>` |
+| `FAIL resolve safeher-glasses.local` | mDNS is blocked — router multicast filtering or AP/client isolation. Pass `--host <ip>` to keep going; the app pairs by IP too, release builds included |
+
+This script runs on a laptop, whose OS resolves `.local` itself. **The phone is
+a different test**, and it can fail for two independent reasons:
+
+1. **Receiving.** Android's Wi-Fi chip discards multicast replies unless the app
+   holds a `WifiManager.MulticastLock`. SafeHer takes one around every lookup
+   (`MulticastLockPlugin.kt`).
+2. **Sending.** With mobile data and WiFi up at once, the query to `224.0.0.251`
+   leaves over whichever network Android has made the *default* — usually
+   cellular when the WiFi has no internet — and never reaches the LAN. Unicast
+   to the camera still works, because RFC1918 addresses route over WiFi.
+
+So a phone that pairs by IP but not by name has one of those two, not a broken
+camera. Turning mobile data off is the quickest way to tell them apart:
+if the name then resolves, it was the second.
 | `FAIL identifies as safeher-glasses` | Something else answered on that address. The app will refuse it too |
 | `FAIL Content-Length on every part` | The phone's parser cannot find frame boundaries — firmware bug, see the protocol doc |
 | `warn frame rate 3 fps` | PSRAM is off in Tools, or WiFi is weak/5 GHz |
@@ -74,6 +89,15 @@ the phone has been touched.
 
 ## Stage 2 — Glove, firmware only
 
+Flash **`glove/firmware/SafeHer_Glove_V5_OnDevice/`** — the only sketch carrying
+the current 5-class model. Check `DATA_COLLECTION_MODE` is **`0`** first: at `1`
+(used when recording training data) BLE is never started and the glove is
+invisible to the app and to this script. The Serial Monitor tells you which you
+have within a second: raw CSV at 100 Hz means mode `1`.
+
+Then close the SafeHer app — a BLE peripheral holds one connection, and if the
+phone has it this script cannot see the glove.
+
 ```bash
 python scripts/check_glove.py --seconds 60
 ```
@@ -81,8 +105,11 @@ python scripts/check_glove.py --seconds 60
 Wear it, move normally for most of the window, then act out a fall near the end.
 
 It verifies the advertised name, the service and characteristic UUIDs, the
-`<LABEL>,<confidence>` payload format, that labels are among the seven known
-classes, and that confidence stays in range. It prints every classification as
+`<LABEL>,<confidence>` payload format, that labels are among the five known
+classes (`NORMAL`, `SUDDEN_MOVEMENT`, `SHAKING`, `TWISTING`, `FALL`), and that
+confidence stays in range. It also recognises the two ways a board can be
+running the wrong sketch: the `CLASS=…,CONFIDENCE=…` payload of
+`SafeHer_Glove_Final`, and the retired `PUSH`/`PULL`/`JERK` labels. It prints every classification as
 it arrives, so you can see what the glove thinks you are doing.
 
 Then it **replays the app's own alarm rule** — two `FALL` at or above 0.75
@@ -91,7 +118,9 @@ would have fired.
 
 | It says | Meaning |
 |---|---|
-| `FAIL advertising as SafeHer-Glove` | Off, out of range, or a different name. The app filters on this exact string |
+| `FAIL advertising as SafeHer-Glove` | `DATA_COLLECTION_MODE 1`, off, out of range, the phone still holds the connection, or a different name |
+| `warn payload format 'CLASS=..'` | `SafeHer_Glove_Final` is flashed — the app reads it, but it carries the retired model |
+| `warn model version` | The retired 7-class model is flashed |
 | `FAIL exposes the SafeHer service` | Wrong service UUID — firmware and `glove_protocol.dart` disagree |
 | `FAIL notifies classifications` | Connected, but the model is not running or not notifying |
 | `warn telemetry omits unmeasured fields` | Sending `0` for heart rate. Zero is not absence on this wire |
@@ -128,12 +157,30 @@ Then check each signal reaches the fusion, one at a time:
 
 | Signal | How to trigger it | What should happen |
 |---|---|---|
-| **Weapon** | Hold a knife or replica in the glasses' view for ~5 seconds | Score rises over a 15-frame window, then decays when removed |
+| **Weapon** | **Trigger the camera first** (speak a distress phrase, or act out a fall), then hold a knife or replica in view inside the 30-second dwell | Score rises over a 15-frame window, then decays when removed |
 | **Audio** | Say a held-out distress phrase clearly | Score rises for that utterance |
 | **Glove** | Act out a fall | Countdown opens — the direct BLE path, no server involved |
 
 Watch the backend log for `POST /alerts/analyze` arriving about once a second
 while armed.
+
+**The camera stays shut until something asks for it.** Presenting a knife to a
+camera nobody opened produces nothing, and that is the design rather than a
+fault — so test it in that order:
+
+| Step | Expect |
+|---|---|
+| Start a journey, say nothing | No video. `vision_score` **absent** from the payload — not zero |
+| Speak a held-out distress phrase | Camera opens within a second; `glassesStreaming` true |
+| Present the knife inside 30 s | Weapon score rises |
+| Wait 30 s after the last trigger, nothing in view | Camera closes; `vision_score` disappears from the payload again |
+| Act out a fall immediately after it closes | Camera reopens — a confident `FALL` bypasses the 10-second cooldown |
+
+The payload check is the one worth doing carefully. A closed camera must be
+**absent** from `/alerts/analyze`, never `vision_score: 0.0`: a zero claims the
+camera looked and saw calm, and at a 0.40 weight that caps the fused score below
+the alarm threshold, suppressing the alarm the microphone and the glove were
+raising between them.
 
 **Then the whole thing.** Trigger two signals together and let the countdown
 run to dispatch. Confirm: contacts notified, GPS attached, audio evidence

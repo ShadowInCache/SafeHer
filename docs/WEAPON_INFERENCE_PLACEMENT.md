@@ -104,10 +104,15 @@ validation. It is not on the critical path and should not be treated as one.
 
 ## Status
 
-The model is bundled at `mobile/assets/models/weapon_yolov8n_int8.onnx` and
-validated — see the README there. **Nothing loads it yet**: there is no ONNX
-runtime dependency in `pubspec.yaml` and no inference code, so `weapon_score`
-still has no producer and `DetectionSources` does not claim one.
+The model is bundled and validated — see the README there. **It now has a
+producer** (as of 2026-09-11): on Android, `ultralytics_weapon_detector.dart`
+runs it on-device via `ultralytics_yolo` (LiteRT fp16); on web, where that
+plugin has no implementation, `remote_weapon_detector.dart` samples a frame to
+`POST /alerts/weapon-frame` and scores it server-side. `weapon_scorer.dart`
+votes over a window and `DetectionSources` reports which path is live.
 
-The frame transport does not exist either, because the Smart Glasses hardware
-does not exist. Both are blocked on the same thing.
+The frame transport now exists too — `mjpeg_client.dart` parses the glasses'
+MJPEG stream and the pairing sheet verifies a device answers as a SafeHer
+camera. What remains unproven is the end-to-end path against **real** glasses
+hardware: the video path has only been exercised against a synthetic MJPEG
+stream.

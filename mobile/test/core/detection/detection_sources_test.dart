@@ -203,6 +203,61 @@ void main() {
       expect(sources.headline, 'Your glove is watching');
     });
 
+    test('names the off-screen limit while the service is not confirmed', () {
+      // The mirror of the glove's caveat, and the defect this pairs with: the
+      // journey pipeline had no foreground service of its own, so a journey
+      // armed with no glove paired stopped listening on screen-off while this
+      // text promised listening and `armed` stayed true.
+      const sources = DetectionSources(
+        backend: DetectionStatus.unknown,
+        gloveListening: false,
+        journeyDetectionActive: true,
+      );
+
+      expect(sources.detail.toLowerCase(), contains('only does this while'));
+      expect(sources.detail.toLowerCase(), contains('screen off'));
+      // The consent facts survive the caveat; they are not alternatives to it.
+      expect(sources.detail, contains('discarded'));
+      expect(sources.detail, contains('only a score leaves the device'));
+      expect(sources.detail, contains('stops when the journey ends'));
+    });
+
+    test('drops the limit and names the notification once the service runs',
+        () {
+      const sources = DetectionSources(
+        backend: DetectionStatus.unknown,
+        gloveListening: false,
+        journeyDetectionActive: true,
+        backgroundWatchActive: true,
+      );
+
+      expect(
+        sources.detail.toLowerCase(),
+        isNot(contains('only does this while')),
+        reason: 'leaving it up would keep a phone in her hand needlessly',
+      );
+      // The notification is how she can check the claim rather than trust it.
+      expect(sources.detail.toLowerCase(), contains('notification'));
+      expect(sources.detail.toLowerCase(), contains('screen off'));
+      expect(sources.detail, contains('discarded'));
+      expect(sources.detail, contains('only a score leaves the device'));
+      expect(sources.detail, contains('stops when the journey ends'));
+    });
+
+    test('a background watch cannot invent journey detection', () {
+      // The same guard the glove branch has: the flag must never be the thing
+      // that makes the screen claim protection.
+      const sources = DetectionSources(
+        backend: DetectionStatus.unknown,
+        gloveListening: false,
+        journeyDetectionActive: false,
+        backgroundWatchActive: true,
+      );
+
+      expect(sources.anyActive, isFalse);
+      expect(sources.headline, 'Automatic detection is not active yet');
+    });
+
     test('no journey and no glove stays pessimistic', () {
       const sources = DetectionSources(
         backend: DetectionStatus.unknown,

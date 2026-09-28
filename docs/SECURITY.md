@@ -208,9 +208,9 @@ audit — none of these are fixed as part of this audit, they're flagged for fol
 - **No refresh-token revocation** — a leaked refresh token remains valid until it
   naturally expires (`REFRESH_TOKEN_EXPIRE_DAYS`, default 7). Consider a token
   denylist (Redis is already in the stack) if this matters for your threat model.
-- **Supabase RLS**: the archived `docs/archive/TECHNICAL_INVENTORY.md` flagged that
-  Supabase row-level security was configured to allow all operations at the time it
-  was written — verify current RLS policy on the `events` table
+- **Supabase RLS**: an earlier technical inventory (since removed; in git history)
+  flagged that Supabase row-level security was configured to allow all operations at
+  the time it was written — verify current RLS policy on the `events` table
   (`deployment/sql/supabase_setup.sql`) before relying on Supabase-side access control.
 - **The legacy Flask gateway was deleted on 2026-08-15.** If you restore it from git
   history, treat it as unmaintained and do not run it in any environment that

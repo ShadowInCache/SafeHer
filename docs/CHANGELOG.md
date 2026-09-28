@@ -7,6 +7,237 @@ until the first tagged release.
 
 ## [Unreleased]
 
+### 2026-09-18 — the background watch covers the journey, not just the glove
+
+#### Fixed
+- **A journey armed with no glove had no foreground service at all.** The
+  service was started by exactly one condition — a connected glove, via
+  `GloveWatchService` watching `gloveLinkProvider.isListening` — and
+  `threat_pipeline.dart` never referenced it. So a Safe Journey running on the
+  glasses with no glove paired lost detection the moment the screen went off:
+  Android freezes the process, so the speech recogniser stopped, the camera
+  policy's 1 s tick stopped, and the once-a-second post to `/alerts/analyze`
+  stopped. `threatPipelineArmed` watches only the journey, so the app went on
+  reporting itself armed throughout. New `SafetyWatch`
+  (`core/background/safety_watch.dart`) owns the service's lifetime as the
+  **union of `WatchReason`s**; the glove and the pipeline each claim and release
+  their own, so neither one ending can switch the other off.
+- **Continuous background listening was never declared to the platform.** The
+  manifest held `FOREGROUND_SERVICE_LOCATION` and
+  `FOREGROUND_SERVICE_CONNECTED_DEVICE` with
+  `foregroundServiceType="connectedDevice|location"` and no microphone type —
+  which is the configuration Android 14+ mutes the microphone for. Added
+  `FOREGROUND_SERVICE_MICROPHONE` and `microphone`.
+- **The Profile screen promised journey listening with no off-screen caveat.**
+  The glove's text has carried "only does this while SafeHer is open" since the
+  service landed; the journey's carried nothing, so a phone that refused the
+  service claimed listening it was not doing. Both halves are now gated on the
+  same `backgroundWatchActive`.
+
+#### Changed
+- `SafetyForegroundService.start` takes the live `reasons` and derives the
+  Android service types and the notification text from them, instead of
+  hardcoding a glove. **The microphone type is added only when
+  `Permission.microphone` is actually granted:** Android 14 refuses a service
+  whose declared types exceed the permissions held, so declaring it after a
+  denial would cost the entire service — and with it the glove's BLE stream —
+  rather than just the microphone.
+- `safetyForegroundServiceProvider` moved to `core/background/safety_watch.dart`,
+  beside the service it creates. The glove is no longer its only consumer, and
+  leaving it in `glove_auto_trigger.dart` made it look as though it were.
+- Notification channel renamed from "Glove monitoring" to "Safety monitoring";
+  the title and body now name whichever reasons are live.
+
+#### Not verified
+- 966 passing tests and a clean analyzer, but **none of this has run on a
+  device.** The claim that matters — that Android 14+ keeps the recogniser alive
+  with the microphone type declared — is exactly the part a test cannot make.
+  The release APK has not been rebuilt.
+- The `location` service type is still declared unconditionally, as it always
+  has been. It should get the same permission gate as the microphone; it is left
+  alone here rather than changed untested alongside a working path.
+
+### 2026-09-17 — the camera opens on a trigger, not for the whole journey
+
+#### Changed
+- **Video is no longer streamed continuously.** The microphone and the glove run
+  for the whole journey because they are cheap; the camera is opened when one of
+  them says something is happening and closed again afterwards. New
+  `CameraActivationPolicy` (`features/safety/domain/`): opens on an utterance
+  scored ≥0.5 or a glove score ≥0.7, holds for 30 s, extends while something is
+  still in view, caps one opening at 3 minutes, and refuses to reopen for 10 s —
+  except for a confident `FALL`, which bypasses that cooldown, because a fall
+  describes something that has already gone wrong.
+- `ThreatPipeline` splits `_startVideo` into preparing the detector when a
+  journey arms (model loaded with the camera shut, so its start-up is not spent
+  in the seconds after a trigger) and opening/closing the stream on the policy's
+  verdict. A 1 s tick enforces the dwell, since the policy is passive.
+- **No firmware change was needed.** `videoStreamTask` only calls
+  `esp_camera_fb_get()` when a client is connected, so closing the stream
+  already stops capture, JPEG encoding and radio transmission on the glasses.
+- New `ThreatPipelineStatus.cameraOpen`, distinct from `glassesStreaming`: the
+  first says the app opened the camera, the second says video is arriving.
+  Glasses that have gone flat leave the first true and the second false, which
+  is what the user needs to be told.
+
+#### Fixed
+- **A closing camera would have reported calm.** `WeaponDetectionService.onStreamLost()`
+  publishes a zero score when its window is reset. With the camera now cycling
+  all journey that would have told the fusion engine "the camera looked and saw
+  nothing" at a 0.40 weight after every opening — capping the fused score and
+  suppressing the alarm the microphone and the glove were raising.
+  `ThreatSignalAggregator.retractWeapon()` withdraws the signal instead, and the
+  pipeline drops any score computed from an empty window.
+
+#### Not verified
+- All of the above is covered by 950 passing tests and a clean analyzer, but
+  **no part of the trigger flow has run against real glasses**. The thresholds
+  and the 30-second dwell are reasoned, not measured.
+
+### 2026-09-16 — 5-class glove model, and a review of what it left inconsistent
+
+#### Changed
+- **Glove model is now 5-class (PR #32, `e15b70b`).** `PUSH`/`PULL`/`JERK`
+  merged into `SUDDEN_MOVEMENT`; 3,000 trees, 37,176 nodes. Locked-test accuracy
+  0.8886, macro F1 0.9001 — but missed-fall windows rose from 8 to 12.
+  Shipped in `SafeHer_Glove_V5_OnDevice/`, with `SUDDEN_MOVEMENT` debounced over
+  two windows on the glove.
+- App label set, threat mapping and `motion_data.dart` updated to five classes.
+- `scripts/check_glove.py` knows the five labels, reads both firmware payloads,
+  and says which sketch is flashed.
+
+#### Fixed
+- **Glove gave no readings.** `SafeHer_Glove_V5_OnDevice.ino` was committed with
+  `DATA_COLLECTION_MODE 1`, which never starts BLE. Back to `0`.
+- **Each app parser read only one firmware payload.** Against `V5_OnDevice` the
+  Motion Risk card showed `--`; against `SafeHer_Glove_Final` the alarm path read
+  the label as `CLASS=FALL` and could never fire. `GloveClassification.tryParse`
+  and `parseMotionPacket` now both accept `FALL,0.93` and
+  `CLASS=FALL,CONFIDENCE=0.9300`.
+- **Closing the pairing sheet could stop auto-SOS readings.** The alarm path and
+  the Motion Risk card each subscribed to the classification characteristic, and
+  whichever cancelled first switched notifications off for both.
+  `FlutterBluePlusBleService` now shares one subscription and switches off only
+  when the last listener leaves. It also uses `onValueReceived` rather than
+  `lastValueStream`, which replayed the previous connection's reading as new.
+- **Tests that passed without testing anything.** Four test files still used
+  `PUSH`/`PULL`/`JERK`; two failed, and two passed only because unknown labels
+  also never trigger. Rewritten for `SUDDEN_MOVEMENT`, with new tests pinning
+  both payload formats.
+
+- **`safeher-glasses.local` would not resolve on Android.** The mDNS resolver
+  never took a `WifiManager.MulticastLock`, and Android's Wi-Fi chip discards
+  multicast not addressed to the phone — so the query went out and the reply
+  was dropped below Dart, while the same phone streamed video from the camera's
+  raw IP. Added `MulticastLockPlugin.kt`, the `CHANGE_WIFI_MULTICAST_STATE`
+  permission, and a `MulticastLock` Dart wrapper that `MdnsGlassesResolver`
+  holds around each query and releases in a `finally`. Every failure to take
+  the lock is non-fatal: the lookup still runs.
+- **Release APK builds were impossible.** Flutter 3.41.6 writes
+  `IntegrationTestPlugin` into `GeneratedPluginRegistrant.java` on every build
+  while Gradle keeps dev-dependency plugins off the release classpath, so
+  `compileReleaseJavaWithJavac` failed on generated code. `integration_test`
+  was declared but entirely unused — no `integration_test/`, no `test_driver/`,
+  no importer — and has been removed. CI never builds an APK, which is why this
+  went unnoticed.
+
+- **mDNS queries left over the wrong network.** The multicast lock was necessary
+  but not sufficient: it governs whether *replies* survive the Wi-Fi chip's
+  filter, not which interface the *question* leaves by. `multicast_dns` binds one
+  socket to `anyIPv4`, and with mobile data and WiFi up at once a datagram to
+  `224.0.0.251` has no specific route — so Android sends it over whichever
+  network is default, normally cellular, and the camera never hears it. Unicast
+  HTTP keeps working throughout, because an RFC1918 address does route over
+  WiFi, which is what makes "pairs by IP, fails by name" so misleading.
+  `mdns_socket.dart` now sets `IP_MULTICAST_IF` to the WiFi interface on that one
+  socket. `ConnectivityManager.bindProcessToNetwork` was rejected: it binds every
+  socket in the process, so an SOS raised during a lookup could try to reach the
+  API over a WiFi link with no internet.
+- **The docs were wrong about release builds and raw IPs.** They claimed a raw
+  IP fails in release because of `network_security_config.xml`. That policy
+  governs Android's Java/Kotlin HTTP stacks; Dart's `HttpClient` is native and
+  never consults it. Disproven on a signed release APK that paired with
+  `10.66.78.183`. Corrected in `glasses/README.md`, `glasses/SETUP.md`,
+  `docs/GLASSES_STREAM_PROTOCOL.md`, `docs/HARDWARE_BRINGUP.md` and the firmware
+  comments. The IP is a genuine fallback when multicast is blocked.
+
+#### Added
+- **A live view of the glasses' camera**, on the pairing sheet. Until now nothing
+  in the app ever drew a frame — the detector consumes them and emits a score —
+  so a user could pair a camera and have no way to tell where it pointed, and the
+  system could not be shown working without starting a Safe Journey.
+  Off by default and started by a deliberate tap; nothing is recorded.
+  **It never opens a second connection while detection is running.** The firmware
+  keeps one `WiFiClient videoClient` and stops the old one when a new `/stream`
+  request arrives, so a preview of its own would evict the detector, which would
+  reconnect and evict the preview, thrashing while weapon detection lost frames.
+  `ThreatPipeline` publishes its stream on `activeGlassesVideoStreamProvider` and
+  the preview borrows it, showing the same picture the detector is scoring and
+  saying so on screen.
+
+#### Still open
+- `SafeHer_Glove_Final`, both diagnostics and Failure Capture still carry the
+  7-class model.
+- The multicast lock and the interface pinning are verified by unit tests and a
+  release build. Whether the name now resolves on the phone that failed needs
+  that phone.
+- **The app never displays the camera's video, by design.** `GlassesVideoStream`
+  is constructed only in `threat_pipeline.dart`'s `_startVideo`, which runs when
+  a Safe Journey arms the pipeline; frames go to the weapon detector and become a
+  score. No widget renders them, so pairing a camera shows no picture and outside
+  a journey no frames are pulled at all. If a live preview is wanted — for a demo,
+  or to let a user confirm the camera points where she thinks — it does not exist
+  yet.
+- The shared subscription is untested against a real radio — the tests use a
+  fake BLE service.
+
+### 2026-09-11 — glove ML integration merged, and the wearables meet real hardware
+
+#### Added
+- **Glove ML integration (PR #30).** Finalised on-device glove pipeline and
+  firmware (`glove/firmware/SafeHer_Glove_Final/`), a motion risk score with BLE
+  offline detection and auto-reconnect, and a batch of new labelled recordings
+  (fall/jerk/normal). Merged into `main` at `0fb6075`.
+- **First real ESP32-C3 hardware validation of the glove** (2026-09-10,
+  `HARDWARE_VALIDATION_REPORT.md`): MPU-6500 detected, 100 Hz sampling with
+  sub-11µs jitter, on-device 7-class inference at ~31 ms/window with sampling
+  never starved. Plus two new diagnostic sketches (hardware-only, inference) and
+  a failure-capture sketch.
+- **Weapon detector wired into the app.** `ultralytics_weapon_detector.dart`
+  scores frames on-device on Android, `remote_weapon_detector.dart` uploads a
+  sampled frame to the server on web, `weapon_scorer.dart` votes over a window,
+  and `mjpeg_client.dart` parses the glasses stream. This closes the
+  2026-09-01 "nothing loads the model" gap.
+- **Glasses camera path**: streaming firmware (`SafeHer_Glasses_Stream`), pairing
+  that refuses anything not identifying as `safeher-glasses`, and an mDNS resolver
+  so `safeher-glasses.local` resolves on Android (where `.local` otherwise fails)
+  while the release cleartext policy stays keyed on the hostname (`f401821`).
+
+#### Changed
+- **Audio distress signal replaced.** The CNN+LSTM keyword spotter (below,
+  2026-09-01) was dropped — it spotted `stop`/`no`/`off`/`down`, not real
+  phrases, and scored below a fuzzy string match on real speech. Replaced by a
+  pure-Dart TF-IDF + logistic-regression phrase classifier
+  (`threat_phrase_classifier.dart` + `phrase_classifier.json`, ~196 kB, web-safe)
+  over the platform speech recogniser. Measured on synthetic/degraded TTS;
+  recording a real distress corpus is deferred (no public dataset supplies it).
+
+#### Two build settings the hardware run surfaced
+The inference firmware overflows the default flash partition (needs **Huge APP
+3MB No OTA**), and **USB CDC On Boot** must be **Enabled** or `Serial` is silent
+on the ESP32-C3. Both are board-menu settings, not code changes.
+
+#### Where the three signals stand
+- **glove** — trained, connected, firmware hardware-validated; app pairing +
+  motion/FALL/BLE still unverified
+- **weapon** — trained (mAP@0.5 0.907), wired on-device (Android) and via server
+  fallback (web); no real glasses stream yet
+- **audio** — pure-Dart classifier wired; validated on synthetic TTS, not real
+  distress
+
+889 mobile tests, 483 backend (7 skipped), analyzer clean.
+
+
 ### 2026-09-01 — the third signal, and the scorer that decides what a detection means
 
 #### Added

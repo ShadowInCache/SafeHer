@@ -64,9 +64,15 @@
 #define SAMPLE_RATE         16000
 #define AUDIO_SAMPLES       2048
 
-// SafeHer app: advertised over mDNS under this name. Release builds of the
-// Android app deny cleartext HTTP everywhere EXCEPT this hostname, so a raw IP
-// address works in a debug build and fails in a release one.
+// SafeHer app: advertised over mDNS under this name, which is how the app is
+// meant to find the glasses without anyone reading an IP off a serial monitor.
+//
+// It is NOT true that a raw IP fails in a release build, though this file and
+// several docs used to say so. Android's network-security config governs the
+// Java/Kotlin HTTP stacks; Dart's HttpClient is native and never consults it,
+// so cleartext to an IP works in release too — confirmed 2026-09-16 on a
+// signed release APK that paired with 10.66.78.183. The IP is therefore a
+// genuine fallback when mDNS is blocked, not a debug-only trick.
 static const char* MDNS_HOSTNAME    = "safeher-glasses";
 static const char* FIRMWARE_VERSION = "1.2.0";
 
@@ -252,8 +258,8 @@ WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("ESP32 IP Address: ");
   Serial.println(WiFi.localIP());
 
-  // SafeHer app: without this the app can reach the glasses only by raw IP,
-  // which its release build refuses.
+  // SafeHer app: without this the app can be paired only by typing the IP,
+  // which works but means reading it off a serial monitor first.
   if (MDNS.begin(MDNS_HOSTNAME)) {
     MDNS.addService("http", "tcp", 80);
     Serial.printf("mDNS: http://%s.local/\n", MDNS_HOSTNAME);

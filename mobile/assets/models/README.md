@@ -79,13 +79,24 @@ implementation, so `ThreatPipeline` picks a detector per platform:
 
 | | rate | where | what leaves the device |
 |---|---|---|---|
-| Android | ~5 fps, continuous | on the phone | nothing — only a score |
+| Android | ~5 fps while the camera is open | on the phone | nothing — only a score |
 | web | 1 frame / 2 s, sampled | `POST /alerts/weapon-frame` | the frame itself |
 
 `ThreatPipelineStatus.weaponOnDevice` publishes which one is running so the UI
-can say so. A sampled server-side check is weaker than a continuous local one,
-and presenting them as one thing would be the sort of claim this codebase keeps
-having to remove.
+can say so. A sampled server-side check is weaker than a local one running at
+5 fps, and presenting them as one thing would be the sort of claim this codebase
+keeps having to remove.
+
+**The camera is not open for the whole journey.** Since 2026-09-17 it is opened
+by a trigger — an utterance the phrase classifier scores as elevated, or a glove
+reading of a fall or force applied by someone else — and closed again after a
+thirty-second dwell, extended while something is still in view
+(`CameraActivationPolicy`). The microphone and the glove are cheap and run
+continuously; the camera is the expensive one, so they say when it is worth
+looking. While it is shut the weapon signal is **absent** from the fusion
+payload, never zero — a zero would claim the camera looked and saw calm, which
+at a 0.40 weight would cap the fused score and suppress the very alarm the other
+two signals were raising.
 
 The server path runs the **INT8 ONNX** export of the same weights from
 `ml_models/`, because `onnxruntime` on a CPU-only host is the opposite trade to
@@ -97,7 +108,8 @@ endpoint answers `available: false` and the client reports the modality
 
 INT8 would be 3.4 MB against 6.13, and it is the wrong trade here. The GPU
 delegate executes in fp16; an INT8 graph often falls back to CPU and loses more
-to the fallback than it saved in size, and this runs continuously on live video.
+to the fallback than it saved in size, and this runs on live video at 5 fps for
+as long as the camera is open.
 
 The first conversion also had to be thrown away, which is the more useful
 lesson. Ultralytics refuses TFLite export on Windows, so the model was
