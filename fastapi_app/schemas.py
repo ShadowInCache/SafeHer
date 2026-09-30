@@ -312,7 +312,7 @@ class ModelScoresRequest(BaseModel):
         default=None, ge=0.0, le=1.0, description="XGBoost over glove accel + gyro"
     )
     audio_score: Optional[float] = Field(
-        default=None, ge=0.0, le=1.0, description="CNN+LSTM over glasses microphone"
+        default=None, ge=0.0, le=1.0, description="ASR + TF-IDF over phone microphone"
     )
     vision_score: Optional[float] = Field(
         default=None, ge=0.0, le=1.0, description="YOLOv8 over glasses camera"

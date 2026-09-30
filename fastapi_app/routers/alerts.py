@@ -67,7 +67,7 @@ async def _auto_dispatch_if_threatened(
     session: AsyncSession,
     settings: Settings,
     user_id: str,
-    raw_score: float,
+    signals: threat_fusion.ThreatSignals,
     incident: Optional[Incident] = None,
     weapon_confidence: float = 0.0,
     in_high_risk_zone: bool = False,
@@ -97,14 +97,26 @@ async def _auto_dispatch_if_threatened(
         .limit(1)
     )
 
-    # `raw_score` arrives already fused by the caller, so it is handed back
-    # in as the glove signal alone: fusing an already-fused number against
-    # itself would double-count it. `weapon_confidence` and
-    # `in_high_risk_zone` are no longer inputs to the score -- see the module
-    # doc in `threat_fusion` for why context was removed -- and are recorded
-    # on the incident as supporting evidence instead.
+    # The caller's signals reach the engine intact rather than pre-fused into
+    # a single number.
+    #
+    # That matters for the audit trail, not for the arithmetic. The score used
+    # to be fused by the caller and handed back in wrapped as a glove reading,
+    # so `decision.reason` -- logged on every auto-SOS and returned from these
+    # endpoints -- named the glove whatever had actually fired. An alarm raised
+    # by a knife in view reported itself as motion, which is worse than no
+    # explanation: it is a confident wrong one, on the record, about why
+    # someone's emergency contacts were called.
+    #
+    # The number is unchanged. `fuse` renormalises over whichever signals
+    # reported, so fusing three here yields exactly what the old path produced
+    # by fusing them upstream and then re-fusing that result on its own.
+    #
+    # `weapon_confidence` and `in_high_risk_zone` are still not inputs to the
+    # score -- see the module doc in `threat_fusion` for why context was
+    # removed -- and are recorded on the incident as supporting evidence.
     decision = threat_fusion.evaluate(
-        signals=threat_fusion.ThreatSignals(glove=raw_score),
+        signals=signals,
         previous_smoothed=_smoothed_scores.get(user_id),
         previous_level=_threat_levels.get(user_id),
         threshold=threshold,
@@ -320,7 +332,11 @@ async def process_threat_alert(
         session=session,
         settings=settings,
         user_id=current_user.id,
-        raw_score=processor_confidence,
+        # One opaque confidence from the external processor, with no
+        # per-modality breakdown to offer. Wrapped as the glove signal
+        # explicitly so the approximation is visible at the call site rather
+        # than hidden inside the helper.
+        signals=threat_fusion.ThreatSignals(glove=processor_confidence),
         incident=incident if threat_detected else None,
         weapon_confidence=float(processor_result.get("weapon_confidence", 0.0) or 0.0),
     )
@@ -630,7 +646,9 @@ async def submit_heartbeat(
         session=session,
         settings=settings,
         user_id=current_user.id,
-        raw_score=payload.threat_score / 100.0,
+        # A single combined score from firmware, with no breakdown. Same
+        # reasoning as /process-threat: wrapped explicitly.
+        signals=threat_fusion.ThreatSignals(glove=payload.threat_score / 100.0),
     )
 
     return {
@@ -676,9 +694,14 @@ async def get_model_registry(
     """What the threat pipeline is currently capable of.
 
     Exists so "why did nothing trigger?" has an answer that does not require
-    reading the source. While no model is trained this reports
-    `scores_are_caller_supplied: true`, which is the honest description of
-    every score the backend currently receives.
+    reading the source.
+
+    All three models are now trained and wired, and all three run off the
+    server: XGBoost on the glove's ESP32, ASR + TF-IDF and YOLOv8n on the
+    phone. So `scores_are_caller_supplied` reports on the *server's* own
+    loaded models, and stays true while the scores arrive from the devices
+    that computed them. That is the honest description of what this backend
+    receives, not a claim that nothing is trained.
     """
     return threat_models.registry_report()
 
@@ -729,11 +752,10 @@ async def analyze_model_scores(
     # The wire names predate the three-signal architecture and are kept so
     # the API does not break: motion is the glove's XGBoost output, vision is
     # YOLOv8n weapon detection, audio is the TF-IDF transcript classifier.
-    fused = threat_fusion.fuse(
-        threat_fusion.ThreatSignals(
-            glove=scores.motion, weapon=scores.vision, audio=scores.audio
-        )
+    signals = threat_fusion.ThreatSignals(
+        glove=scores.motion, weapon=scores.vision, audio=scores.audio
     )
+    fused = threat_fusion.fuse(signals)
     # Heart rate is deliberately no longer added. A racing pulse is evidence of
     # running for a bus; it is carried as supporting context on the incident.
 
@@ -754,7 +776,7 @@ async def analyze_model_scores(
         session=session,
         settings=settings,
         user_id=current_user.id,
-        raw_score=fused,
+        signals=signals,
         weapon_confidence=scores.weapon_confidence,
         in_high_risk_zone=payload.in_high_risk_zone,
         scores=scores,

@@ -1,4 +1,4 @@
-"""The three-model pipeline contract — XGBoost, CNN+LSTM, YOLOv8.
+"""The three-model pipeline contract — XGBoost, ASR + TF-IDF, YOLOv8.
 
 No model is trained yet. What these tests protect is the contract around
 them, and in particular the one property that fails silently and dangerously:
@@ -97,7 +97,7 @@ class TestRegistry(unittest.TestCase):
     def test_the_algorithms_are_the_ones_chosen_for_the_product(self):
         by_modality = tm.MODELS_BY_MODALITY
         self.assertEqual(by_modality["motion"].algorithm, "XGBoost")
-        self.assertEqual(by_modality["audio"].algorithm, "CNN + LSTM")
+        self.assertEqual(by_modality["audio"].algorithm, "ASR + TF-IDF")
         self.assertEqual(by_modality["vision"].algorithm, "YOLOv8")
 
     def test_nothing_claims_to_be_trained(self):
@@ -160,6 +160,21 @@ class TestAnalyzeEndpoint(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status_code, 202, response.text)
         self.assertEqual(response.json()["modalities_used"], ["motion", "audio"])
+
+    async def test_the_reason_names_the_sensors_that_actually_fired(self):
+        # A score reaching a threshold is only half an audit trail; the other
+        # half is which sensor produced it. This used to name the glove
+        # whatever had fired, because the fused score was handed back into the
+        # engine wrapped as a glove reading -- so an alarm raised by a knife in
+        # view was logged, and reported here, as motion.
+        body = (await self._analyze(
+            motion_score=0.1, audio_score=0.2, vision_score=0.3
+        )).json()
+
+        reason = body["auto_sos"]["reason"]
+        self.assertIn("glove 0.10", reason)
+        self.assertIn("audio 0.20", reason)
+        self.assertIn("weapon 0.30", reason)
 
     async def test_a_calm_read_raises_nothing(self):
         response = await self._analyze(motion_score=0.1, audio_score=0.1, vision_score=0.1)

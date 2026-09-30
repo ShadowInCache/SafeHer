@@ -113,16 +113,21 @@ MODELS: tuple[ModelSpec, ...] = (
     ),
     ModelSpec(
         modality="audio",
-        algorithm="CNN + LSTM",
-        source_device="glasses",
-        inputs="microphone stream, windowed spectrogram",
+        algorithm="ASR + TF-IDF",
+        source_device="phone",
+        inputs="platform speech recognition transcript",
         produces="audio_score in [0, 1] over distress speech",
         notes=(
-            "Raw audio must not leave the device for scoring. Evidence is "
-            "encrypted at rest under SafeHer's own key (FR-EMG-07), and "
-            "sending an assault recording to a third-party transcription "
-            "service is a materially different privacy decision that no "
-            "module should take quietly."
+            "Runs entirely on the phone: the platform recogniser transcribes, "
+            "and a TF-IDF classifier in pure Dart scores the transcript. The "
+            "words are classified and dropped, so only the number leaves the "
+            "device and no recording is sent anywhere for scoring -- which is "
+            "the privacy decision the previous note was protecting. "
+            "The CNN+LSTM specified here was retired on 2026-09-02 for "
+            "scoring 54.5% on unseen phrasings, below a fuzzy string match. "
+            "The source is the phone, not the glasses: Android's "
+            "SpeechRecognizer cannot be fed a remote stream, so the glasses' "
+            "microphone is evidence only and feeds no score."
         ),
     ),
     ModelSpec(

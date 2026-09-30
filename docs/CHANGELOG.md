@@ -49,11 +49,24 @@ until the first tagged release.
   objects like knife blades, and QVGA is upscaled to the model's 640×640 input.
   **Nothing has measured what this does to mAP**, and that measurement is worth
   more than anything else in those documents.
-- `POST /alerts/analyze`'s docstring and its wire-name comment both described a
-  **CNN+LSTM over the glasses' microphone**. That model was retired on
-  2026-09-02 for scoring 54.5% on unseen phrasings, below a fuzzy string match.
-  What ships is platform ASR into a TF-IDF classifier, fed by the **phone's**
-  microphone; the glasses microphone feeds none of it.
+- **`GET /alerts/models` was serving a wrong answer, not a stale comment.** The
+  `MODELS` registry declared the audio model as `algorithm: "CNN + LSTM"` with
+  `source_device: "glasses"`, and `tests/test_threat_models.py` asserted that
+  value, so the mistake was pinned in place by a passing test. Both are
+  corrected to `ASR + TF-IDF` on the `phone`. Any client that asked the backend
+  what it runs was told the name of a model retired on 2026-09-02 — for scoring
+  54.5% on unseen phrasings, below a fuzzy string match.
+- The same claim appeared in five more places, all now corrected: the
+  `threat_fusion` module docstring's list of the three signals; the
+  `audio_score` field description in `schemas.py`, which is **published in the
+  OpenAPI schema**; the `GET /alerts/models` docstring, which additionally still
+  said "while no model is trained"; `POST /alerts/analyze`'s docstring and its
+  wire-name comment; and `detection_status.dart`, which named the wrong model
+  *and* said all three were "not trained yet".
+- Throughout, two facts were wrong together and both are fixed: the audio model
+  is **ASR + TF-IDF**, not CNN+LSTM, and its source is the **phone's**
+  microphone, not the glasses'. Android's `SpeechRecognizer` cannot be fed a
+  remote stream, so the glasses microphone is evidence only and feeds no score.
 - `docs/ARCHITECTURE.md`'s primary-signal diagram showed
   `Glasses mic → CNN + LSTM → audio score`. Both halves were wrong. The glasses
   microphone now appears where it belongs, under supporting evidence.

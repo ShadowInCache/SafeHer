@@ -12,7 +12,7 @@ the alarm for her.
 
     glove   XGBoost over the Smart Glove's accelerometer/gyroscope
     weapon  YOLOv8-nano weapon detection from the Smart Glasses' camera
-    audio   CNN+LSTM threat/help-word detection from the glasses' microphone
+    audio   platform ASR into a TF-IDF classifier, from the *phone's* microphone
 
 **Nothing else may enter the score.** Not GPS, not time of day, not facial
 expression, not heart rate, not whether a camera happens to be streaming.

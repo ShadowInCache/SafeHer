@@ -5,12 +5,16 @@
 /// a user could set it to 60% and reasonably believe SafeHer would raise the
 /// alarm for her. The threshold now reaches the server and the server acts on
 /// it, but the decision still needs a *score* — and those come from three
-/// models (XGBoost over the glove's motion, CNN+LSTM over the glasses'
-/// microphone, YOLOv8 over its camera) that are not trained yet.
+/// models: XGBoost over the glove's motion, ASR into a TF-IDF classifier over
+/// the *phone's* microphone, and YOLOv8n over the glasses' camera.
 ///
-/// So the honest state today is: the machinery is complete and nothing feeds
-/// it. A control that silently governs nothing is worse than no control at
-/// all on a safety app, because it is indistinguishable from protection.
+/// **All three are now trained and feeding the fusion**, which is why this
+/// class exists in its current form: it reports what is genuinely running
+/// rather than asserting the feature. A control that silently governs nothing
+/// is worse than no control at all on a safety app, because it is
+/// indistinguishable from protection — and the mirror is just as bad, so a
+/// signal that is absent for an ordinary reason (no glasses paired, a refused
+/// microphone) is reported as absent rather than as calm.
 ///
 /// The obvious shortcut — post the phone's raw accelerometer magnitude as a
 /// "motion score" — is deliberately not taken. It would be an invented number
