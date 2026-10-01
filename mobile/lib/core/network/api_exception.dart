@@ -12,11 +12,22 @@ class ApiException implements Exception {
 
   factory ApiException.fromDioException(DioException error) {
     switch (error.type) {
+      // Failing to *reach* the server and the server failing to *answer* are
+      // different faults with different remedies, and telling someone to check
+      // a working connection sends them to fix the wrong thing. The backend
+      // hibernates when idle and takes about a minute to wake, which surfaces
+      // here as a receive timeout after a handshake that succeeded instantly.
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
+        return const ApiException(
+          message: 'Could not reach the server in time. Check your network and try again.',
+        );
       case DioExceptionType.receiveTimeout:
       case DioExceptionType.transformTimeout:
-        return const ApiException(message: 'The connection timed out. Check your network and try again.');
+        return const ApiException(
+          message: 'The server is taking longer than usual to reply — it may be '
+              'waking up. Give it a moment and try again.',
+        );
       case DioExceptionType.connectionError:
         return const ApiException(message: "Couldn't reach the server. Check your connection and try again.");
       case DioExceptionType.badCertificate:

@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+
+import '../config/app_config.dart';
 import 'api_client.dart';
 
 /// Wakes a sleeping backend ahead of a request that must not wait.
@@ -35,10 +39,20 @@ class BackendWarmerRemote implements BackendWarmer {
 
   Future<void> _warm() async {
     try {
-      await _apiClient.dio.get('/health');
-    } catch (_) {
-      // A failed warm-up costs nothing. The dispatch still runs, and it is
-      // the dispatch that reports what actually happened to the user.
+      // The default receive timeout is 15 seconds and a cold start takes about
+      // 60, so this request would otherwise give up long before the thing it
+      // asked for had happened. Sending it still *triggers* the wake — the
+      // instance starts on the inbound connection — but giving up early means
+      // never learning whether it worked, and never logging that it did not.
+      await _apiClient.dio.get(
+        '/health',
+        options: Options(receiveTimeout: AppConfig.apiColdStartReceiveTimeout),
+      );
+      debugPrint('SafeHer: backend is awake');
+    } catch (error) {
+      // A failed warm-up costs nothing on its own. The request that follows
+      // reports its own outcome, and that is the one the user is waiting on.
+      debugPrint('SafeHer: backend warm-up did not complete: $error');
     }
   }
 }

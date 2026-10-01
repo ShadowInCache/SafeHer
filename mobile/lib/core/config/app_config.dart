@@ -108,5 +108,28 @@ abstract final class AppConfig {
   static const apiConnectTimeout = Duration(seconds: 10);
   static const apiReceiveTimeout = Duration(seconds: 15);
 
+  /// Receive timeout for requests made before the backend is known to be awake.
+  ///
+  /// The API is deployed on a Render instance that **hibernates when idle**.
+  /// Waking it is not slow in the usual sense — TLS completes in about 200 ms —
+  /// but the first request then waits while the container starts. Measured
+  /// 2026-10-01 against the live deployment: **63 seconds**, with the hostname
+  /// reporting itself as `srv-...-hibernate-...`.
+  ///
+  /// Against [apiReceiveTimeout]'s 15 seconds, every request after an idle
+  /// period failed. That is why sign-in appeared completely broken while the
+  /// server was in fact healthy and returning 200: Google, guest and
+  /// email/password all end at the same backend, so all four paths failed
+  /// together and the app blamed the network.
+  ///
+  /// Used only where a long wait is honest and survivable — waking the backend,
+  /// and signing in. It is deliberately **not** the default: an emergency
+  /// dispatch must fail fast and fall back, not sit for a minute.
+  ///
+  /// The real cure is to stop the instance hibernating (a keep-alive ping, or a
+  /// paid tier). This keeps the app usable until that happens, and keeps it
+  /// honest afterwards.
+  static const apiColdStartReceiveTimeout = Duration(seconds: 75);
+
   const AppConfig._();
 }

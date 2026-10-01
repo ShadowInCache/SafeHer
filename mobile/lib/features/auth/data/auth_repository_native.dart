@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/auth_token_store.dart';
 import '../domain/auth_repository.dart';
@@ -164,9 +165,19 @@ class AuthRepositoryNative implements AuthRepository {
 
   // ------------------------------------------------------------------ helpers
 
+  /// Every backend auth call goes through here — register, login, refresh.
+  ///
+  /// It carries the cold-start budget rather than the default 15 seconds,
+  /// because this is usually the first request the app makes after an idle
+  /// period and the backend hibernates. At the default it failed every time,
+  /// and sign-in looked broken while the server was healthy.
   Future<Response<dynamic>> _post(String path, Map<String, dynamic> body) async {
     try {
-      return await _apiClient.dio.post<dynamic>(path, data: body);
+      return await _apiClient.dio.post<dynamic>(
+        path,
+        data: body,
+        options: Options(receiveTimeout: AppConfig.apiColdStartReceiveTimeout),
+      );
     } on DioException catch (error) {
       throw AuthException(_messageFor(error));
     }

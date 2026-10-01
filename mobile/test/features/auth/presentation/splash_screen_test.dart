@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
 import 'package:safeher_app/core/local/local_key_value_store.dart';
 import 'package:safeher_app/core/local/onboarding_prefs.dart';
+import 'package:safeher_app/core/network/backend_warmer.dart';
+import 'package:safeher_app/core/network/network_providers.dart';
 import 'package:safeher_app/core/theme/app_theme.dart';
 import 'package:safeher_app/features/auth/data/auth_providers.dart';
 import 'package:safeher_app/features/auth/domain/auth_repository.dart';
@@ -108,6 +110,11 @@ Widget _harness({
     overrides: [
       authRepositoryProvider.overrideWithValue(_FakeAuthRepository(hasSession: hasSession)),
       localKeyValueStoreProvider.overrideWithValue(_FakeKeyValueStore(hasSeenOnboarding: hasSeenOnboarding)),
+      // The splash wakes the backend on launch. Left real, that is an HTTP
+      // call whose timeout timer outlives the widget tree, and the test fails
+      // with "A Timer is still pending" — a message that names the symptom
+      // and never the network call behind it.
+      backendWarmerProvider.overrideWithValue(const BackendWarmerNoop()),
     ],
     child: MaterialApp.router(
     // Mirrors main.dart's shell so screens render over the same ambient

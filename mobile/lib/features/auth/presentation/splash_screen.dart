@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/animations/animation_helpers.dart';
 import '../../../core/local/onboarding_prefs.dart';
+import '../../../core/network/network_providers.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/components/icons/sa_icon.dart';
@@ -34,6 +35,26 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
   @override
   void initState() {
     super.initState();
+
+    // Start waking the backend the instant the app opens.
+    //
+    // It is deployed on an instance that hibernates when idle, and the first
+    // request after that pays the spin-up — measured at about 60 seconds
+    // against the live deployment. Sign-in was the request paying it, and at
+    // the default 15-second timeout it simply failed: Google, guest and
+    // email/password all end at the same backend, so every way into the app
+    // broke at once and the error blamed the user's network.
+    //
+    // Firing it here spends that minute on the splash and on however long the
+    // user takes to read the login screen and type, instead of on a button
+    // they have already pressed. Fire-and-forget by design: it never throws,
+    // nothing awaits it, and if it fails the real request still reports its
+    // own outcome.
+    //
+    // This does not make hibernation acceptable — a keep-alive ping or a paid
+    // tier is the actual cure. It stops it being fatal in the meantime.
+    ref.read(backendWarmerProvider).warm();
+
     _hasActiveSession = ref.read(authRepositoryProvider).hasActiveSession();
     _controller = AnimationController(vsync: this, duration: _totalDuration);
     WidgetsBinding.instance.addPostFrameCallback((_) => _run());

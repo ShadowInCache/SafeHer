@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/auth_token_store.dart';
 import '../domain/auth_repository.dart';
@@ -81,6 +83,10 @@ class AuthRepositoryRemote implements AuthRepository {
 
     try {
       final idToken = await user.getIdToken(true);
+      // Google, phone OTP and guest sign-in all end here, which is why all
+      // three failed together whenever the backend was hibernating: Firebase
+      // succeeded and this exchange timed out. Same cold-start budget as the
+      // email/password path for the same reason.
       final response = await _apiClient.dio.post(
         '/auth/firebase/exchange',
         data: {
@@ -89,6 +95,7 @@ class AuthRepositoryRemote implements AuthRepository {
           if (phone != null && phone.isNotEmpty) 'phone': phone,
           if (user.photoURL != null) 'avatar_url': user.photoURL,
         },
+        options: Options(receiveTimeout: AppConfig.apiColdStartReceiveTimeout),
       );
       final accessToken = response.data['access_token'] as String?;
       if (accessToken == null) {
