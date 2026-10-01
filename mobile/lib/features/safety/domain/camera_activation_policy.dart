@@ -41,7 +41,7 @@ enum CameraTrigger {
 /// wait out a timer to save battery is the wrong trade.
 class CameraActivationPolicy {
   CameraActivationPolicy({
-    this.dwell = const Duration(seconds: 30),
+    this.dwell = const Duration(seconds: 45),
     this.cooldown = const Duration(seconds: 10),
     this.maxOpen = const Duration(minutes: 3),
     this.audioScore = 0.5,
@@ -50,6 +50,16 @@ class CameraActivationPolicy {
   });
 
   /// How long the camera stays open after the most recent trigger.
+  ///
+  /// 45 seconds, chosen as the product requirement: an incident wants roughly
+  /// 45–60 seconds of footage around it. Extended by every further trigger and
+  /// by anything still in view, so the effective window is longer than this
+  /// whenever something is actually happening; [maxOpen] bounds the total.
+  ///
+  /// The floor is not arbitrary. It has to comfortably exceed the detector's
+  /// own evidence window — the scorer votes over 15 frames at about 5 fps,
+  /// roughly three seconds — or the camera would close before any score it
+  /// produced could mean anything.
   final Duration dwell;
 
   /// How long after closing before an ordinary trigger may reopen it.

@@ -42,8 +42,21 @@ void main() {
     test('closes once the dwell elapses', () {
       final policy = build()..reportAudio(0.9, now: t0);
 
-      expect(policy.shouldClose(now: t0.add(const Duration(seconds: 29))), isFalse);
-      expect(policy.shouldClose(now: t0.add(const Duration(seconds: 30))), isTrue);
+      expect(
+        policy.shouldClose(now: t0.add(policy.dwell - const Duration(seconds: 1))),
+        isFalse,
+      );
+      expect(policy.shouldClose(now: t0.add(policy.dwell)), isTrue);
+    });
+
+    test('the dwell is the 45-60s window the product asks for', () {
+      // Stated as a range because it is a product decision, not an
+      // implementation detail: an incident wants roughly 45 to 60 seconds of
+      // footage around it. Pinned here so tuning the constant for battery or
+      // bandwidth cannot quietly drop below what the feature promises.
+      final policy = build();
+      expect(policy.dwell, greaterThanOrEqualTo(const Duration(seconds: 45)));
+      expect(policy.dwell, lessThanOrEqualTo(const Duration(seconds: 60)));
     });
 
     test('the dwell outlasts the scorer evidence window', () {
@@ -60,8 +73,11 @@ void main() {
 
       policy.reportAudio(0.9, now: later);
 
-      expect(policy.shouldClose(now: later.add(const Duration(seconds: 29))), isFalse);
-      expect(policy.shouldClose(now: later.add(const Duration(seconds: 30))), isTrue);
+      expect(
+        policy.shouldClose(now: later.add(policy.dwell - const Duration(seconds: 1))),
+        isFalse,
+      );
+      expect(policy.shouldClose(now: later.add(policy.dwell)), isTrue);
     });
 
     test('still seeing something keeps it open', () {
@@ -102,7 +118,7 @@ void main() {
   group('cooldown', () {
     test('an ordinary trigger cannot reopen immediately', () {
       final policy = build()..reportAudio(0.9, now: t0);
-      final closedAt = t0.add(const Duration(seconds: 30));
+      final closedAt = t0.add(policy.dwell);
       policy.close(now: closedAt);
 
       expect(
@@ -114,7 +130,7 @@ void main() {
 
     test('and may once the cooldown passes', () {
       final policy = build()..reportAudio(0.9, now: t0);
-      final closedAt = t0.add(const Duration(seconds: 30));
+      final closedAt = t0.add(policy.dwell);
       policy.close(now: closedAt);
 
       expect(
@@ -127,7 +143,7 @@ void main() {
       // The one signal describing something that has already gone wrong. Making
       // it wait out a battery timer is the wrong trade.
       final policy = build()..reportAudio(0.9, now: t0);
-      final closedAt = t0.add(const Duration(seconds: 30));
+      final closedAt = t0.add(policy.dwell);
       policy.close(now: closedAt);
 
       expect(
@@ -139,7 +155,7 @@ void main() {
 
     test('a merely elevated glove reading does not', () {
       final policy = build()..reportAudio(0.9, now: t0);
-      final closedAt = t0.add(const Duration(seconds: 30));
+      final closedAt = t0.add(policy.dwell);
       policy.close(now: closedAt);
 
       expect(
@@ -152,7 +168,7 @@ void main() {
   group('lifecycle', () {
     test('closing clears the opening', () {
       final policy = build()..reportAudio(0.9, now: t0);
-      policy.close(now: t0.add(const Duration(seconds: 30)));
+      policy.close(now: t0.add(policy.dwell));
 
       expect(policy.isOpen, isFalse);
       expect(policy.openedBy, isNull);
@@ -167,7 +183,7 @@ void main() {
 
     test('reset clears the cooldown too, so a new journey starts clean', () {
       final policy = build()..reportAudio(0.9, now: t0);
-      final closedAt = t0.add(const Duration(seconds: 30));
+      final closedAt = t0.add(policy.dwell);
       policy.close(now: closedAt);
 
       policy.reset();

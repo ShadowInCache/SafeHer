@@ -98,7 +98,7 @@ Detection runs **only while a Safe Journey is active**, and even then the camera
 is not left streaming. The microphone and the glove run for the whole journey
 because they are cheap; the camera is opened when one of them says something is
 happening — an utterance scored as elevated, or a fall or force applied by
-someone else — and closed again after a thirty-second dwell, extended while
+someone else — and closed again after a forty-five-second dwell, extended while
 something is still in view. See `CameraActivationPolicy` for the thresholds.
 
 Two reasons, and the second is the one that matters. It saves the glasses'

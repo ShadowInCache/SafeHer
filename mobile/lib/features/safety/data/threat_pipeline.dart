@@ -131,10 +131,22 @@ class ThreatPipeline extends _$ThreatPipeline {
       final classification = next.classification;
       if (classification == null || !next.isListening) return;
       final score = gloveScore(classification);
-      ref.read(threatSignalAggregatorProvider).reportGlove(
-            score,
-            label: classification.label,
-          );
+      final aggregator = ref.read(threatSignalAggregatorProvider);
+      if (score <= 0) {
+        // `NORMAL` — and any class this app does not recognise. Withheld
+        // rather than reported as 0.0, because a zero claims the glove looked
+        // and found calm, and it did no such thing: it found no threatening
+        // *motion*, which says nothing about a knife held to someone standing
+        // perfectly still.
+        //
+        // Reported, it weighed 0.25 against every other signal and silenced
+        // them. See `ThreatSignalAggregator.retractGlove` for the measured
+        // numbers; the short version is that a connected glove made a visible
+        // weapon stop raising the alarm.
+        aggregator.retractGlove();
+      } else {
+        aggregator.reportGlove(score, label: classification.label);
+      }
       // A fall, or force applied by someone else, is reason enough to look.
       if (state.armed && _policy.reportGlove(score, now: DateTime.now())) {
         _openCameraIfNeeded();

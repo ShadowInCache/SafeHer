@@ -89,6 +89,29 @@ class ThreatSignalAggregator {
   /// have produced between them. Absent is the truth: nothing looked.
   void retractWeapon() => _weapon = null;
 
+  /// Forgets the glove signal, so the next payload omits it entirely.
+  ///
+  /// Used when the glove classifies `NORMAL`, which is **not** a reading of
+  /// 0.0 — it is the absence of one.
+  ///
+  /// The glove measures motion. `NORMAL` means "no threatening motion
+  /// pattern", which is the absence of motion evidence, not evidence that
+  /// nothing is wrong. Reporting it as a score told the fusion engine the
+  /// opposite: a sensor that looked and found calm, weighted at 0.25.
+  ///
+  /// Measured against the live engine, that inverted the feature. A knife
+  /// detected at full confidence scores 1.000 and raises the alarm with no
+  /// glove paired; with a glove reporting `NORMAL` it scored **0.615** and
+  /// raised nothing. A scream at 0.90 fell from 0.900 to 0.525. **Wearing the
+  /// glove made her less protected than not wearing it** — and in the likeliest
+  /// scenario of all, because holding still is what people do when a weapon is
+  /// pointed at them, so `NORMAL` is exactly what the glove reports at the
+  /// moment it matters most.
+  ///
+  /// `SHAKING` and `TWISTING` still report at 0.3: those are real low readings
+  /// about motion that actually happened. Only "nothing to say" is withheld.
+  void retractGlove() => _glove = null;
+
   bool get isArmed => _armed;
 
   void arm() {

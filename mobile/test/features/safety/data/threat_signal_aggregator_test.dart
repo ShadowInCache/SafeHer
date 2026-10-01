@@ -203,6 +203,68 @@ void main() {
     });
   });
 
+  group('a glove with nothing to say', () {
+    // The glove measures motion. NORMAL means "no threatening motion", which
+    // is the absence of evidence — not evidence that nothing is wrong. Sent as
+    // 0.0 it told the fusion engine a sensor had looked and found calm, and at
+    // a 0.25 weight that silenced the other two.
+    //
+    // Measured against the real engine: a knife at full confidence scores
+    // 1.000 and alarms with no glove paired, and 0.615 — silent — with a glove
+    // reporting NORMAL. A scream at 0.90 fell from 0.900 to 0.525. Wearing the
+    // glove made her less protected than not wearing it, in the likeliest
+    // scenario there is: holding still because a weapon is pointed at you.
+    test('retracting removes the glove signal from the payload', () {
+      final aggregator = build()
+        ..reportWeapon(0.9, label: 'knife')
+        ..reportGlove(0.3, label: 'SHAKING');
+
+      aggregator.retractGlove();
+
+      final payload = aggregator.buildPayload()!;
+      expect(payload['vision_score'], 0.9);
+      expect(payload.containsKey('motion_score'), isFalse);
+    });
+
+    test('a retracted glove is absent, where one reporting 0.0 is not', () {
+      final reporting = (build()..reportGlove(0.0)).buildPayload()!;
+      expect(reporting['motion_score'], 0.0);
+
+      final withheld = build()
+        ..reportGlove(0.0)
+        ..retractGlove();
+      expect(withheld.buildPayload(), isNull);
+    });
+
+    test('retracting leaves the other signals untouched', () {
+      final aggregator = build()
+        ..reportAudio(0.6, label: 'distress')
+        ..reportWeapon(0.8, label: 'knife')
+        ..retractGlove();
+
+      final payload = aggregator.buildPayload()!;
+      expect(payload['audio_score'], 0.6);
+      expect(payload['vision_score'], 0.8);
+      expect(payload.containsKey('motion_score'), isFalse);
+    });
+
+    test('retracting when nothing was reported is harmless', () {
+      final aggregator = build();
+      expect(aggregator.retractGlove, returnsNormally);
+      expect(aggregator.buildPayload(), isNull);
+    });
+
+    test('a real reading reports again after a retraction', () {
+      // A journey is mostly NORMAL with occasional real readings, so this
+      // alternates constantly. Retract must not wedge the signal off.
+      final aggregator = build()
+        ..retractGlove()
+        ..reportGlove(1.0, label: 'FALL');
+
+      expect(aggregator.buildPayload()!['motion_score'], 1.0);
+    });
+  });
+
   group('arming', () {
     test('does not post while disarmed', () async {
       final aggregator = build()..reportGlove(0.9);

@@ -162,7 +162,7 @@ Then check each signal reaches the fusion, one at a time:
 
 | Signal | How to trigger it | What should happen |
 |---|---|---|
-| **Weapon** | **Trigger the camera first** (speak a distress phrase, or act out a fall), then hold a knife or replica in view inside the 30-second dwell | Score rises over a 15-frame window, then decays when removed |
+| **Weapon** | **Trigger the camera first** (speak a distress phrase, or act out a fall), then hold a knife or replica in view inside the 45-second dwell | Score rises over a 15-frame window, then decays when removed |
 | **Audio** | Say a held-out distress phrase clearly | Score rises for that utterance |
 | **Glove** | Act out a fall | Countdown opens — the direct BLE path, no server involved |
 
