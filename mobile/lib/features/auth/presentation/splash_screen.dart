@@ -39,6 +39,27 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
     WidgetsBinding.instance.addPostFrameCallback((_) => _run());
   }
 
+  /// Runs the animation, works out where to go, and goes there.
+  ///
+  /// **Nothing in here may prevent the redirect.** This screen fades itself to
+  /// `opacity: 0` over its last 300 ms, so once the animation has finished the
+  /// only thing on screen is an empty dark `Scaffold`. That is fine while the
+  /// redirect always follows, and catastrophic when it does not: the app looks
+  /// dead on launch, with no spinner, no message and nothing in the log.
+  ///
+  /// It did not always follow. The session check reads the backend JWT from
+  /// the platform keystore via `flutter_secure_storage`, and that can throw —
+  /// on a keystore that will not decrypt after an OS update or a device
+  /// restore, and on OEM builds whose keystore is simply broken. It was
+  /// awaited bare, so a throw killed `_run` as an unhandled async error and
+  /// left the user staring at a blank dark screen for as long as they were
+  /// willing to wait. Observed on an Infinix X6832, where the Android keystore
+  /// fails crypto setup.
+  ///
+  /// So every step here is allowed to fail, and the redirect happens anyway.
+  /// Failing to read a session is not the same as not having one, but the safe
+  /// destination is identical: login. Signing in again is a recoverable
+  /// annoyance; a launch screen that never moves is not.
   Future<void> _run() async {
     final reducedMotion = AnimationHelpers.reducedMotion(context);
     final animationDone = reducedMotion
@@ -46,12 +67,38 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
         : AnimationHelpers.forward(context, _controller);
     if (reducedMotion) _controller.value = 1;
 
-    final results = await Future.wait([animationDone, _hasActiveSession]);
+    // Both futures are already running, so awaiting them one after the other
+    // still costs max(animation, session) rather than the sum of the two.
+    // The timeout covers the other half of the failure: a keystore call that
+    // never returns cannot be caught, only outlived.
+    var hasActiveSession = false;
+    try {
+      hasActiveSession =
+          await _hasActiveSession.timeout(const Duration(seconds: 5));
+    } catch (error, stackTrace) {
+      debugPrint('SafeHer: could not read the saved session at launch: $error');
+      debugPrintStack(stackTrace: stackTrace, maxFrames: 6);
+    }
+
+    // The animation is decoration. A failure in it must not strand the app
+    // either, so its error is swallowed rather than propagated.
+    try {
+      await animationDone;
+    } catch (_) {}
+
     if (!mounted) return;
 
-    final hasActiveSession = results[1] as bool;
-    final prefs = ref.read(onboardingPrefsProvider);
-    final destination = !prefs.hasSeenOnboarding
+    // Local storage, so very unlikely to throw once `main` has opened the box
+    // — but this method's whole contract is that it reaches `context.go`, and
+    // an uncaught read here would break that for the same invisible reason.
+    var hasSeenOnboarding = false;
+    try {
+      hasSeenOnboarding = ref.read(onboardingPrefsProvider).hasSeenOnboarding;
+    } catch (error) {
+      debugPrint('SafeHer: could not read onboarding state at launch: $error');
+    }
+
+    final destination = !hasSeenOnboarding
         ? '/onboarding'
         : (hasActiveSession ? '/home' : '/auth/login');
 
