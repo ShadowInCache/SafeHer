@@ -20,16 +20,108 @@ void _bleLog(String message) {
   if (kDebugMode) debugPrint('[BLE] $message');
 }
 
+/// How long startup may take before it is treated as hung.
+///
+/// A throw is not the only way `main` can fail to reach `runApp`. A box that
+/// never opens, or a platform channel that never answers, leaves an `await`
+/// pending forever — and an `await` that never completes cannot be caught.
+/// The screen stays black with nothing in the log, which is precisely the
+/// failure this file shipped with.
+const _startupBudget = Duration(seconds: 15);
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Skipped under the fixture-data flavor (`--dart-define=USE_MOCK_API=true`),
-  // so UI-only work never needs Firebase configured. The default is the real
-  // flavor, which does initialise it.
+
+  // **`runApp` is now reached on every path.**
+  //
+  // This used to be two bare `await`s with `runApp` after them. Anything that
+  // threw — a Firebase misconfiguration, a Hive box that would not open — meant
+  // `runApp` was never called, so Android showed a black screen with nothing on
+  // it and nothing in the log to say why. On a safety app that is the worst
+  // possible failure: indistinguishable from a dead phone, and undebuggable
+  // without a cable.
+  //
+  // Firebase and local storage fail differently and are treated differently.
+  // Firebase being down costs sign-in and push; the app still has SOS, the
+  // shake gesture and contacts, so it starts and says what is degraded. Local
+  // storage is not survivable — `prefsBox` is read through `getIt` all over the
+  // app and would throw on first access — so that one stops here, visibly.
   if (!AppConfig.useMockApi) {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      ).timeout(_startupBudget);
+    } catch (error, stackTrace) {
+      // Reported, not fatal. Sign-in and push will not work; everything that
+      // does not need the network still will.
+      debugPrint('SafeHer: Firebase did not start: $error');
+      debugPrintStack(stackTrace: stackTrace, maxFrames: 8);
+    }
   }
-  await configureDependencies();
+
+  try {
+    await configureDependencies().timeout(_startupBudget);
+  } catch (error, stackTrace) {
+    debugPrint('SafeHer: local storage did not start: $error');
+    debugPrintStack(stackTrace: stackTrace, maxFrames: 8);
+    runApp(_StartupFailureApp(detail: '$error'));
+    return;
+  }
+
   runApp(const ProviderScope(child: _AppLifecycleLogger(child: SafeHerApp())));
+}
+
+/// Shown when the app genuinely cannot start.
+///
+/// Deliberately built from nothing but `MaterialApp` and `Text`: it has to
+/// render when dependency injection, preferences and the theme are all
+/// unavailable, so it may not touch any of them. Its whole job is to replace a
+/// black screen with a sentence.
+class _StartupFailureApp extends StatelessWidget {
+  const _StartupFailureApp({required this.detail});
+
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: const Color(0xFF1A1A1A),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'SafeHer could not start',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Its local storage would not open, so the app cannot run. '
+                  'Reopening may fix it. If it does not, reinstalling will — '
+                  'but that clears anything saved on this device.',
+                  style: TextStyle(color: Colors.white70, fontSize: 15, height: 1.4),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  detail,
+                  style: const TextStyle(color: Colors.white38, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Logs app-lifecycle transitions under `[BLE]` — not because the app
