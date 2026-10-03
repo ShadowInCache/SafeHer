@@ -7,6 +7,131 @@ until the first tagged release.
 
 ## [Unreleased]
 
+### 2026-10-03 — four field failures, and the measurement that was overdue
+
+#### Fixed
+- **The app opened to a blank dark screen on a real phone** (`eea317f`,
+  `1f39c4c`). The saved login token had been encrypted under an Android
+  keystore key that no longer matched, so `flutter_secure_storage` threw
+  `BadPaddingException: BAD_DECRYPT` on every read — normal after a reinstall,
+  a restore, or an OS update. Two things then lined up: the splash fades its
+  own content to `opacity: 0` over its last 300 ms, and its only exit
+  (`context.go`) sat behind an unguarded `await` on that read. The throw killed
+  `_run` as an unhandled async error, so the app painted a dark `Scaffold` and
+  never navigated. Alive, rendering correctly, showing nothing.
+  - `AuthTokenStore` now treats an unreadable entry as an absent one and
+    deletes it, which makes the condition self-healing: the next sign-in writes
+    fresh ciphertext under the current key. This is the real fix, because
+    `readToken()` is also called by the Dio interceptor on **every**
+    authenticated request, the WebSocket handshake and the offline queue.
+  - The splash can no longer be stranded — the session read is caught *and*
+    timed out, and neither the animation nor the preferences read can block the
+    redirect.
+  - `main()` now reaches `runApp()` on every path, with a visible error screen
+    instead of a void. Diagnosed on an Infinix X6832 over adb.
+- **No sign-in method worked at all — and Firebase was not the cause**
+  (`8aa66ac`). Measured against the live deployment: the Render instance
+  **hibernates when idle** and the first request takes **63 seconds**
+  (TLS completed in 0.2 s; the hostname reported itself as
+  `srv-...-hibernate-...`). Against a 15-second receive timeout every request
+  failed. Google, guest, phone OTP and email/password all end at the same
+  backend, so all four broke together while the server returned 200s.
+  - New `apiColdStartReceiveTimeout` (75 s) on sign-in and the warm-up only;
+    an emergency dispatch still fails fast.
+  - `BackendWarmer` is now actually *called*, at launch from the splash — it
+    had been written, documented and tested, and never invoked. The ~60 s wake
+    now overlaps the splash and the user reading the login screen.
+  - A receive timeout no longer claims the user's network is broken. "Could not
+    reach the server" and "the server may be waking up" are different faults
+    with different remedies.
+- **A connected glove suppressed the alarm it was meant to raise** (`f5e66d4`).
+  The glove reports `NORMAL` roughly every 0.5 s and the app mapped that to a
+  score of **0.0** — a *reported* zero, meaning "I looked and she is safe",
+  carrying 0.25 of the fused weight. Measured against the live engine:
+
+  | Scenario | No glove | Glove reading NORMAL |
+  |---|---|---|
+  | knife 1.00 | **1.000 ALARM** | 0.615 — silent |
+  | knife 0.90 + scream 0.90 | **0.950 ALARM** | 0.725 — silent |
+  | scream 0.90 | **0.900 ALARM** | 0.525 — silent |
+
+  **Wearing the glove made her less protected than not wearing it**, in the
+  likeliest scenario there is: holding still is what people do when a weapon is
+  pointed at them, so `NORMAL` is exactly what the glove reports at the moment
+  it matters most. `NORMAL` is now withheld via `retractGlove()` rather than
+  reported, mirroring what the camera already did on close. `SHAKING` and
+  `TWISTING` still report at 0.3 — those are real readings. The engine itself
+  was not changed; it was behaving exactly as designed on a number the client
+  could not justify.
+- **An auto-SOS named the wrong sensor** (`2d2ba8b`). The fused score was
+  handed back into the engine wrapped as a glove reading, so `decision.reason`
+  — logged on every dispatch and returned from the API — said "glove" whatever
+  had fired. An alarm raised by a knife in view reported itself as motion. The
+  real `ThreatSignals` now reach `evaluate()`; the arithmetic is unchanged,
+  because `fuse` renormalises and a single signal passes through as itself.
+
+#### Changed
+- **The camera dwell is 45 seconds, not 30**, to match the product requirement
+  that an incident wants 45–60 seconds of footage. Extended by further triggers
+  and by anything still in view, still capped at `maxOpen` 3 minutes. The range
+  is now asserted by a test, so tuning for battery cannot quietly drop below
+  what the feature promises.
+
+#### Measured
+- **What the glasses' camera settings cost weapon detection**, on 250 held-out
+  images from the merged test set, through the real detector at the app's own
+  0.55 operating threshold:
+
+  | Condition | Detected | Mean confidence |
+  |---|---|---|
+  | Native resolution | **91.2%** | 0.780 |
+  | QVGA only | 89.2% | 0.755 |
+  | Full resolution, heavy compression | 90.4% | 0.776 |
+  | QVGA + compression | 80.8% – 88.4% | 0.696 – 0.747 |
+
+  Neither setting hurts much alone — QVGA costs 2.0 points, compression 0.8 —
+  but together they cost up to **10.4**, around four times additive. At 320×240
+  a blade is a few pixels wide and JPEG quantises away exactly that detail.
+  The firmware's `jpeg_quality 20` lands near the 2.8–5.6 point band, which the
+  scorer's 15-frame vote largely absorbs, **so the shipped settings are
+  defensible** — the opposite of what the docs previously implied. The cheapest
+  improvement is a lower `jpeg_quality` number, not a larger frame size.
+  Script: `D:\SafeHer-ML\weapon_detection\scripts\measure_stream_degradation.py`.
+- **Backend capacity**, measured locally against SQLite on one uvicorn worker:
+  throughput plateaus at **~150 req/s**, and since each active Safe Journey
+  posts at 1 Hz that is **~100 concurrent journeys** (p95 154 ms, no missed
+  ticks). At 200 it collapses — p95 4.9 s and 963 missed one-second ticks, with
+  no errors, which is worse than erroring because the app looks fine while the
+  fused score goes stale. Treat it as an upper bound: production adds shared
+  CPU and a network round-trip per query to Neon.
+
+#### Not verified
+- The detection measurement used the server's **ONNX** export; the phone runs
+  the **TFLite fp16** build. Same lineage, different quantisation.
+- It measures single-frame recall on dataset images, not a real knife in a real
+  room, and not through the glasses.
+- The capacity figure was measured on local SQLite, not Render + Neon.
+
+#### Known, unfixed
+- **`/alerts/analyze` has no rate limit, and a naive one would do harm.**
+  `client_key()` keys on IP, not user, and two people behind one carrier NAT
+  each post 60 req/min — so any limit loose enough for them is no limit, and
+  any limit tight enough to matter throttles real journeys. It needs per-user
+  keying, not a new rule in `DEFAULT_RULES`.
+- **One worker is the architectural ceiling.** `_smoothed_scores`,
+  `_threat_levels` and the rate-limiter window are in-process dicts; a second
+  worker splits the EMA and doubles effective limits. Redis is already a
+  dependency and is where that state belongs.
+- **A `SHAKING` reading at 0.3 drags a maxed knife to 0.731**, just under the
+  0.75 threshold. Defensible — 0.3 is a genuine observation — but it means
+  trembling with fear can suppress a weapon alarm. Fixing it would mean
+  touching the engine's solo floor rather than the client.
+- **Firmware credentials are still tracked in git.** `secrets.h` and the legacy
+  noise-alarm sketch. Rotating the WiFi password and that Gmail app password is
+  the only step that actually helps; `git rm --cached` alone does nothing to
+  history.
+
+
 ### 2026-09-28 — the documented endpoint becomes a real one, and the docs stop contradicting the code
 
 #### Added

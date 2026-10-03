@@ -156,8 +156,8 @@ Everything worth changing is a named constant at the top of the sketch.
 
 | Constant | Default | Effect |
 |---|---|---|
-| `config.frame_size` | `FRAMESIZE_QVGA` | 320×240. Raised to VGA the stream stuttered, and the sketch comment records the decision: a stable QVGA stream beats a stuttering VGA one. **The trade is real and unmeasured** — the weapon model's input is 640×640, so QVGA is upscaled, and thin objects like a knife blade are exactly what upscaling loses. |
-| `config.jpeg_quality` | `20` | Lower = better quality, bigger frames. **This is above the ~18 at which the detector starts losing thin blades**, and was chosen for stream stability rather than detection accuracy. Worth re-measuring with a real knife before the demo. |
+| `config.frame_size` | `FRAMESIZE_QVGA` | 320×240. Raised to VGA the stream stuttered: a stable QVGA stream beats a stuttering VGA one. **Measured cost: 2.0 points of per-frame detection** on 250 held-out weapon images — small on its own. |
+| `config.jpeg_quality` | `20` | Lower = better quality, bigger frames. **Measured 2026-10-03: compression costs almost nothing at full resolution (0.8 pts) but compounds badly at QVGA**, where the pair costs up to 10.4 points instead of the ~3 you would expect. A blade is a few pixels wide at QVGA and JPEG quantises exactly that detail away. Lowering this number is the cheapest way to buy detection back — see `docs/GLASSES_STREAM_PROTOCOL.md`. |
 | `config.fb_count` | `1` | Two buffers need PSRAM and stop the capture loop stalling while the previous frame is still going out. One was chosen alongside QVGA for stability. |
 | `AUDIO_SAMPLE_RATE` | `16000` | Every speech model here expects 16 kHz. Raising it costs bandwidth and buys nothing. |
 | `s->set_vflip` | `1` | Set to `0` if your camera is mounted the other way up. |

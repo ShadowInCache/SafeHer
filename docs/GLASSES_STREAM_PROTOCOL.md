@@ -65,10 +65,45 @@ it records why. The table was describing an intention, not the build.
 | `fb_count` | 1 | Two requires PSRAM and avoids stalling the capture loop while the previous frame is still going out. One was chosen alongside QVGA |
 | `pixel_format` | `PIXFORMAT_JPEG` | The app expects JPEG bytes; anything else means decoding on the phone for no gain |
 
-**This combination has never been evaluated against the weapon model.** Detection
-was validated at 640×640 on clean images; nothing has measured what QVGA at
-quality 20, upscaled, does to mAP. That measurement is worth more than any other
-item in this document.
+### What the combination costs — measured 2026-10-03
+
+It used to say here that nothing had measured this. It has now been measured, on
+**250 held-out weapon images** from the same merged test set the model was
+validated against, scored through the real detector at the app's own operating
+threshold (`WeaponScorer.confidenceFloor = 0.55`):
+
+| Condition | Detected | Mean confidence |
+|---|---|---|
+| Native resolution (baseline) | **91.2%** | 0.780 |
+| QVGA only, near-lossless | 89.2% | 0.755 |
+| Full resolution, heavy compression | 90.4% | 0.776 |
+| **QVGA + compression** | **80.8% – 88.4%** | 0.696 – 0.747 |
+
+**Neither setting is the problem on its own, and together they are.** Dropping to
+QVGA costs 2.0 points. Compressing hard at full resolution costs 0.8. If the
+effects were additive the pair would cost under 3 — the measured cost reaches
+**10.4**, roughly four times that.
+
+The reason is the interaction, not either setting. At 320×240 a knife blade is a
+few pixels wide; JPEG then quantises away precisely the high-frequency detail
+that remains. At full resolution the blade spans enough pixels to survive the
+same quantisation.
+
+**Where the firmware sits.** esp32-camera's `jpeg_quality` is 0–63 with *lower*
+meaning better, so its 20 is not libjpeg's 20. It lands around the
+`qvga_q70`–`qvga_q85` band above: a **2.8–5.6 point** loss per frame. The scorer
+then votes over 15 frames, which absorbs most of a few points of per-frame
+recall — so the shipped settings are defensible, which is the opposite of what
+this section previously implied.
+
+**The cheap improvement is quality, not resolution.** Raising resolution is what
+destabilised the stream. Compression at full resolution cost almost nothing, and
+QVGA is where it compounds — so lowering the `jpeg_quality` *number* (better
+quality, larger frames) buys back 2–3 points without touching frame size.
+
+Two caveats. This used the server's **ONNX** export; the phone runs the
+**TFLite fp16** build, same lineage but differently quantised. And it measures
+single-frame recall on dataset images, not a real knife in a real room.
 
 **Target 10–15 fps.** The app tolerates less. It deliberately runs inference at
 about 5 fps regardless of how fast frames arrive, because the scorer votes over
