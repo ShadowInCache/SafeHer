@@ -71,7 +71,11 @@ abstract final class GloveBle {
 
 /// One classification from the on-device model.
 class GloveClassification {
-  const GloveClassification({required this.label, required this.confidence});
+  const GloveClassification({
+    required this.label,
+    required this.confidence,
+    this.sequence,
+  });
 
   /// The raw label as the firmware sent it, e.g. `FALL`.
   ///
@@ -82,6 +86,22 @@ class GloveClassification {
 
   /// 0.0-1.0, as reported by the model.
   final double confidence;
+
+  /// The firmware's inference counter, when it sends one.
+  ///
+  /// **Why it exists.** GATT notifications are *unacknowledged* — the glove
+  /// calls `notify()` and never learns whether the phone received it. Without
+  /// a counter, a dropped classification is indistinguishable from a quiet
+  /// half-second, so the app could not tell "the glove saw nothing" from "the
+  /// glove said something and it never arrived". A fall produces two to four
+  /// windows and the alarm rule needs two of them, so losing two of three
+  /// silently costs an alarm.
+  ///
+  /// **Null is expected, not exceptional.** Firmware predating the counter
+  /// sends `FALL,0.93` with no third field, and `SafeHer_Glove_Final` sends a
+  /// keyed format with none either. Both must keep working, so absence means
+  /// "this glove cannot tell us about loss", never "no packets were lost".
+  final int? sequence;
 
   /// The five classes the v7 model was trained on, in label order. `PUSH`,
   /// `PULL`, and `JERK` were merged into `SUDDEN_MOVEMENT`: trained
@@ -153,11 +173,24 @@ class GloveClassification {
     final confidence = double.tryParse(unkey(parts[1], 'CONFIDENCE='));
     if (confidence == null || confidence.isNaN) return null;
 
+    // Optional third field: the firmware's inference counter. Parsed
+    // leniently and on its own — a counter this app cannot read is a lost
+    // ability to detect dropped notifications, which must never cost us the
+    // classification itself. A glove reporting a real FALL with a garbled
+    // sequence is still reporting a real FALL.
+    int? sequence;
+    if (parts.length >= 3) {
+      final raw = unkey(parts[2], 'SEQ=');
+      final parsed = int.tryParse(raw);
+      if (parsed != null && parsed >= 0) sequence = parsed;
+    }
+
     return GloveClassification(
       label: label,
       // Clamped: a firmware bug reporting 1.4 should not travel through the
       // app as a confidence above certainty.
       confidence: confidence.clamp(0.0, 1.0),
+      sequence: sequence,
     );
   }
 

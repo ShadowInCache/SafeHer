@@ -36,6 +36,7 @@ class GloveLinkState {
     this.heartRateUnsupported = false,
     this.lastUpdate,
     this.isReporting = false,
+    this.droppedNotifications = 0,
   });
 
   /// How long the glove may stay silent before it counts as not reporting.
@@ -86,6 +87,23 @@ class GloveLinkState {
   /// True when the link is up but nothing is coming over it.
   bool get isSilent => isListening && !isReporting;
 
+  /// How many classifications were lost in transit on this connection.
+  ///
+  /// Counted from gaps in the firmware's inference counter, so it is only ever
+  /// non-zero against firmware that sends one. **Zero therefore means either
+  /// "none lost" or "this glove cannot tell us"** — [lossIsMeasurable]
+  /// separates the two, and no caller should read a zero as proof of a clean
+  /// link without checking it.
+  ///
+  /// Why it matters: GATT notifications are unacknowledged, a fall produces
+  /// two to four windows, and the alarm rule needs two of them. Losing two of
+  /// three costs an alarm, and before this there was no way to know it had
+  /// happened.
+  final int droppedNotifications;
+
+  /// Whether this glove's firmware reports an inference counter at all.
+  bool get lossIsMeasurable => classification?.sequence != null;
+
   /// The glove connected but has no telemetry characteristic -- firmware
   /// older than the one that added it. Surfaced rather than swallowed so the
   /// UI can say "this glove reports classifications only" instead of showing
@@ -104,6 +122,7 @@ class GloveLinkState {
     GloveTelemetry? telemetry,
     bool? isListening,
     bool? isReporting,
+    int? droppedNotifications,
     bool? telemetryUnsupported,
     int? heartRateBpm,
     bool clearHeartRate = false,
@@ -115,6 +134,7 @@ class GloveLinkState {
       telemetry: telemetry ?? this.telemetry,
       isListening: isListening ?? this.isListening,
       isReporting: isReporting ?? this.isReporting,
+      droppedNotifications: droppedNotifications ?? this.droppedNotifications,
       telemetryUnsupported: telemetryUnsupported ?? this.telemetryUnsupported,
       heartRateBpm: clearHeartRate ? null : (heartRateBpm ?? this.heartRateBpm),
       heartRateUnsupported: heartRateUnsupported ?? this.heartRateUnsupported,
@@ -148,6 +168,15 @@ class GloveLink extends _$GloveLink {
   /// when *no* event arrives: silence produces no state change to react to,
   /// which is exactly why it went unnoticed.
   Timer? _silenceWatchdog;
+
+  /// The last inference counter seen, for spotting gaps. Null until a glove
+  /// that sends one has been heard from.
+  int? _lastSequence;
+
+  /// Lost classifications on this connection. Reset with the link, not kept
+  /// across reconnects: the firmware's counter restarts when it reboots, and
+  /// carrying a total over that boundary would describe two different runs.
+  int _dropped = 0;
 
   StreamSubscription<String>? _classificationSub;
   StreamSubscription<String>? _telemetrySub;
@@ -302,6 +331,22 @@ class GloveLink extends _$GloveLink {
     });
   }
 
+  /// Counts classifications lost between [previous] and [next].
+  ///
+  /// A counter that goes backwards or stands still is a glove that rebooted
+  /// (it restarts at zero), not four billion lost packets, so tracking
+  /// restarts rather than reporting an absurd gap. Same treatment covers a
+  /// uint32 wrap, which at two inferences a second is about sixty-eight years
+  /// away and still should not produce nonsense if it ever arrives.
+  int _gapBetween(int previous, int next) {
+    final delta = next - previous;
+    if (delta <= 0) {
+      _bleLog('sequence restarted ($previous -> $next); loss count reset');
+      return 0;
+    }
+    return delta - 1;
+  }
+
   void _onClassification(String raw) {
     final parsed = GloveClassification.tryParse(raw);
     // Unparsable notifications are dropped rather than clearing what is on
@@ -314,10 +359,30 @@ class GloveLink extends _$GloveLink {
     } else {
       _bleLog('notification received (${parsed.label}, ${parsed.confidence})');
     }
+    final sequence = parsed.sequence;
+    if (sequence != null) {
+      final previous = _lastSequence;
+      if (previous != null) {
+        final lost = _gapBetween(previous, sequence);
+        if (lost > 0) {
+          _dropped += lost;
+          // Logged rather than surfaced as an alarm: losing a notification is
+          // not itself an emergency, and the next window is already on its
+          // way. It is recorded so a bench session can see whether the link
+          // is healthy, which was previously unknowable.
+          _bleLog('lost $lost notification(s) before #$sequence '
+              '($_dropped on this connection)');
+        }
+        if (lost < 0 || sequence <= previous) _dropped = 0;
+      }
+      _lastSequence = sequence;
+    }
+
     state = state.copyWith(
       classification: parsed,
       lastUpdate: DateTime.now(),
       isReporting: true,
+      droppedNotifications: _dropped,
     );
     _markReporting();
   }
@@ -367,6 +432,11 @@ class GloveLink extends _$GloveLink {
     // left for it to report on anyway.
     _silenceWatchdog?.cancel();
     _silenceWatchdog = null;
+    // The firmware's counter restarts when it reboots, so carrying either of
+    // these across a reconnect would compare two different runs and invent a
+    // gap that never happened.
+    _lastSequence = null;
+    _dropped = 0;
     _listeningTo = null;
     if (state.hasData || state.isListening) state = const GloveLinkState();
   }
