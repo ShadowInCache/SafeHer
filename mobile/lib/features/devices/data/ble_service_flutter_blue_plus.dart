@@ -130,6 +130,9 @@ class FlutterBluePlusBleService implements BleService {
       // Service discovery is what proves the link is real: it round-trips
       // to the peripheral's GATT server rather than trusting a local flag.
       final services = await device.discoverServices();
+      // Asked for after discovery and before the caller subscribes, so the
+      // first notification already travels under the negotiated size.
+      await _negotiateMtu(device);
       return BleConnectionInfo(
         deviceId: deviceId,
         serviceUuids: services.map((service) => service.uuid.str).toList(growable: false),
@@ -138,6 +141,30 @@ class FlutterBluePlusBleService implements BleService {
       // Never leave a half-open connection behind after a failure.
       await _disconnectQuietly(device);
       throw _mapException(error, fallback: "Couldn't connect to this device.");
+    }
+  }
+
+  /// Asks for a larger ATT MTU, and carries on without one.
+  ///
+  /// The default 23-byte MTU leaves 20 bytes of payload, and the glove's
+  /// longest classification is exactly 20 — no headroom at all. See
+  /// [kBleDesiredMtu].
+  ///
+  /// Every failure is swallowed deliberately. `requestMtu` is Android-only and
+  /// *throws* on iOS and web; some Android peripherals and stacks refuse the
+  /// exchange; and a refused MTU is not a broken link — it is the link the app
+  /// has always used. Letting any of that abort `connect` would turn a working
+  /// pairing into a failed one for an optimisation.
+  Future<void> _negotiateMtu(BluetoothDevice device) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      final granted = await device.requestMtu(kBleDesiredMtu);
+      debugPrint('SafeHer: BLE MTU negotiated at $granted bytes');
+    } on Object catch (error) {
+      // Still usable: 20 bytes is what the current wire format needs, exactly.
+      debugPrint(
+        'SafeHer: BLE MTU request refused, staying at the default: $error',
+      );
     }
   }
 

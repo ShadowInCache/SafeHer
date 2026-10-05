@@ -1,4 +1,5 @@
 import asyncio
+import hmac
 import json
 import logging
 import ssl
@@ -87,12 +88,11 @@ async def _handle_event_message(session: AsyncSession, topic: str, payload: str)
         )
         device = rows.scalars().first()
 
-    if not device and data.get("device_id"):
-        fallback_id = str(data.get("device_id"))
-        rows = await session.execute(
-            select(models.Device).where(models.Device.device_name == fallback_id).limit(1)
-        )
-        device = rows.scalars().first()
+    # The payload used to be able to name a device when the topic did not match
+    # one. That let the *message body* choose whose account an event landed in,
+    # which is the same untrusted-identity problem the topic already has, with
+    # one fewer obstacle. Identity now comes from the topic alone, and is only
+    # believed once the device's own secret has been verified below.
 
     if not device:
         logger.warning("Unknown device on topic %s", topic)
@@ -103,16 +103,36 @@ async def _handle_event_message(session: AsyncSession, topic: str, payload: str)
 
     settings = get_settings()
 
-    # Require auth_secret for device-originated events in production-like environments.
+    # Every device-originated event must carry the device's own secret.
+    #
+    # This used to be conditional on `settings.environment` being exactly
+    # "production" or "staging" -- a case-sensitive comparison against a field
+    # that defaults to "development". An unset ENVIRONMENT, or "prod", or
+    # "Production", therefore accepted *unauthenticated* events and created
+    # incidents from them in the named user's account. A forged emergency
+    # notifies that user's emergency contacts, so the cost of the fail-open was
+    # someone else's alarm.
+    #
+    # It is now unconditional unless an operator explicitly opts out, and the
+    # comparison is constant-time: `auth_secret` is a bearer credential, and
+    # comparing it with `!=` leaks its prefix to anyone able to time the broker
+    # round trip.
     auth_secret = data.get("auth_secret")
-    if not auth_secret or auth_secret != device.auth_secret:
-        if settings.environment in {"production", "staging"}:
-            logger.warning("Unauthorized MQTT message for device %s", device.id)
+    authentic = bool(auth_secret) and hmac.compare_digest(
+        str(auth_secret), device.auth_secret or ""
+    )
+    if not authentic:
+        if not settings.allow_unauthenticated_device_events:
+            logger.warning(
+                "Rejected unauthenticated MQTT message for device %s on %s",
+                device.id,
+                topic,
+            )
             return
         logger.warning(
-            "Device %s published without valid auth_secret; accepted in %s only",
+            "Device %s published without a valid auth_secret; accepted because "
+            "allow_unauthenticated_device_events is set",
             device.id,
-            settings.environment,
         )
 
     device.last_seen = datetime.utcnow()

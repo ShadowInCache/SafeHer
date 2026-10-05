@@ -12,6 +12,19 @@ void _bleLog(String message) {
   if (kDebugMode) debugPrint('[BLE] $message');
 }
 
+/// How long the glove may stay silent before it counts as not reporting.
+///
+/// It classifies a 100-sample window every ~0.5 s and notifies every result,
+/// `NORMAL` included, so silence is never normal. Fifteen seconds is thirty
+/// missed windows: unambiguous, while still tolerating a few dropped BLE
+/// notifications and a slow reconnect.
+///
+/// Mutable and `@visibleForTesting` for the same reason
+/// `gloveAutoConnectScanWindow` is: a test should not have to wait fifteen
+/// real seconds to prove the glove went quiet.
+@visibleForTesting
+Duration gloveSilenceTimeout = const Duration(seconds: 15);
+
 /// What the glove is currently saying.
 class GloveLinkState {
   const GloveLinkState({
@@ -22,7 +35,11 @@ class GloveLinkState {
     this.heartRateBpm,
     this.heartRateUnsupported = false,
     this.lastUpdate,
+    this.isReporting = false,
   });
+
+  /// How long the glove may stay silent before it counts as not reporting.
+  static Duration get silenceTimeout => gloveSilenceTimeout;
 
   /// The most recent classification from the on-device model, if any.
   final GloveClassification? classification;
@@ -44,7 +61,30 @@ class GloveLinkState {
   final bool heartRateUnsupported;
 
   /// Subscribed to at least the classification characteristic.
+  ///
+  /// **Subscribed is not the same as hearing anything.** A glove whose sensor
+  /// failed at boot still advertises, still pairs, and still accepts a
+  /// subscription — it simply never notifies. See [isReporting].
   final bool isListening;
+
+  /// Whether a classification has actually arrived recently.
+  ///
+  /// **The gap this closes.** [isListening] only says a BLE subscription
+  /// exists, and the UI drew "Your glove is watching" from it. But the
+  /// firmware checks the IMU *after* starting BLE, so a glove with a dead
+  /// MPU-6500 pairs, reports connected, halts in an infinite loop, and sends
+  /// nothing — and the app said it was watching. The same silence follows a
+  /// wedged inference loop, a flat battery, or a glove left in
+  /// `DATA_COLLECTION_MODE 1`.
+  ///
+  /// The fused score was already honest about this: the aggregator drops a
+  /// reading older than ten seconds, so the signal went absent on its own.
+  /// Only the UI was claiming protection that had stopped. This is the value
+  /// screens should believe.
+  final bool isReporting;
+
+  /// True when the link is up but nothing is coming over it.
+  bool get isSilent => isListening && !isReporting;
 
   /// The glove connected but has no telemetry characteristic -- firmware
   /// older than the one that added it. Surfaced rather than swallowed so the
@@ -63,6 +103,7 @@ class GloveLinkState {
     GloveClassification? classification,
     GloveTelemetry? telemetry,
     bool? isListening,
+    bool? isReporting,
     bool? telemetryUnsupported,
     int? heartRateBpm,
     bool clearHeartRate = false,
@@ -73,6 +114,7 @@ class GloveLinkState {
       classification: classification ?? this.classification,
       telemetry: telemetry ?? this.telemetry,
       isListening: isListening ?? this.isListening,
+      isReporting: isReporting ?? this.isReporting,
       telemetryUnsupported: telemetryUnsupported ?? this.telemetryUnsupported,
       heartRateBpm: clearHeartRate ? null : (heartRateBpm ?? this.heartRateBpm),
       heartRateUnsupported: heartRateUnsupported ?? this.heartRateUnsupported,
@@ -100,6 +142,13 @@ class GloveLinkState {
 /// works while you are looking at it.
 @Riverpod(keepAlive: true)
 class GloveLink extends _$GloveLink {
+  /// Flips [GloveLinkState.isReporting] off when the glove goes quiet.
+  ///
+  /// A timer rather than a computed getter because nothing redraws on its own
+  /// when *no* event arrives: silence produces no state change to react to,
+  /// which is exactly why it went unnoticed.
+  Timer? _silenceWatchdog;
+
   StreamSubscription<String>? _classificationSub;
   StreamSubscription<String>? _telemetrySub;
   StreamSubscription<String>? _heartRateSub;
@@ -242,6 +291,17 @@ class GloveLink extends _$GloveLink {
         : state.copyWith(heartRateBpm: bpm, lastUpdate: DateTime.now());
   }
 
+  /// Restarts the silence watchdog. Called on every classification.
+  void _markReporting() {
+    _silenceWatchdog?.cancel();
+    _silenceWatchdog = Timer(GloveLinkState.silenceTimeout, () {
+      if (!state.isListening) return;
+      _bleLog('glove silent for ${GloveLinkState.silenceTimeout.inSeconds}s '
+          '— reporting stopped');
+      state = state.copyWith(isReporting: false);
+    });
+  }
+
   void _onClassification(String raw) {
     final parsed = GloveClassification.tryParse(raw);
     // Unparsable notifications are dropped rather than clearing what is on
@@ -254,7 +314,12 @@ class GloveLink extends _$GloveLink {
     } else {
       _bleLog('notification received (${parsed.label}, ${parsed.confidence})');
     }
-    state = state.copyWith(classification: parsed, lastUpdate: DateTime.now());
+    state = state.copyWith(
+      classification: parsed,
+      lastUpdate: DateTime.now(),
+      isReporting: true,
+    );
+    _markReporting();
   }
 
   void _onTelemetry(String raw) {
@@ -297,6 +362,11 @@ class GloveLink extends _$GloveLink {
 
   void _stop() {
     _cancelSubscriptions();
+    // Cancelled with the subscriptions: a watchdog left running past a
+    // disconnect would fire into a disposed notifier, and there is nothing
+    // left for it to report on anyway.
+    _silenceWatchdog?.cancel();
+    _silenceWatchdog = null;
     _listeningTo = null;
     if (state.hasData || state.isListening) state = const GloveLinkState();
   }

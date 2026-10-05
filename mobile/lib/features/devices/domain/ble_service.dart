@@ -8,6 +8,25 @@ const kBleScanTimeout = Duration(seconds: 15);
 /// default — a safety app must not leave someone staring at a spinner.
 const kBleConnectTimeout = Duration(seconds: 20);
 
+/// ATT MTU to ask the glove for once connected.
+///
+/// **Why this is needed at all.** The default ATT MTU is 23 bytes, of which 20
+/// carry payload — and the glove's longest classification,
+/// `SUDDEN_MOVEMENT,0.93`, is *exactly* 20. The wire format has no headroom
+/// whatsoever: one more character and notifications silently truncate, turning
+/// a classification into an unparsable fragment that the app drops. A safety
+/// signal cannot sit one byte from the edge of its transport.
+///
+/// 64 leaves 61 bytes of payload, which is room for a sequence number (so lost
+/// notifications become *detectable* — GATT notifications are unacknowledged
+/// and carry no delivery guarantee), a timestamp, or a longer class name,
+/// without revisiting this again.
+///
+/// Android only. iOS negotiates its own, larger MTU automatically, and web has
+/// no BLE at all — so a failure here is normal on two of three platforms and
+/// must never be fatal.
+const kBleDesiredMtu = 64;
+
 /// The BLE radio, behind an interface.
 ///
 /// ## What this is, and what it deliberately is not

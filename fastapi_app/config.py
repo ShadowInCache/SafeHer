@@ -19,7 +19,26 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     api_host: str = "0.0.0.0"
     api_port: int = 5000
-    enable_mqtt_worker: bool = True
+    # Off by default. **No current firmware publishes MQTT** -- the glove speaks
+    # BLE and the glasses speak HTTP; only the two retired sketches under
+    # `*/firmware/legacy_*` ever used it. Leaving an ingest path enabled that
+    # nothing feeds is attack surface with no corresponding feature, and this
+    # one can create incidents in a user's account.
+    #
+    # Turn it on deliberately, with `mqtt_username`/`mqtt_password` set and
+    # `mqtt_tls_enabled` true, if MQTT firmware returns.
+    enable_mqtt_worker: bool = False
+
+    # Whether device-originated events may skip the per-device `auth_secret`
+    # check. **Security must not be keyed on a free-text environment string.**
+    #
+    # It was: the check ran only when `environment` was exactly "production" or
+    # "staging" -- case-sensitively, against a field that defaults to
+    # "development". So an unset ENVIRONMENT, or "prod", or "Production",
+    # silently accepted unauthenticated device events and created incidents
+    # from them. A deployment that forgets one variable should not quietly lose
+    # authentication; it should fail closed, which is what this default does.
+    allow_unauthenticated_device_events: bool = False
     event_processor_url: str = "http://localhost:8080"
 
     # Database

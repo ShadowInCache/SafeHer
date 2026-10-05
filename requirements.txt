@@ -5,14 +5,33 @@
 # training pipelines themselves live outside this repository.
 
 # Web Framework
-flask==3.0.0
+flask==3.1.3
 flask-cors==4.0.0
 fastapi==0.110.0
 # Required for multipart/form-data, i.e. every file upload -- evidence
 # uploads 400 without it. Was only in requirements-backend.txt.
-python-multipart==0.0.9
+python-multipart==0.0.31
 uvicorn[standard]==0.27.1
-python-jose[cryptography]==3.3.0
+
+# --- transitive, but pinned here because they carry the security load -------
+# `cryptography` encrypts evidence at rest (FR-EMG-07). It arrives via
+# python-jose's extra, so without an explicit floor the deployed version is
+# whatever the resolver happens to pick -- which was 46.0.3, carrying 13 known
+# vulnerabilities.
+cryptography>=50.0.0
+# python-jose asks for `pyasn1<0.5.0`. 0.4.x has 8 known vulnerabilities and
+# breaks pyasn1-modules, so the newer one is held deliberately. It is safe
+# because pyasn1 is only reached when parsing asymmetric keys, and every token
+# this app issues is HS256 -- a property `test_jwt_algorithm.py` enforces, so
+# the assumption cannot rot silently.
+pyasn1>=0.6.4
+urllib3>=2.8.0
+idna>=3.15
+# 3.4.0 fixes CVE-2024-33663 (algorithm confusion) and CVE-2024-33664
+# (JWT bomb). Note it *declares* `pyasn1<0.5.0`, which is itself vulnerable and
+# conflicts with pyasn1-modules -- see the pyasn1 pin below for why holding the
+# newer one is both safe and deliberate here.
+python-jose[cryptography]==3.4.0
 passlib[bcrypt]==1.7.4
 pydantic-settings==2.15.0
 httpx==0.27.0
@@ -45,7 +64,9 @@ onnxruntime==1.29.0
 
 # Image Processing (for weapon detection)
 opencv-python==4.8.0.76
-Pillow==10.0.0
+# Used by `scripts/` only (icon generation, the glasses check), never by the
+# server. Bumped anyway: 10.0.0 carries 37 known vulnerabilities.
+Pillow==12.3.0
 
 # Audio Processing (for voice analysis) 
 librosa==0.10.1
@@ -53,7 +74,7 @@ soundfile==0.12.1
 
 # Utilities
 python-dotenv==1.0.0
-requests==2.31.0
+requests==2.33.0
 asyncio-mqtt==0.13.0
 google-auth==2.38.0
 

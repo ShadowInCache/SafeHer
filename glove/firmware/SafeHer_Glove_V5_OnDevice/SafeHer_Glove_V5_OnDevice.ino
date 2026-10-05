@@ -122,6 +122,18 @@ void initializeBLE() {
   Serial.println("BLE: Initializing...");
 
   BLEDevice::init(BLE_DEVICE_NAME);
+
+  // Accept a larger ATT MTU when the phone asks for one.
+  //
+  // The default is 23 bytes, 20 of them payload -- and "SUDDEN_MOVEMENT,0.93"
+  // is exactly 20. The format has no room to grow: adding a sequence number,
+  // which is what would make a dropped notification *detectable*, would
+  // truncate the message instead. Both ends have to agree, so the phone asks
+  // (see `kBleDesiredMtu`) and this allows it.
+  //
+  // Harmless on its own: nothing here sends more than 20 bytes yet, and a
+  // phone that never asks keeps the old size.
+  BLEDevice::setMTU(64);
   Serial.println("BLE: Device name = SafeHer-Glove");
 
   bleServer = BLEDevice::createServer();
@@ -647,20 +659,27 @@ void setup() {
   Serial.println("Classes: 7");
   Serial.println("FALL threshold: 0.65");
 
-  initializeBLE();
-
+  // The IMU is checked *before* BLE starts, deliberately.
+  //
+  // It used to be the other way round, and the consequence was a glove that
+  // advertised, paired, accepted a subscription, and then halted in the loop
+  // below having never sent a single classification. The phone showed it as
+  // connected and told the user it was watching her. A device that cannot
+  // sense must not be pairable: failing here means the app sees no glove at
+  // all, which is the truth and which the app already handles.
   const uint8_t deviceId = readRegister(WHO_AM_I_REG);
   Serial.print("WHO_AM_I = 0x");
   Serial.println(deviceId, HEX);
 
   if (deviceId != 0x70) {
-    Serial.println("ERROR: MPU-6500 not detected!");
+    Serial.println("ERROR: MPU-6500 not detected! BLE will NOT be started.");
     while (true) {
       delay(1000);
     }
   }
 
   initializeMPU6500();
+  initializeBLE();
   Serial.println("MPU-6500 detected and initialized.");
 
   // MAX30102 shares the MPU's I2C bus (already started above). Optional: the

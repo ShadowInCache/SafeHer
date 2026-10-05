@@ -18,7 +18,7 @@
 fastapi==0.110.0
 uvicorn[standard]==0.27.1
 pydantic-settings==2.15.0
-python-multipart==0.0.9
+python-multipart==0.0.31
 # Required by pydantic's EmailStr, which schemas.py uses throughout. Without it
 # `import fastapi_app.main` raises ImportError at schema definition time. This
 # is missing from requirements.txt too -- the dev environment only works
@@ -28,7 +28,7 @@ email-validator==2.1.1
 # --- auth ---
 # `jose` comes from python-jose; `passlib` provides the pbkdf2_sha256 hashing
 # used for both passwords and the Safety PIN.
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]==3.4.0
 passlib[bcrypt]==1.7.4
 # Verifies Firebase ID tokens in services/firebase_auth.py.
 google-auth==2.38.0
@@ -64,7 +64,7 @@ pytest==9.1.1
 pytest-asyncio==1.4.0
 pytest-subtests==0.14.2
 # Used by the live-server suites (test_api_gateway.py, test_integration.py).
-requests==2.31.0
+requests==2.33.0
 
 # --- weapon detection, web fallback only ---
 #

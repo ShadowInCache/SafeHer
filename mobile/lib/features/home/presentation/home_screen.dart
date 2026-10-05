@@ -642,7 +642,15 @@ class _LiveMonitoringSummaryCard extends ConsumerWidget {
     final glove = ref.watch(gloveLinkProvider);
     final latest = monitoring.events.isNotEmpty ? monitoring.events.first : null;
 
-    final (statusLabel, statusColor) = glove.isListening
+    // `isSilent` is checked before `isListening`, because a subscribed glove
+    // that has stopped sending used to read as "Glove live". The firmware
+    // notifies every window including NORMAL, so fifteen seconds of silence
+    // means something is wrong -- a failed sensor, a wedged model, a flat
+    // battery -- and saying "live" there tells her she is covered when she is
+    // not.
+    final (statusLabel, statusColor) = glove.isSilent
+        ? ('Glove not reporting', AppColors.warning500)
+        : glove.isListening
         ? ('Glove live', AppColors.success500)
         : switch (monitoring.status) {
             MonitoringConnectionStatus.connected => ('Live', AppColors.success500),
