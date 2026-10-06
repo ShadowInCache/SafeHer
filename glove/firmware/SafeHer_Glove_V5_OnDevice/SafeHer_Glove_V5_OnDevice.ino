@@ -176,9 +176,10 @@ void notifyClassification(int predictedClass, float confidence) {
     return;
   }
 
-  char message[32];
-  snprintf(message, sizeof(message), "%s,%.2f",
-           CLASS_NAMES[predictedClass], confidence);
+  char message[48];
+  snprintf(message, sizeof(message), "%s,%.2f,%lu",
+           CLASS_NAMES[predictedClass], confidence,
+           (unsigned long)predictionCounter);
   bleResultCharacteristic->setValue(message);
   bleResultCharacteristic->notify();
 }
