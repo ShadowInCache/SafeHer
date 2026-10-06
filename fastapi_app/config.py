@@ -224,6 +224,39 @@ class Settings(BaseSettings):
     ]
     allow_origin_regex: Optional[str] = None
 
+    # Whether to serve with request rate limiting switched off.
+    #
+    # **Security must not be keyed on a free-text environment string.** It was:
+    # `rate_limiting_enabled = not is_development`, where `environment`
+    # defaults to "development". So an unset ENVIRONMENT -- a forgotten
+    # variable on a new deployment -- served production traffic with *no*
+    # limits on sign-in, registration, password reset or SOS, and with CORS
+    # open to `*`. Nothing failed loudly; the app simply ran wide open.
+    #
+    # It is now an explicit switch that defaults to safe, so forgetting it
+    # costs a throttled test suite rather than an unprotected deployment.
+    # `tests/conftest.py` sets it for the suite, which is the only place that
+    # genuinely wants limits off.
+    disable_rate_limiting: bool = False
+
+    # The documents a new account must accept, and the versions of them.
+    #
+    # Dates rather than numbers so the value is self-describing in a database
+    # row: `2026-10-06` says when the text was written, where `v2` says
+    # nothing. Bump these when `docs/TERMS.md` or `docs/PRIVACY.md` change
+    # materially, and every existing acceptance immediately reads as stale --
+    # which is the point of versioning it.
+    current_terms_version: str = "2026-10-06"
+    current_privacy_version: str = "2026-10-06"
+
+    # Whether registration refuses accounts that have not accepted.
+    #
+    # Defaults to on, and is explicit rather than keyed on the environment
+    # string -- the same rule the rate limiter and the device-event check now
+    # follow. The test suite turns it off deliberately in `conftest.py`;
+    # `test_terms_acceptance.py` turns it back on and tests both paths.
+    require_terms_acceptance: bool = True
+
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
         env_file_encoding="utf-8",

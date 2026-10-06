@@ -8,6 +8,7 @@ import '../../features/auth/presentation/otp_screen.dart';
 import '../../features/auth/presentation/signup_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/dashboard/presentation/dashboard_screen.dart';
+import '../../features/legal/presentation/legal_document_screen.dart';
 import '../../features/devices/presentation/device_management_screen.dart';
 import '../../features/emergency/presentation/emergency_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
@@ -68,6 +69,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/reports/:id',
         name: 'report-detail',
         builder: (context, state) => ReportDetailScreen(reportId: state.pathParameters['id']!),
+      ),
+      // Reachable without a session: they are read *before* an account
+      // exists, which is the whole point of asking.
+      GoRoute(
+        path: '/legal/terms',
+        name: 'terms',
+        builder: (context, state) =>
+            const LegalDocumentScreen(document: LegalDocument.terms),
+      ),
+      GoRoute(
+        path: '/legal/privacy',
+        name: 'privacy',
+        builder: (context, state) =>
+            const LegalDocumentScreen(document: LegalDocument.privacy),
       ),
       GoRoute(path: '/profile', name: 'profile', builder: (context, state) => const ProfileScreen()),
       GoRoute(path: '/settings', name: 'settings', builder: (context, state) => const SettingsScreen()),

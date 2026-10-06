@@ -16,6 +16,14 @@ class UserCreate(UserBase):
     full_name: Optional[str] = None
     phone: Optional[str] = Field(default=None, max_length=32)
 
+    # The versions the client says the user accepted. Optional *in the schema*
+    # and required *by the endpoint* when `require_terms_acceptance` is on --
+    # so the refusal is a 422 naming the documents, rather than a validation
+    # error about a missing field, and an older client gets an answer it can
+    # show someone.
+    accepted_terms_version: Optional[str] = Field(default=None, max_length=32)
+    accepted_privacy_version: Optional[str] = Field(default=None, max_length=32)
+
 
 class UserLogin(BaseModel):
     email: EmailStr

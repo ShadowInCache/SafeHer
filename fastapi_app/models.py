@@ -47,6 +47,15 @@ class User(Base):
     # still change their mind inside the grace period.
     deletion_requested_at = Column(DateTime, nullable=True)
 
+    # Which documents this account actually agreed to, and when. Versioned
+    # because "she agreed" does not answer "to what" -- and when a policy
+    # changes, a stored boolean cannot say whether she saw the clause that
+    # changed. NULL means consent was never recorded for this account, which
+    # is a different fact from refusing it.
+    terms_version = Column(String, nullable=True)
+    privacy_version = Column(String, nullable=True)
+    terms_accepted_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, nullable=False, default=_utcnow)
     updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
 

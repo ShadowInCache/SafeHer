@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import delete, select
@@ -19,8 +20,20 @@ async def create(
     full_name: Optional[str],
     role: str = "user",
     phone: Optional[str] = None,
+    terms_version: Optional[str] = None,
+    privacy_version: Optional[str] = None,
+    terms_accepted_at: Optional[datetime] = None,
 ) -> User:
-    user = User(email=email.lower(), password_hash=password_hash, full_name=full_name, role=role, phone=phone)
+    user = User(
+        email=email.lower(),
+        password_hash=password_hash,
+        full_name=full_name,
+        role=role,
+        phone=phone,
+        terms_version=terms_version,
+        privacy_version=privacy_version,
+        terms_accepted_at=terms_accepted_at,
+    )
     session.add(user)
     await session.commit()
     await session.refresh(user)

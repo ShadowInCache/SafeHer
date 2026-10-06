@@ -157,6 +157,10 @@ flutter:
   uses-material-design: true
 
   assets:
+    # Bundled rather than fetched, for the same reason the models are: consent
+    # has to be readable before an account exists, which is before the app has
+    # a session, and potentially with no network at all.
+    - assets/legal/
     - assets/images/
     - assets/icons/
     - assets/animations/

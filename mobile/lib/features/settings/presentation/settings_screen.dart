@@ -279,6 +279,20 @@ class _SettingsContentState extends ConsumerState<_SettingsContent> {
                 ],
               ),
               const Divider(height: AppSpacing.space6),
+              // Reachable after signing up, not only during it. Consent that
+              // can only be read on the form you are filling in is consent you
+              // cannot revisit, and these describe what the app does with a
+              // woman's location, microphone, camera and contacts.
+              _NavRow(
+                label: 'Terms & Conditions',
+                onTap: () => context.push('/legal/terms'),
+              ),
+              const Divider(height: AppSpacing.space6),
+              _NavRow(
+                label: 'Privacy Policy',
+                onTap: () => context.push('/legal/privacy'),
+              ),
+              const Divider(height: AppSpacing.space6),
               _NavRow(
                 label: 'Open Source Licenses',
                 onTap: () => showLicensePage(context: context, applicationName: 'SafeHer'),

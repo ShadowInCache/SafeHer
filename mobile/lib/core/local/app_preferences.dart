@@ -1,6 +1,5 @@
 import 'dart:ui';
 
-import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -54,11 +53,20 @@ class AppPreferences {
 
   Future<void> setAutoRecordEnabled(bool value) => _store.setBool(_kAutoRecord, value);
 
-  /// Defaults to whatever the platform's brightness is at first read, so
-  /// installing the app doesn't override the user's system preference
-  /// until they explicitly touch this switch.
-  bool get darkModeEnabled =>
-      _store.getBool(_kDarkMode, defaultValue: SchedulerBinding.instance.platformDispatcher.platformBrightness == Brightness.dark);
+  /// Defaults to **light**, and follows the saved choice once there is one.
+  ///
+  /// It used to follow the platform's brightness, which meant a phone set to
+  /// dark got a dark SafeHer on first launch -- before the user had expressed
+  /// any preference about *this* app. That is a reasonable default for most
+  /// software and the wrong one here: the first-run screens are where someone
+  /// decides whether to trust a safety app with her location and her contacts,
+  /// and the light palette is the one whose contrast has actually been checked
+  /// against those screens.
+  ///
+  /// This only governs the *first* read. `setDarkModeEnabled` persists an
+  /// explicit choice, and from then on the stored value wins -- so a user who
+  /// prefers dark picks it once and keeps it.
+  bool get darkModeEnabled => _store.getBool(_kDarkMode, defaultValue: false);
 
   Future<void> setDarkModeEnabled(bool value) => _store.setBool(_kDarkMode, value);
 

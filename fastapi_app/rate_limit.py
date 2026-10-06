@@ -111,14 +111,61 @@ class SlidingWindowLimiter:
 def client_key(request) -> str:
     """Best available identifier for the caller.
 
+    **An authenticated caller is keyed by account, not by address**, and the
+    difference decides whether a limit is usable at all on this product's
+    busiest endpoint. An armed Safe Journey posts to `/alerts/analyze` once a
+    second -- sixty requests a minute, legitimately -- and mobile networks put
+    thousands of subscribers behind one carrier-NAT address. Keyed by address,
+    any limit loose enough for several women travelling at once is no limit,
+    and any limit tight enough to matter throttles real journeys.
+
+    The subject comes from a *verified* token. Reading it unverified would be
+    worse than useless here: anyone could mint a different `sub` per request
+    and walk straight through the limiter, which is exactly what it exists to
+    stop. Verification costs one HMAC over a short string.
+
+    Unauthenticated routes -- sign-in, registration, password reset, where the
+    caller has no account yet by definition -- still key by address, which is
+    the only identity they have.
+
     Only the first `X-Forwarded-For` hop is used; the rest is client-supplied
     and appending to it is a trivial evasion.
     """
+    subject = _authenticated_subject(request)
+    if subject is not None:
+        return f"user:{subject}"
+
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         return forwarded.split(",")[0].strip()
     client = getattr(request, "client", None)
     return getattr(client, "host", None) or "unknown"
+
+
+def _authenticated_subject(request) -> Optional[str]:
+    """The account id from a valid bearer token, or None.
+
+    Every failure is None rather than an exception: this runs in middleware
+    ahead of routing, so a malformed or expired token must fall through to
+    address-based limiting and let the endpoint's own dependency produce the
+    401. Rejecting here would turn an authentication error into a rate-limit
+    error, and the caller would be told the wrong thing about their own
+    request.
+    """
+    header = request.headers.get("authorization") or ""
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return None
+
+    try:
+        # Imported lazily: `security` imports settings and schemas, and this
+        # module is deliberately importable on its own.
+        from fastapi_app.config import get_settings
+        from fastapi_app.security import decode_token
+
+        return decode_token(token.strip(), get_settings()).sub
+    except Exception:
+        return None
 
 
 # Deliberately generous: these exist to make automated abuse expensive, not to
@@ -143,6 +190,15 @@ DEFAULT_RULES = (
     # web fallback -- roughly one frame every two seconds for ten minutes --
     # and refuses a client looping it as free GPU-less inference.
     RateLimitRule("/api/v1/alerts/weapon-frame", limit=300, window_seconds=600),
+    # The busiest authenticated endpoint in the product: an armed Safe Journey
+    # posts once a second for its whole duration. 300 in 60s is five times the
+    # legitimate rate, which leaves generous room for a retry storm or a clock
+    # skew while still capping a client stuck in a loop.
+    #
+    # This is only safe because `client_key` keys authenticated callers by
+    # account. Keyed by address it would have throttled several women behind
+    # one carrier NAT, which is why the endpoint previously had no rule at all.
+    RateLimitRule("/api/v1/alerts/analyze", limit=300, window_seconds=60),
     # Emails a code to an address the *caller* chose, which makes it the one
     # authenticated route that can send mail to a stranger. Without a limit,
     # an account can add any address as a "contact" and loop this endpoint to

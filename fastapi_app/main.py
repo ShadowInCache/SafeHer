@@ -47,21 +47,37 @@ app = FastAPI(
 
 is_development = settings.environment.lower() == "development"
 
+# CORS is configured the same way in every environment.
+#
+# It used to widen to `allow_origins=["*"]` whenever `environment` looked like
+# development -- and that field defaults to "development", so an unset
+# ENVIRONMENT opened production to every origin on the internet. The
+# convenience it bought is already provided safely: `Settings.validate_secrets`
+# fills `allow_origin_regex` with a localhost pattern in development, so local
+# work keeps working without a wildcard anywhere.
+#
+# Credentials can now be allowed unconditionally, which was impossible before:
+# the CORS spec forbids `*` together with credentials, so the wildcard was
+# silently costing local development its cookies.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if is_development else settings.allow_origins,
-    allow_origin_regex=None if is_development else settings.allow_origin_regex,
-    allow_credentials=False if is_development else True,
+    allow_origins=settings.allow_origins,
+    allow_origin_regex=settings.allow_origin_regex,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# Enabled outside development so the test suite and local work are not
-# throttled while creating accounts. The limiter object is module-level so a
+# On unless something explicitly turns it off.
+#
+# This was `not is_development`, and `environment` defaults to "development" --
+# so a deployment that forgot the variable ran with no rate limiting at all.
+# The switch is now explicit and defaults to safe; see
+# `Settings.disable_rate_limiting`. The limiter object stays module-level so a
 # test can reach in, force it on, and assert the behaviour directly.
 rate_limiter = SlidingWindowLimiter(DEFAULT_RULES)
-rate_limiting_enabled = not is_development
+rate_limiting_enabled = not settings.disable_rate_limiting
 
 
 @app.middleware("http")
@@ -101,9 +117,18 @@ async def security_headers_middleware(request: Request, call_next):
         "Content-Security-Policy",
         "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
     )
-    if not is_development:
-        # Only meaningful over TLS, and actively unhelpful on a local http
-        # server, where it would pin the browser to https for localhost.
+    # Sent when the request actually arrived over TLS, rather than when an
+    # environment string says it should have.
+    #
+    # It was keyed on `is_development`, and `environment` defaults to
+    # "development" -- so a deployment that forgot the variable served without
+    # HSTS. The scheme is self-evident and needs no configuration to be right:
+    # behind Render's proxy the forwarded header carries it, and on a local
+    # http server it is plainly "http", which is the case the exemption exists
+    # for (HSTS there would pin the browser to https for localhost).
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+    over_tls = (forwarded_proto or request.url.scheme) == "https"
+    if over_tls:
         response.headers.setdefault(
             "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
         )

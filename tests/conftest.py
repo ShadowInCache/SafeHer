@@ -23,6 +23,24 @@ because it runs before any test module imports the app and constructs
 
 import os
 
+# --- rate limiting: off, because the suite is not a client ----------------
+# Hundreds of tests register accounts and sign in from one address, which any
+# honest limiter would throttle. This used to happen implicitly, because
+# limiting keyed off `ENVIRONMENT` defaulting to "development" -- the same
+# default that silently disabled limiting on any deployment that forgot the
+# variable. The switch is explicit now, so the suite asks for it directly and
+# production no longer inherits the test suite's convenience.
+os.environ.setdefault("DISABLE_RATE_LIMITING", "true")
+
+# --- terms acceptance: not enforced, because the suite is not a signup form --
+# Forty-five test modules create accounts inline to get at something else
+# entirely, and none of them is testing consent. Enforcement is switched off
+# here and switched back *on* inside `test_terms_acceptance.py`, which is the
+# file that actually covers it -- so the behaviour is tested deliberately
+# rather than inherited by every registration in the suite.
+os.environ.setdefault("REQUIRE_TERMS_ACCEPTANCE", "false")
+os.environ.setdefault("ENVIRONMENT", "development")
+
 # --- outbound channels: off, so no test can reach a real person ----------
 os.environ.setdefault("SMTP_HOST", "")
 os.environ.setdefault("SMTP_USERNAME", "")

@@ -97,6 +97,12 @@ Future<void> _fillValidForm(WidgetTester tester) async {
   await tester.pump();
   await tester.enterText(find.bySemanticsLabel('Confirm password'), _strongPassword);
   await tester.pump();
+  // Ticking the box is part of a valid form now. It is deliberately not
+  // pre-ticked in the widget -- a pre-ticked consent box is not consent -- so
+  // every test that expects a successful signup has to perform the act the
+  // user performs.
+  await tester.tap(find.byType(Checkbox));
+  await tester.pump();
 }
 
 void main() {
@@ -159,6 +165,40 @@ void main() {
       expect(find.text("Passwords don't match"), findsOneWidget);
     });
 
+    testWidgets('a complete form will not submit without consent', (tester) async {
+      // The screen used to say "By continuing you agree to our Terms of
+      // Service and Privacy Policy" over links that raised a toast saying
+      // "coming soon" -- so agreement was assumed from pressing the button,
+      // and there was nothing behind the links to read. Pressing Create
+      // Account with the box unticked must now get her an explanation rather
+      // than an account.
+      await useRealisticSurface(tester);
+      await tester.pumpWidget(_harness());
+      await tester.pump();
+
+      await tester.enterText(find.bySemanticsLabel('First name'), 'Priya');
+      await tester.enterText(find.bySemanticsLabel('Last name'), 'Sharma');
+      await tester.enterText(find.bySemanticsLabel('Email'), 'priya@example.com');
+      await tester.enterText(
+          find.bySemanticsLabel('Phone number, country code +1'), '5551234567');
+      await tester.enterText(find.bySemanticsLabel('Password'), _strongPassword);
+      await tester.pump();
+      await tester.enterText(
+          find.bySemanticsLabel('Confirm password'), _strongPassword);
+      await tester.pump();
+      // Deliberately not tapping the checkbox.
+
+      await tester.tap(_createAccountButton);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump();
+
+      expect(find.text('otp-stub'), findsNothing,
+          reason: 'no account may be created without accepting');
+      expect(find.textContaining('accept the Terms'), findsOneWidget,
+          reason: 'she must be told why nothing happened');
+    });
+
     testWidgets('navigation_actions_work: valid signup navigates to OTP', (tester) async {
       await useRealisticSurface(tester);
       await tester.pumpWidget(_harness());
@@ -183,6 +223,10 @@ void main() {
       await tester.enterText(find.bySemanticsLabel('Password'), _strongPassword);
       await tester.pump();
       await tester.enterText(find.bySemanticsLabel('Confirm password'), _strongPassword);
+      await tester.pump();
+      // This test fills the form inline rather than through _fillValidForm, so
+      // it has to tick the box itself to reach the request at all.
+      await tester.tap(find.byType(Checkbox));
       await tester.pump();
 
       await tester.tap(_createAccountButton);

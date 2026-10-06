@@ -61,6 +61,11 @@ class AuthRepositoryNative implements AuthRepository {
       'password': password,
       if (fullName.isNotEmpty) 'full_name': fullName,
       if (phoneE164.trim().isNotEmpty) 'phone': phoneE164,
+      // The versions this build displays. The server refuses anything that
+      // does not match its current ones, so an app too old to have shown the
+      // current documents cannot create an account against them.
+      'accepted_terms_version': AppConfig.termsVersion,
+      'accepted_privacy_version': AppConfig.privacyVersion,
     });
 
     final body = _asMap(response.data);

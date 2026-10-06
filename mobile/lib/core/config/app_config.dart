@@ -105,6 +105,23 @@ abstract final class AppConfig {
     defaultValue: '112',
   );
 
+  /// The versions of the Terms and Privacy Policy this build ships.
+  ///
+  /// These are the versions the app can actually *show* — the documents are
+  /// bundled at `assets/legal/` — so they are what registration reports as
+  /// accepted. The server compares them against its own current versions and
+  /// refuses anything older, which is the point: an old build cannot collect
+  /// consent to a document it has never displayed.
+  ///
+  /// Bump these together with `docs/TERMS.md`, `docs/PRIVACY.md`, the copies
+  /// under `assets/legal/`, and the server's `current_terms_version` /
+  /// `current_privacy_version`. If the server moves first, this build's
+  /// registrations are refused with a message naming the documents — which is
+  /// the correct outcome, and the reason the version is not simply whatever
+  /// the server asks for.
+  static const termsVersion = '2026-10-06';
+  static const privacyVersion = '2026-10-06';
+
   static const apiConnectTimeout = Duration(seconds: 10);
   static const apiReceiveTimeout = Duration(seconds: 15);
 

@@ -119,6 +119,34 @@ async def register(
     if await user_repo.exists(session, payload.email):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists")
 
+    # Consent is checked before the account exists, not after.
+    #
+    # This app asks for location, microphone, camera and the phone numbers of
+    # the people she would call for help. Creating the account first and
+    # collecting agreement later would mean holding that data on the strength
+    # of an intention to ask.
+    #
+    # The accepted version must match the current one: an older version is not
+    # consent to the current document, and silently accepting it would make
+    # the stored version a record of what we served rather than what she saw.
+    accepted_at = None
+    if settings.require_terms_acceptance:
+        expected_terms = settings.current_terms_version
+        expected_privacy = settings.current_privacy_version
+        if (
+            payload.accepted_terms_version != expected_terms
+            or payload.accepted_privacy_version != expected_privacy
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "The Terms & Conditions and Privacy Policy must be accepted "
+                    f"to create an account (terms {expected_terms}, "
+                    f"privacy {expected_privacy})."
+                ),
+            )
+        accepted_at = datetime.utcnow()
+
     hashed = get_password_hash(payload.password)
     try:
         user = await user_repo.create(
@@ -128,6 +156,9 @@ async def register(
             full_name=payload.full_name,
             role=payload.role,
             phone=payload.phone,
+            terms_version=payload.accepted_terms_version,
+            privacy_version=payload.accepted_privacy_version,
+            terms_accepted_at=accepted_at,
         )
     except IntegrityError:
         await session.rollback()

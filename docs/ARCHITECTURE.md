@@ -28,8 +28,8 @@ flowchart TB
     Mobile["mobile/ (Flutter)\nRiverpod + GoRouter"]
 
     Glove -- "BLE notify, no server" --> Mobile
-    GloveOld -- "MQTT / TLS" --> MQTTIn
-    Glasses -- "MQTT frames" --> MQTTIn
+    Glasses -- "MJPEG + audio over WiFi" --> Mobile
+    GloveOld -. "MQTT / TLS (retired, worker off by default)" .-> MQTTIn
     MQTTIn --> Motion & Voice & Weapon
     Motion & Voice & Weapon --> Fusion
     Fusion -- "POST /api/v1/alerts/process-threat" --> Routers
@@ -42,22 +42,32 @@ flowchart TB
     FCM --> Mobile
 ```
 
+> **On MQTT in the diagrams below.** The original design had the devices
+> publish raw telemetry to a broker and the server run inference. That is no
+> longer how this works: the glove runs XGBoost on the ESP32 and sends a
+> *conclusion* over BLE, and the glasses stream to the phone over HTTP, so
+> there is no raw stream left to publish. The phone is the gateway, and events
+> reach the backend as authenticated requests from a user rather than from a
+> device. The MQTT ingest is retired — `enable_mqtt_worker` defaults to off —
+> and is drawn with a dotted line where it still appears.
+
 ## Request flow: an emergency alert end to end
 
 ```mermaid
 sequenceDiagram
     participant Glove as ESP32 Smart Glove
-    participant MQTT as fastapi_app mqtt_service.py
+    participant Phone as mobile/ (the gateway)
     participant Fusion as fastapi_app services/threat_fusion.py
     participant API as fastapi_app routers/alerts.py
     participant DB as Postgres/SQLite
     participant FCM as Firebase Cloud Messaging
     participant Mobile as mobile/ (Flutter)
 
-    Glove->>MQTT: motion telemetry (accel/gyro) over MQTT/TLS
-    MQTT->>Fusion: forward reading
-    Fusion->>Fusion: combine motion(35%) + voice(30%) + weapon(35%)
-    Fusion->>API: POST /api/v1/alerts/process-threat
+    Glove->>Phone: classification over BLE (on-device XGBoost, not raw telemetry)
+    Phone->>API: POST /api/v1/alerts/analyze (batched at 1 Hz, JWT bearer)
+    API->>Fusion: three signals, whichever reported
+    Fusion->>Fusion: weapon(40%) + audio(35%) + glove(25%), renormalised
+    Fusion->>API: fused score, smoothed and banded
     API->>DB: read device + user + emergency contacts
     alt threat_level is high/critical
         API->>DB: create Incident row
@@ -247,7 +257,7 @@ deletion. Full detail: [API.md](API.md#authentication), [SECURITY.md](SECURITY.m
 | Supabase (`events` table, `supabase_setup.sql`) | Append-only archive of raw events, parallel to the transactional DB, not a replacement for it | `deployment/docker/safeher_event_processor.py` **only**, over plain REST. `fastapi_app` never touches it — it has no Supabase settings and no client. |
 | Redis | Real-time pub/sub for the event-processing pipeline (`deployment/docker/docker-compose.yml`) | `deployment/docker/safeher_event_processor.py` |
 | Hive (mobile, on-device) | Auth/session state, onboarding flags, offline action queue | `mobile/lib/core/local/`, `mobile/lib/core/offline/` |
-| Mosquitto (MQTT broker) | Transport only, no persistence | Devices publish, `fastapi_app/mqtt_service.py` subscribes |
+| Mosquitto (MQTT broker) | **Not in use.** No current firmware publishes: the glove speaks BLE and the glasses speak HTTP. `enable_mqtt_worker` is off by default and the broker requires authentication | Retired path, kept for the archived `legacy_*` sketches |
 | BLE (phone ↔ glove) | Transport only, nothing stored on either side. Classifications are consumed by the vote and discarded; only a resulting incident is persisted | Glove notifies, `mobile/lib/features/devices/data/glove_link_providers.dart` subscribes |
 
 ## Folder responsibilities

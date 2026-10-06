@@ -35,10 +35,17 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  // These used to raise a toast saying "coming soon", on a screen that was
+  // simultaneously telling the user that continuing meant agreeing to them.
   late final _termsTapRecognizer = TapGestureRecognizer()
-    ..onTap = () => showSaToast(context, message: 'Terms of Service — coming soon.');
+    ..onTap = () => context.push('/legal/terms');
   late final _privacyTapRecognizer = TapGestureRecognizer()
-    ..onTap = () => showSaToast(context, message: 'Privacy Policy — coming soon.');
+    ..onTap = () => context.push('/legal/privacy');
+
+  /// Whether the user has ticked the box. Starts false, and nothing sets it
+  /// but the user: a pre-ticked box is not consent.
+  bool _acceptedTerms = false;
+  bool _showTermsError = false;
 
   String? _firstNameError;
   String? _lastNameError;
@@ -106,7 +113,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   }
 
   void _submit() {
-    if (!_validate()) return;
+    // Checked before the field validation runs *and* reported alongside it, so
+    // a user who has filled the form correctly but not ticked the box is told
+    // why nothing happened rather than watching the button do nothing.
+    setState(() => _showTermsError = !_acceptedTerms);
+    if (!_validate() || !_acceptedTerms) return;
     ref.read(signupControllerProvider.notifier).signUp(
       firstName: _firstNameController.text.trim(),
       lastName: _lastNameController.text.trim(),
@@ -267,29 +278,70 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 ),
               ),
               const SizedBox(height: AppSpacing.space4),
-              Center(
-                child: Text.rich(
-                  TextSpan(
-                    style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.6)),
-                    children: [
-                      const TextSpan(text: 'By continuing you agree to our '),
-                      TextSpan(
-                        text: 'Terms of Service',
-                        style: AppTypography.bodyS.copyWith(color: context.saColors.interactive, fontWeight: FontWeight.w600),
-                        recognizer: _termsTapRecognizer,
-                      ),
-                      const TextSpan(text: ' and '),
-                      TextSpan(
-                        text: 'Privacy Policy',
-                        style: AppTypography.bodyS.copyWith(color: context.saColors.interactive, fontWeight: FontWeight.w600),
-                        recognizer: _privacyTapRecognizer,
-                      ),
-                      const TextSpan(text: '.'),
-                    ],
+              // An explicit act, not a consequence of pressing Sign Up.
+              // SafeHer asks for location, microphone, camera and the phone
+              // numbers of the people she would call for help; "by continuing
+              // you agree" is not a reasonable way to collect agreement to
+              // that, and there was nothing behind the links to read anyway.
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Semantics(
+                    label: 'I agree to the Terms and Conditions and acknowledge '
+                        'the Privacy Policy',
+                    checked: _acceptedTerms,
+                    child: Checkbox(
+                      value: _acceptedTerms,
+                      onChanged: (value) => setState(() {
+                        _acceptedTerms = value ?? false;
+                        if (_acceptedTerms) _showTermsError = false;
+                      }),
+                    ),
                   ),
-                  textAlign: TextAlign.center,
-                ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.space3),
+                      child: Text.rich(
+                        TextSpan(
+                          style: AppTypography.bodyS
+                              .copyWith(color: onSurface.withValues(alpha: 0.8)),
+                          children: [
+                            const TextSpan(text: 'I agree to the '),
+                            TextSpan(
+                              text: 'Terms & Conditions',
+                              style: AppTypography.bodyS.copyWith(
+                                color: context.saColors.interactive,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              recognizer: _termsTapRecognizer,
+                            ),
+                            const TextSpan(text: ' and acknowledge the '),
+                            TextSpan(
+                              text: 'Privacy Policy',
+                              style: AppTypography.bodyS.copyWith(
+                                color: context.saColors.interactive,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              recognizer: _privacyTapRecognizer,
+                            ),
+                            const TextSpan(text: '.'),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
+              if (_showTermsError)
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.space2),
+                  child: Text(
+                    'Please accept the Terms & Conditions and Privacy Policy '
+                    'to create an account.',
+                    style: AppTypography.bodyS
+                        .copyWith(color: Theme.of(context).colorScheme.error),
+                  ),
+                ),
               const SizedBox(height: AppSpacing.space4),
               Center(
                 child: Wrap(
