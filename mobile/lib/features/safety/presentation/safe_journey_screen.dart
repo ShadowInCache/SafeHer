@@ -12,7 +12,6 @@ import '../../../shared/components/cards/sa_card.dart';
 import '../../../shared/components/feedback/sa_empty_state.dart';
 import '../../../shared/components/feedback/sa_loading_shimmer.dart';
 import '../../../shared/components/icons/sa_icon.dart';
-import '../../../shared/components/overlays/sa_bottom_sheet.dart';
 import '../../../shared/components/overlays/sa_toast.dart';
 import '../data/safety_providers.dart';
 import '../domain/models/safe_journey.dart';
@@ -49,29 +48,7 @@ class _SafeJourneyScreenState extends ConsumerState<SafeJourneyScreen> {
     super.dispose();
   }
 
-  Future<void> _start() async {
-    final config = await showSaBottomSheet<StartJourneyConfig>(
-      context,
-      builder: (context) => const StartJourneySheet(),
-    );
-    if (config == null || !mounted) return;
-
-    try {
-      await ref.read(activeJourneyNotifierProvider.notifier).start(
-        destinationLabel: config.destinationLabel,
-        expectedDurationMinutes: config.expectedDurationMinutes,
-        checkInIntervalMinutes: config.checkInIntervalMinutes,
-        contactIds: config.contactIds,
-      );
-      if (mounted) {
-        showSaToast(context, message: 'Safe Journey started', type: SaToastType.success);
-      }
-    } catch (_) {
-      if (mounted) {
-        showSaToast(context, message: "Couldn't start the journey", type: SaToastType.error);
-      }
-    }
-  }
+  Future<void> _start() => showStartJourneyFlow(context, ref);
 
   Future<void> _run(Future<void> Function() action, String successMessage) async {
     try {

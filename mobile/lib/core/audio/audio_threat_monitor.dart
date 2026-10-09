@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
+import 'recognizer_tone.dart';
 import 'threat_phrase_classifier.dart';
 
 /// One utterance, scored.
@@ -72,17 +73,20 @@ class AudioThreatMonitor {
   AudioThreatMonitor({
     required ThreatPhraseClassifier classifier,
     SpeechToText? speech,
+    RecognizerTone tone = const RecognizerTone(),
     Duration listenFor = const Duration(seconds: 20),
     Duration pauseFor = const Duration(seconds: 4),
     Duration restartDelay = const Duration(milliseconds: 400),
   })  : _classifier = classifier,
         _speech = speech ?? SpeechToText(),
+        _tone = tone,
         _listenFor = listenFor,
         _pauseFor = pauseFor,
         _restartDelay = restartDelay;
 
   final ThreatPhraseClassifier _classifier;
   final SpeechToText _speech;
+  final RecognizerTone _tone;
   final Duration _listenFor;
   final Duration _pauseFor;
   final Duration _restartDelay;
@@ -130,6 +134,11 @@ class AudioThreatMonitor {
       return false;
     }
 
+    // Muted for the whole listening period rather than around each session.
+    // Per-session muting would still duck the audio every few seconds as
+    // sessions restart, which is its own kind of irritating.
+    await _tone.mute();
+
     _publish(AudioMonitorStatus.listening);
     await _listenOnce();
     return true;
@@ -145,6 +154,9 @@ class AudioThreatMonitor {
       // A recogniser that will not stop cleanly must not take the caller down
       // with it — `stop` is what runs when a journey ends or the app closes.
     }
+    // Outside the try above on purpose: the phone must not be left silent
+    // because the recogniser failed to stop cleanly.
+    await _tone.unmute();
     _publish(AudioMonitorStatus.idle);
   }
 

@@ -36,7 +36,10 @@ import '../domain/models/home_summary.dart';
 import 'widgets/home_greeting_section.dart';
 import '../../../core/voice/voice_command.dart';
 import '../../safety/presentation/safety_toolkit_screen.dart';
+import 'widgets/home_journey_card.dart';
 import 'widgets/home_quick_actions.dart';
+import '../../safety/data/safety_providers.dart';
+import '../../safety/presentation/widgets/start_journey_sheet.dart';
 
 /// Dashboard — SafeHer's single command-center screen: real safety status,
 /// real device status, a real live-monitoring summary, quick actions, this
@@ -240,6 +243,24 @@ class _HomeContent extends ConsumerWidget {
   final ScrollController scrollController;
   final double scrollOffset;
 
+  /// Opens the running journey, or collects the details for a new one.
+  ///
+  /// Starting goes straight to the sheet rather than routing through the Safe
+  /// Journey screen first — that screen's only job when nothing is running is
+  /// to offer this same sheet, so stopping there would be a tap that asks the
+  /// user to confirm what they already chose. The screen is where they land
+  /// once it has started, because that is where the countdown, check-in and
+  /// "I've arrived" live.
+  static Future<void> _openJourney(BuildContext context, WidgetRef ref) async {
+    final active = ref.read(activeJourneyNotifierProvider).valueOrNull;
+    if (active?.isInProgress ?? false) {
+      context.go('/safety/journey');
+      return;
+    }
+    final started = await showStartJourneyFlow(context, ref);
+    if (started && context.mounted) context.go('/safety/journey');
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final onSurface = Theme.of(context).colorScheme.onSurface;
@@ -287,6 +308,13 @@ class _HomeContent extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenMarginPhone),
           sliver: SliverToBoxAdapter(
             child: _LiveMonitoringSummaryCard(monitoring: monitoring, onTap: () => context.go('/monitor')),
+          ),
+        ),
+        SliverToBoxAdapter(child: const SizedBox(height: AppSpacing.space5)),
+        SliverToBoxAdapter(
+          child: HomeJourneyCard(
+            journey: ref.watch(activeJourneyNotifierProvider).valueOrNull,
+            onTap: () => _openJourney(context, ref),
           ),
         ),
         SliverToBoxAdapter(child: const SizedBox(height: AppSpacing.space5)),

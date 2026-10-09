@@ -1,5 +1,6 @@
 package io.github.akshayag.safeher
 
+import io.github.akshayag.safeher.audio.RecognizerTonePlugin
 import io.github.akshayag.safeher.hardware.SafeHerHardwarePlugin
 import io.github.akshayag.safeher.network.MulticastLockPlugin
 import io.flutter.embedding.android.FlutterFragmentActivity
@@ -18,5 +19,8 @@ class MainActivity : FlutterFragmentActivity() {
 		// Without this, mDNS replies are filtered by the Wi-Fi chip and
 		// safeher-glasses.local never resolves on Android. See the plugin.
 		flutterEngine.plugins.add(MulticastLockPlugin())
+		// Suppresses the system beep that speech recognition plays on every
+		// start and stop -- once every few seconds, for a whole journey.
+		flutterEngine.plugins.add(RecognizerTonePlugin())
 	}
 }

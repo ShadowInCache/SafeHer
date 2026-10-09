@@ -31,6 +31,8 @@ import 'package:safeher_app/shared/components/charts/sa_bar_chart.dart';
 import 'package:safeher_app/shared/components/navigation/sa_bottom_nav_bar.dart';
 import 'package:safeher_app/shared/models/threat_level.dart';
 
+import 'package:safeher_app/features/safety/data/safety_providers.dart';
+import '../../../test_utils/fake_safety_repository.dart';
 import '../../../test_utils/offline_test_overrides.dart';
 import 'package:safeher_app/shared/components/layout/sa_ambient_background.dart';
 
@@ -199,6 +201,10 @@ Widget _harness({Brightness brightness = Brightness.dark, HomeRepository? repo, 
       reportsRepositoryProvider.overrideWithValue(_FakeReportsRepository()),
       dashboardRepositoryProvider.overrideWithValue(_FakeDashboardRepository()),
       liveMonitoringControllerProvider.overrideWith(() => _FakeLiveMonitoringController()),
+      // The Home screen shows a Safe Journey card, so it reads this provider.
+      // Without a fake it reaches for the real backend and leaves a pending
+      // timer behind.
+      journeyRepositoryProvider.overrideWithValue(FakeJourneyRepository(delay: Duration.zero)),
       ...offlineTestOverrides(offline: offline),
     ],
     child: MaterialApp.router(
@@ -255,6 +261,7 @@ void main() {
             reportsRepositoryProvider.overrideWithValue(_FakeReportsRepository()),
             dashboardRepositoryProvider.overrideWithValue(_FakeDashboardRepository()),
             liveMonitoringControllerProvider.overrideWith(() => _FakeLiveMonitoringController()),
+            journeyRepositoryProvider.overrideWithValue(FakeJourneyRepository(delay: Duration.zero)),
             ...offlineTestOverrides(),
           ],
           child: MaterialApp.router(theme: AppTheme.dark, routerConfig: _buildTestRouter()),

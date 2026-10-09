@@ -46,6 +46,11 @@
          feature exists for. -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Lets RecognizerTonePlugin mute the stream Android plays the speech
+         recognition beep on. Ring and alarm are never touched, so calls and
+         alarms stay audible. Normal permission: granted at install. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
     <application
         android:label="SafeHer"
         android:name="${applicationName}"

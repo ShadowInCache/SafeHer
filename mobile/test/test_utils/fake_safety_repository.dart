@@ -82,9 +82,15 @@ class FakeJourneyRepository implements JourneyRepository {
 
   final List<String> calls = [];
 
+  /// `Future.delayed(Duration.zero)` still schedules a timer, which a test
+  /// that never pumps will be failed for leaving pending. A zero delay means
+  /// "do not involve the clock at all", so it must not create one.
+  Future<void> _settle() =>
+      delay == Duration.zero ? Future<void>.value() : Future<void>.delayed(delay);
+
   @override
   Future<SafeJourney?> getActiveJourney() async {
-    await Future<void>.delayed(delay);
+    await _settle();
     return active;
   }
 

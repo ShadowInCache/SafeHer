@@ -5,7 +5,44 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/components/buttons/sa_button.dart';
 import '../../../../shared/components/inputs/sa_text_field.dart';
+import '../../../../shared/components/overlays/sa_bottom_sheet.dart';
+import '../../../../shared/components/overlays/sa_toast.dart';
 import '../../../contacts/data/contacts_providers.dart';
+import '../../data/safety_providers.dart';
+
+/// Collects the journey details and starts one. Returns whether it started.
+///
+/// Lives here rather than on the Safe Journey screen because that screen is no
+/// longer the only way in: the Home screen offers the same flow without making
+/// the user walk through Profile, Settings and the Safety Toolkit first. Both
+/// entry points must behave identically — a journey begun from Home arms the
+/// detection pipeline exactly as one begun from the toolkit does — so there is
+/// one implementation and no second copy to drift.
+Future<bool> showStartJourneyFlow(BuildContext context, WidgetRef ref) async {
+  final config = await showSaBottomSheet<StartJourneyConfig>(
+    context,
+    builder: (context) => const StartJourneySheet(),
+  );
+  if (config == null || !context.mounted) return false;
+
+  try {
+    await ref.read(activeJourneyNotifierProvider.notifier).start(
+      destinationLabel: config.destinationLabel,
+      expectedDurationMinutes: config.expectedDurationMinutes,
+      checkInIntervalMinutes: config.checkInIntervalMinutes,
+      contactIds: config.contactIds,
+    );
+    if (context.mounted) {
+      showSaToast(context, message: 'Safe Journey started', type: SaToastType.success);
+    }
+    return true;
+  } catch (_) {
+    if (context.mounted) {
+      showSaToast(context, message: "Couldn't start the journey", type: SaToastType.error);
+    }
+    return false;
+  }
+}
 
 /// What the user chose when starting a journey.
 class StartJourneyConfig {
