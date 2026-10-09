@@ -9,6 +9,7 @@ import '../../../core/network/api_client.dart';
 import '../domain/models/report_detail.dart';
 import '../domain/models/report_summary.dart';
 import '../domain/reports_repository.dart';
+import '../../../core/network/api_time.dart';
 
 /// `fastapi_app`-backed [ReportsRepository] — `GET /api/v1/incidents` and
 /// `GET /api/v1/incidents/{id}`.
@@ -35,7 +36,7 @@ class ReportsRepositoryRemote implements ReportsRepository {
   };
 
   ReportSummary _summaryFromJson(Map<String, dynamic> json) {
-    final createdAt = DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now();
+    final createdAt = tryParseApiTime(json['created_at'] as String? ?? '') ?? DateTime.now();
     return ReportSummary(
       id: json['id'] as String,
       date: _formatDate(createdAt),
@@ -80,7 +81,7 @@ class ReportsRepositoryRemote implements ReportsRepository {
   Future<ReportDetail> getReportDetail(String id) async {
     final response = await _apiClient.dio.get('/incidents/$id');
     final json = response.data as Map<String, dynamic>;
-    final createdAt = DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now();
+    final createdAt = tryParseApiTime(json['created_at'] as String? ?? '') ?? DateTime.now();
     final latitude = (json['latitude'] as num?)?.toDouble();
     final longitude = (json['longitude'] as num?)?.toDouble();
 

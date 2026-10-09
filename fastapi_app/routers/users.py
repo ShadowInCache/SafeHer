@@ -17,6 +17,7 @@ from fastapi_app.schemas import (
     UserUpdate,
 )
 from fastapi_app.security import get_current_user
+from fastapi_app.time_utils import to_utc_iso, utc_now_iso
 from fastapi_app.services.contact_verification import (
     ContactVerificationError,
     confirm_verification_code,
@@ -79,7 +80,7 @@ async def export_my_data(
         return (await session.execute(statement)).scalars().all()
 
     def when(value):
-        return value.isoformat() if value else None
+        return to_utc_iso(value)
 
     user = await session.get(User, current_user.id)
 

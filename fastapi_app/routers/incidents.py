@@ -9,6 +9,7 @@ from fastapi_app.deps import fcm_credentials, get_evidence_store
 from fastapi_app.models import Incident, Location, Media
 from fastapi_app.schemas import IncidentCreate, IncidentPublic, UserPublic
 from fastapi_app.security import get_current_user
+from fastapi_app.time_utils import to_utc_iso, utc_now_iso
 from fastapi_app.services.evidence_store import EvidenceStore, EvidenceStoreError
 from fastapi_app.services.incident_pdf import assemble_incident_pdf
 from fastapi_app.services.incident_summary import (
@@ -215,7 +216,7 @@ async def generate_incident_summary(
     prompt = build_prompt(
         title=incident.title,
         severity=incident.threat_level,
-        occurred_at=incident.created_at.isoformat(),
+        occurred_at=to_utc_iso(incident.created_at),
         latitude=location.lat if location else None,
         longitude=location.lng if location else None,
         evidence_count=evidence_count,

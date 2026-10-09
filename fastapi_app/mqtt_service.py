@@ -16,6 +16,7 @@ from fastapi_app import models
 from fastapi_app.config import get_settings
 from fastapi_app.db import SessionLocal
 from fastapi_app.realtime import manager
+from fastapi_app.time_utils import utc_now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +173,7 @@ async def _handle_event_message(session: AsyncSession, topic: str, payload: str)
         "device_id": device.id,
         "user_id": device.user_id,
         "payload": data,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": utc_now_iso(),
     }
     if incident is not None:
         await session.refresh(incident)

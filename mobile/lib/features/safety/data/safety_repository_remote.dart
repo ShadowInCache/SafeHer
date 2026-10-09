@@ -4,6 +4,7 @@ import '../../../core/network/api_client.dart';
 import '../domain/models/nearby_place.dart';
 import '../domain/models/safety_settings.dart';
 import '../domain/safety_repository.dart';
+import '../../../core/network/api_time.dart';
 
 /// `fastapi_app`-backed [SafetyRepository] — `/api/v1/safety/*`.
 class SafetyRepositoryRemote implements SafetyRepository {
@@ -48,7 +49,7 @@ class SafetyRepositoryRemote implements SafetyRepository {
     return SafetyPinStatus(
       isSet: json['is_set'] as bool? ?? false,
       isLocked: json['is_locked'] as bool? ?? false,
-      lockedUntil: lockedUntil == null ? null : DateTime.tryParse(lockedUntil),
+      lockedUntil: lockedUntil == null ? null : tryParseApiTime(lockedUntil),
     );
   }
 
@@ -73,7 +74,7 @@ class SafetyRepositoryRemote implements SafetyRepository {
     return PinVerificationResult(
       valid: json['valid'] as bool? ?? false,
       attemptsRemaining: json['attempts_remaining'] as int?,
-      lockedUntil: lockedUntil == null ? null : DateTime.tryParse(lockedUntil),
+      lockedUntil: lockedUntil == null ? null : tryParseApiTime(lockedUntil),
     );
   }
 

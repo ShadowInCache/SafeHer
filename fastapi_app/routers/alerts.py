@@ -33,6 +33,7 @@ from fastapi_app.schemas import (
     UserPublic,
 )
 from fastapi_app.security import get_current_user
+from fastapi_app.time_utils import to_utc_iso, utc_now_iso
 from fastapi_app.services import threat_fusion, threat_models, weapon_detector
 from fastapi_app.services.emergency_dispatch import (
     DISPATCH_COMPLETE,
@@ -305,7 +306,7 @@ async def process_threat_alert(
             "threat_level": level,
             "confidence": processor_confidence,
             "summary": payload.summary,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utc_now_iso(),
         }
         await manager.broadcast_to_user(current_user.id, ws_payload)
 
@@ -321,7 +322,7 @@ async def process_threat_alert(
     _latest_scores[current_user.id] = {
         "score": round(processor_confidence * 100, 2),
         "level": _to_level(processor_confidence * 100),
-        "updated_at": datetime.utcnow().isoformat(),
+        "updated_at": utc_now_iso(),
     }
 
     # SRS FR-EMG-02. The push above reaches the user's own phone, which is
@@ -484,7 +485,7 @@ async def trigger_emergency_alert(
         "summary": payload.summary,
         "location": payload.location,
         "auto": payload.auto,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": utc_now_iso(),
     }
     await manager.broadcast_to_user(current_user.id, ws_payload)
 
@@ -500,7 +501,7 @@ async def trigger_emergency_alert(
     _latest_scores[current_user.id] = {
         "score": 100.0,
         "level": "critical",
-        "updated_at": datetime.utcnow().isoformat(),
+        "updated_at": utc_now_iso(),
     }
 
     # FR-EMG-04/05: notify the people who can actually help. Queued rather
@@ -561,7 +562,7 @@ async def get_dispatch_status(
         "contacts_reached": _json_ids(incident.contacts_reached),
         "contacts_failed": _json_ids(incident.contacts_failed),
         "completed_at": (
-            incident.dispatch_completed_at.isoformat()
+            to_utc_iso(incident.dispatch_completed_at)
             if incident.dispatch_completed_at
             else None
         ),
@@ -634,7 +635,7 @@ async def submit_heartbeat(
     _latest_scores[current_user.id] = {
         "score": round(payload.threat_score, 2),
         "level": level,
-        "updated_at": payload.timestamp.isoformat(),
+        "updated_at": to_utc_iso(payload.timestamp),
     }
 
     # SRS FR-EMG-02, for when firmware exists to post these. `threat_score`
@@ -786,7 +787,7 @@ async def analyze_model_scores(
     _latest_scores[current_user.id] = {
         "score": round(fused * 100, 2),
         "level": _to_level(fused * 100),
-        "updated_at": (payload.timestamp or datetime.utcnow()).isoformat(),
+        "updated_at": to_utc_iso(payload.timestamp) or utc_now_iso(),
     }
 
     return {

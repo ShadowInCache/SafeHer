@@ -192,7 +192,7 @@ class _NoJourneyView extends StatelessWidget {
   }
 }
 
-class _ActiveJourneyView extends StatelessWidget {
+class _ActiveJourneyView extends StatefulWidget {
   const _ActiveJourneyView({
     required this.journey,
     required this.onCheckIn,
@@ -206,6 +206,19 @@ class _ActiveJourneyView extends StatelessWidget {
   final VoidCallback onArrived;
   final VoidCallback onCancel;
   final Future<void> Function() onEscalate;
+
+  @override
+  State<_ActiveJourneyView> createState() => _ActiveJourneyViewState();
+}
+
+class _ActiveJourneyViewState extends State<_ActiveJourneyView> {
+  /// The journey we have already told the server has run out of time.
+  ///
+  /// The countdown label is driven by a one-second ticker, so this view
+  /// rebuilds every second. Without this guard an overdue journey fired an
+  /// escalate request on every single rebuild — once a second, for as long as
+  /// the screen stayed open.
+  String? _escalationRequestedFor;
 
   static String _formatRemaining(Duration remaining) {
     final overdue = remaining.isNegative;
@@ -221,14 +234,17 @@ class _ActiveJourneyView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final journey = widget.journey;
     final onSurface = Theme.of(context).colorScheme.onSurface;
     final now = DateTime.now();
     final remaining = journey.remaining(now);
     final isOverdue = journey.status == JourneyStatus.overdue || remaining.isNegative;
 
-    // The server owns the decision; this just tells it the clock ran out.
-    if (journey.hasRunOutOfTime(now)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => onEscalate());
+    // The server owns the decision; this just tells it the clock ran out, and
+    // only once per journey — see [_escalationRequestedFor].
+    if (journey.hasRunOutOfTime(now) && _escalationRequestedFor != journey.id) {
+      _escalationRequestedFor = journey.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) => widget.onEscalate());
     }
 
     final accent = isOverdue ? AppColors.danger500 : AppColors.success500;
@@ -304,18 +320,18 @@ class _ActiveJourneyView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.space5),
-        SaButton(label: "I've arrived safely", onPressed: onArrived, fullWidth: true),
+        SaButton(label: "I've arrived safely", onPressed: widget.onArrived, fullWidth: true),
         const SizedBox(height: AppSpacing.space3),
         SaButton(
           label: 'Check in — still on my way',
-          onPressed: onCheckIn,
+          onPressed: widget.onCheckIn,
           variant: SaButtonVariant.secondary,
           fullWidth: true,
         ),
         const SizedBox(height: AppSpacing.space3),
         SaButton(
           label: 'Cancel journey',
-          onPressed: onCancel,
+          onPressed: widget.onCancel,
           variant: SaButtonVariant.danger,
           confirmRequired: true,
           fullWidth: true,

@@ -1,8 +1,30 @@
-from datetime import datetime
-from typing import Any, Optional
+from datetime import datetime, timezone
+from typing import Annotated, Any, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, PlainSerializer, field_validator
+
+
+def _ensure_utc(value: datetime) -> datetime:
+    """Tag a naive timestamp as UTC.
+
+    Every timestamp in this system is stored naive but *means* UTC (see
+    `models._utcnow`). Serialising that without an offset is a trap: a client
+    reading `2026-10-09T08:44:00` has no way to know it is not local time, and
+    both Dart's `DateTime.parse` and JavaScript's `Date` will assume it is. A
+    user in IST then sees a journey that began five and a half hours ago.
+    """
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+# Only the JSON form changes. `model_dump()` still yields real datetime
+# objects, so server-side callers and tests are unaffected.
+UtcDatetime = Annotated[
+    datetime,
+    PlainSerializer(lambda v: _ensure_utc(v).isoformat(), return_type=str, when_used="json"),
+]
 
 
 class UserBase(BaseModel):
@@ -56,9 +78,9 @@ class UserPublic(UserBase):
     is_verified: bool = True
     # SRS FR-EMG-02 -- the score at which SafeHer raises the alarm unasked.
     threat_threshold: float = 0.75
-    deletion_requested_at: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: Optional[datetime] = None
+    deletion_requested_at: Optional[UtcDatetime] = None
+    created_at: UtcDatetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[UtcDatetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -110,8 +132,8 @@ class PasswordResetConfirmRequest(BaseModel):
 
 
 class AccountDeletionResponse(BaseModel):
-    deletion_requested_at: datetime
-    purge_scheduled_for: datetime
+    deletion_requested_at: UtcDatetime
+    purge_scheduled_for: UtcDatetime
     grace_period_days: int
 
 
@@ -171,9 +193,9 @@ class EmergencyContactPublic(EmergencyContactBase):
     user_id: str
     # SRS FR-EMG-10. Null means nobody at this address has confirmed a code
     # — the contact is still notified, but the app flags it.
-    verified_at: Optional[datetime] = None
-    created_at: datetime
-    updated_at: Optional[datetime] = None
+    verified_at: Optional[UtcDatetime] = None
+    created_at: UtcDatetime
+    updated_at: Optional[UtcDatetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -199,8 +221,8 @@ class IncidentPublic(BaseModel):
     description: Optional[str] = None
     threat_level: Optional[str] = None
     evidence_url: Optional[str] = None
-    created_at: datetime
-    updated_at: Optional[datetime] = None
+    created_at: UtcDatetime
+    updated_at: Optional[UtcDatetime] = None
     # Populated by the router from a joined Location row when one exists
     # for this incident — not an ORM-mapped attribute on Incident itself,
     # since one incident could in principle have multiple location pings.
@@ -216,7 +238,7 @@ class IncidentPublic(BaseModel):
     # SRS FR-RPT-01. Machine-written; the client labels it as such so it is
     # never read as a human account of what happened.
     ai_summary: Optional[str] = None
-    ai_summary_generated_at: Optional[datetime] = None
+    ai_summary_generated_at: Optional[UtcDatetime] = None
 
     contacts_total: Optional[int] = None
     contacts_notified: Optional[int] = None
@@ -279,8 +301,8 @@ class DevicePublic(BaseModel):
     device_name: str
     device_type: str
     is_active: bool
-    created_at: datetime
-    last_seen: Optional[datetime] = None
+    created_at: UtcDatetime
+    last_seen: Optional[UtcDatetime] = None
     battery_level: Optional[int] = None
     signal_strength: Optional[int] = None
     firmware_version: Optional[str] = None
@@ -314,7 +336,7 @@ class ModelScoresRequest(BaseModel):
     """
 
     device_id: Optional[str] = None
-    timestamp: Optional[datetime] = None
+    timestamp: Optional[UtcDatetime] = None
 
     motion_score: Optional[float] = Field(
         default=None, ge=0.0, le=1.0, description="XGBoost over glove accel + gyro"
@@ -341,7 +363,7 @@ class ModelScoresRequest(BaseModel):
 
 
 class HeartbeatRequest(BaseModel):
-    timestamp: datetime
+    timestamp: UtcDatetime
     threat_score: float = Field(ge=0.0, le=100.0)
     location: dict[str, float]
 
@@ -371,13 +393,13 @@ class SafetyPinVerifyRequest(BaseModel):
 class SafetyPinStatus(BaseModel):
     is_set: bool
     is_locked: bool = False
-    locked_until: Optional[datetime] = None
+    locked_until: Optional[UtcDatetime] = None
 
 
 class SafetyPinVerifyResponse(BaseModel):
     valid: bool
     attempts_remaining: Optional[int] = None
-    locked_until: Optional[datetime] = None
+    locked_until: Optional[UtcDatetime] = None
 
 
 class SafetyPreferences(BaseModel):
@@ -429,7 +451,7 @@ class JourneyBreadcrumb(BaseModel):
     latitude: float
     longitude: float
     accuracy_metres: Optional[float] = None
-    captured_at: datetime
+    captured_at: UtcDatetime
 
 
 class JourneyPublic(BaseModel):
@@ -440,8 +462,8 @@ class JourneyPublic(BaseModel):
     expected_duration_minutes: int
     check_in_interval_minutes: Optional[int] = None
     status: str
-    started_at: datetime
-    expected_arrival_at: datetime
-    last_check_in_at: Optional[datetime] = None
-    ended_at: Optional[datetime] = None
+    started_at: UtcDatetime
+    expected_arrival_at: UtcDatetime
+    last_check_in_at: Optional[UtcDatetime] = None
+    ended_at: Optional[UtcDatetime] = None
     contact_ids: list[str] = Field(default_factory=list)

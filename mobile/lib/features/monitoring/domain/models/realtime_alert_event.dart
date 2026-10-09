@@ -1,3 +1,5 @@
+import '../../../../core/network/api_time.dart';
+
 enum RealtimeAlertKind { threat, emergency }
 
 /// A single real event received over the live alerts WebSocket
@@ -43,7 +45,7 @@ class RealtimeAlertEvent {
     return RealtimeAlertEvent(
       kind: kind,
       summary: (json['summary'] as String?) ?? 'Alert received',
-      timestamp: timestampRaw != null ? (DateTime.tryParse(timestampRaw) ?? DateTime.now()) : DateTime.now(),
+      timestamp: timestampRaw != null ? (tryParseApiTime(timestampRaw) ?? DateTime.now()) : DateTime.now(),
       incidentId: json['incident_id'] as String?,
       threatLevel: (json['threat_level'] as String?) ?? (json['severity'] as String?),
       latitude: (location?['latitude'] as num?)?.toDouble(),

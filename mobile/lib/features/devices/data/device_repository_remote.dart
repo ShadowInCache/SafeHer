@@ -1,6 +1,7 @@
 import '../../../core/network/api_client.dart';
 import '../domain/device_repository.dart';
 import '../domain/models/device_detail.dart';
+import '../../../core/network/api_time.dart';
 
 /// `fastapi_app`-backed [DeviceRepository] — `GET /api/v1/devices/me`.
 ///
@@ -26,7 +27,7 @@ class DeviceRepositoryRemote implements DeviceRepository {
 
   DeviceDetail _fromJson(Map<String, dynamic> json) {
     final lastSeenRaw = json['last_seen'] as String?;
-    final lastSeen = lastSeenRaw != null ? DateTime.tryParse(lastSeenRaw) : null;
+    final lastSeen = lastSeenRaw != null ? tryParseApiTime(lastSeenRaw) : null;
     final isOnline = lastSeen != null && DateTime.now().toUtc().difference(lastSeen.toUtc()) < _onlineWindow;
     final batteryLevel = json['battery_level'] as int?;
 

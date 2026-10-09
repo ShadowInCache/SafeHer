@@ -1,6 +1,7 @@
 import '../../../core/network/api_client.dart';
 import '../domain/home_repository.dart';
 import '../domain/models/home_summary.dart';
+import '../../../core/network/api_time.dart';
 
 /// `fastapi_app`-backed [HomeRepository] — `GET /api/v1/alerts/live`.
 ///
@@ -21,7 +22,7 @@ class HomeRepositoryRemote implements HomeRepository {
     final updatedAtRaw = liveScore?['updated_at'] as String?;
     // A null updated_at is the backend's own signal that no score has ever
     // been reported for this user — distinct from a genuine 0 reading.
-    final updatedAt = updatedAtRaw != null ? DateTime.tryParse(updatedAtRaw) : null;
+    final updatedAt = updatedAtRaw != null ? tryParseApiTime(updatedAtRaw) : null;
     final rawScore = (liveScore?['score'] as num?)?.toDouble();
 
     return HomeSummary(

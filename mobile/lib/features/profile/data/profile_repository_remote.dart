@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../../core/network/api_client.dart';
 import '../domain/models/user_profile.dart';
 import '../domain/profile_repository.dart';
+import '../../../core/network/api_time.dart';
 
 /// `fastapi_app`-backed [ProfileRepository] — `GET`/`PATCH /api/v1/users/me`.
 /// `safetyScore`/`streakDays` stay null: there is no backend concept of
@@ -14,7 +15,7 @@ class ProfileRepositoryRemote implements ProfileRepository {
 
   UserProfile _fromJson(Map<String, dynamic> json) {
     final createdAtRaw = json['created_at'] as String?;
-    final createdAt = createdAtRaw != null ? DateTime.tryParse(createdAtRaw) : null;
+    final createdAt = createdAtRaw != null ? tryParseApiTime(createdAtRaw) : null;
     return UserProfile(
       name: (json['full_name'] as String?) ?? 'SafeHer User',
       email: json['email'] as String? ?? '',

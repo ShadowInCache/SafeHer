@@ -6,6 +6,7 @@ import '../../../shared/components/charts/sa_bar_chart.dart';
 import '../../../shared/components/charts/sa_donut_chart.dart';
 import '../../../shared/components/charts/sa_heat_grid.dart';
 import '../../../shared/models/threat_level.dart';
+import '../../../core/network/api_time.dart';
 import '../domain/dashboard_repository.dart';
 import '../domain/models/dashboard_analytics.dart';
 import '../domain/models/dashboard_summary.dart';
@@ -122,7 +123,7 @@ class DashboardRepositoryRemote implements DashboardRepository {
             id: row['id'] as String,
             title: row['title'] as String,
             threatLevel: row['threat_level'] as String?,
-            createdAt: DateTime.tryParse(row['created_at'] as String? ?? '')?.toLocal() ?? DateTime.now(),
+            createdAt: tryParseApiTime(row['created_at'])?.toLocal() ?? DateTime.now(),
           ),
       ],
       deviceHealth: [
@@ -134,7 +135,7 @@ class DashboardRepositoryRemote implements DashboardRepository {
             batteryLevel: (row['battery_level'] as num?)?.toInt(),
             signalStrength: (row['signal_strength'] as num?)?.toInt(),
             isActive: row['is_active'] as bool? ?? false,
-            lastSeen: DateTime.tryParse(row['last_seen'] as String? ?? '')?.toLocal(),
+            lastSeen: tryParseApiTime(row['last_seen'])?.toLocal(),
           ),
       ],
       batteryHistoryAvailable: json['device_battery_history_available'] as bool? ?? false,

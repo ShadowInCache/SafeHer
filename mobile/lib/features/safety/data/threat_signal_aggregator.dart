@@ -5,6 +5,17 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/network/api_client.dart';
 
+/// Whether to print each reading and the fusion engine's reply to the log.
+///
+/// Deliberately on by default and *not* gated on `kDebugMode`: the thing worth
+/// checking is a release build on a real phone with the real wearables, which
+/// is exactly where `kDebugMode` logging disappears. One line per second, and
+/// only while a journey is armed.
+///
+/// Turn it off with `--dart-define=SAFEHER_LOG_SIGNALS=false`.
+const bool kLogThreatSignals =
+    bool.fromEnvironment('SAFEHER_LOG_SIGNALS', defaultValue: true);
+
 /// One modality's most recent word, and when it said it.
 @immutable
 class TimedSignal {
@@ -162,19 +173,62 @@ class ThreatSignalAggregator {
     if (!_armed || _posting) return;
 
     final payload = buildPayload();
-    if (payload == null) return;
+    if (payload == null) {
+      if (kLogThreatSignals) {
+        debugPrint('SafeHer: analyze -> nothing fresh to send');
+      }
+      return;
+    }
 
     _posting = true;
     postAttempts++;
     try {
-      await _apiClient.dio.post('/alerts/analyze', data: payload);
-    } on DioException catch (_) {
+      final response = await _apiClient.dio.post('/alerts/analyze', data: payload);
+      if (kLogThreatSignals) _logExchange(payload, response.data);
+    } on DioException catch (error) {
+      if (kLogThreatSignals) {
+        debugPrint('SafeHer: analyze -> ${_describe(payload)} | FAILED '
+            '(${error.response?.statusCode ?? error.type.name})');
+      }
       // The alarm this feeds is the server's to raise, and a dropped reading
       // is one the next tick replaces a second later. Retrying would build a
       // queue of readings that were true when they were taken and are not now.
     } finally {
       _posting = false;
     }
+  }
+
+  /// One line per reading: what we sent, and what the fusion engine made of it.
+  ///
+  /// `modalities_used` is the only authoritative answer to "did this signal
+  /// actually reach the engine" — it names the signals the verdict rests on.
+  /// Printing it beside the payload makes a dropped signal obvious: it is in
+  /// the left half and missing from the right.
+  void _logExchange(Map<String, dynamic> payload, Object? body) {
+    final sent = _describe(payload);
+    if (body is! Map) {
+      debugPrint('SafeHer: analyze -> $sent | (no verdict in response)');
+      return;
+    }
+    final score = body['fused_score'];
+    final used = (body['modalities_used'] as List?)?.join(',') ?? 'none';
+    final level = (body['live_score'] as Map?)?['level'] ?? '?';
+    // Present and non-null only when the server actually dispatched.
+    final sos = body['auto_sos'] == null ? '' : '  ** AUTO-SOS **';
+    debugPrint('SafeHer: analyze -> $sent => fused $score [$used] $level$sos');
+  }
+
+  static String _describe(Map<String, dynamic> payload) {
+    String show(String key, String name) {
+      final value = payload[key];
+      // "--" is the point of this line: it distinguishes a signal that is
+      // absent from one reporting a low score.
+      return value == null ? '$name --' : '$name $value';
+    }
+
+    return '${show('motion_score', 'glove')} | '
+        '${show('audio_score', 'audio')} | '
+        '${show('vision_score', 'weapon')}';
   }
 
   TimedSignal? _fresh(TimedSignal? signal, DateTime now) =>

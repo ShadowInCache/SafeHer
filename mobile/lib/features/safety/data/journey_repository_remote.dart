@@ -1,6 +1,7 @@
 import '../../../core/network/api_client.dart';
 import '../domain/models/safe_journey.dart';
 import '../domain/safety_repository.dart';
+import '../../../core/network/api_time.dart';
 
 /// `fastapi_app`-backed [JourneyRepository] — `/api/v1/journeys/*`.
 class JourneyRepositoryRemote implements JourneyRepository {
@@ -18,15 +19,15 @@ class JourneyRepositoryRemote implements JourneyRepository {
     expectedDurationMinutes: json['expected_duration_minutes'] as int,
     checkInIntervalMinutes: json['check_in_interval_minutes'] as int?,
     status: JourneyStatus.fromWire(json['status'] as String? ?? 'active'),
-    startedAt: DateTime.parse(json['started_at'] as String),
-    expectedArrivalAt: DateTime.parse(json['expected_arrival_at'] as String),
+    startedAt: parseApiTime(json['started_at'] as String),
+    expectedArrivalAt: parseApiTime(json['expected_arrival_at'] as String),
     lastCheckInAt: _parseNullableDate(json['last_check_in_at']),
     endedAt: _parseNullableDate(json['ended_at']),
     contactIds: (json['contact_ids'] as List?)?.cast<String>() ?? const [],
   );
 
   static DateTime? _parseNullableDate(Object? value) =>
-      value is String ? DateTime.tryParse(value) : null;
+      value is String ? tryParseApiTime(value) : null;
 
   @override
   Future<SafeJourney?> getActiveJourney() async {
@@ -90,7 +91,7 @@ class JourneyRepositoryRemote implements JourneyRepository {
         latitude: (json['latitude'] as num).toDouble(),
         longitude: (json['longitude'] as num).toDouble(),
         accuracyMetres: (json['accuracy_metres'] as num?)?.toDouble(),
-        capturedAt: DateTime.parse(json['captured_at'] as String),
+        capturedAt: parseApiTime(json['captured_at'] as String),
       );
     }).toList();
   }

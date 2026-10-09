@@ -38,6 +38,7 @@ from fastapi_app.schemas import (
     UserPublic,
 )
 from fastapi_app.security import get_current_user
+from fastapi_app.time_utils import to_utc_iso, utc_now_iso
 from fastapi_app.services.notifications import send_fcm_notification
 
 logger = logging.getLogger(__name__)
@@ -137,8 +138,8 @@ async def start_journey(
             "type": "journey_started",
             "journey_id": journey.id,
             "destination": journey.destination_label,
-            "expected_arrival_at": journey.expected_arrival_at.isoformat(),
-            "timestamp": datetime.utcnow().isoformat(),
+            "expected_arrival_at": to_utc_iso(journey.expected_arrival_at),
+            "timestamp": utc_now_iso(),
         },
     )
     return await _to_public(session, journey)
@@ -191,7 +192,7 @@ async def push_journey_location(
             "type": "journey_location",
             "journey_id": journey.id,
             "location": {"latitude": payload.latitude, "longitude": payload.longitude},
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utc_now_iso(),
         },
     )
     return None
@@ -251,7 +252,7 @@ async def mark_arrived(
             "type": "journey_ended",
             "journey_id": journey.id,
             "status": "arrived",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utc_now_iso(),
         },
     )
     return await _to_public(session, updated)
@@ -273,7 +274,7 @@ async def cancel_journey(
             "type": "journey_ended",
             "journey_id": journey.id,
             "status": "cancelled",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utc_now_iso(),
         },
     )
     return await _to_public(session, updated)
@@ -331,7 +332,7 @@ async def escalate_overdue_journey(
         "last_known_location": (
             {"latitude": last.lat, "longitude": last.lng} if last is not None else None
         ),
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": utc_now_iso(),
     }
     await manager.broadcast_to_user(current_user.id, ws_payload)
 
