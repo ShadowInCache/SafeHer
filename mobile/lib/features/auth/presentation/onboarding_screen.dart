@@ -68,9 +68,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   static const _paperMuted = Color(0xB3FAF8F4); // paper at 70%
 
   late final List<_OnboardingPage> _pages = [
+    // Deliberately not "Always Protected, every step of the way". Detection
+    // runs only during a Safe Journey the user starts -- that is what the
+    // privacy policy promises and what the code does -- and the Terms are
+    // explicit that SafeHer is not an emergency service and depends on
+    // coverage, Bluetooth and battery. Onboarding is where someone decides
+    // how much to rely on this app, so it is the worst place to overstate it.
     const _OnboardingPage(
-      title: 'Always Protected',
-      body: 'SafeHer watches over you silently, every step of the way.',
+      title: 'Watching When You Ask',
+      body: 'Start a Safe Journey and SafeHer listens and watches until you '
+          'arrive.',
       ground: AppColors.light50,
       ink: AppColors.neutral900,
       inkMuted: AppColors.neutral500,

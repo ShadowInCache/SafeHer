@@ -209,7 +209,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
                   Opacity(
                     opacity: taglineIn,
                     child: Text(
-                      'ALWAYS PROTECTED',
+                      // Not "ALWAYS PROTECTED": the app protects during a
+                      // Safe Journey, not continuously, and the Terms say so.
+                      'SAFETY, SHARED',
                       style: AppTypography.eyebrow.copyWith(color: AppColors.neutral400),
                     ),
                   ),

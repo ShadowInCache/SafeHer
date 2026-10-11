@@ -83,14 +83,34 @@ void main() {
       await tester.pumpWidget(_harness(brightness: Brightness.light));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      expect(find.text('Always Protected'), findsOneWidget);
+      expect(find.text('Watching When You Ask'), findsOneWidget);
     });
 
     testWidgets('renders in dark mode', (tester) async {
       await tester.pumpWidget(_harness());
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      expect(find.text('Always Protected'), findsOneWidget);
+      expect(find.text('Watching When You Ask'), findsOneWidget);
+    });
+
+    testWidgets('does not promise protection the app does not provide',
+        (tester) async {
+      // Detection runs only during a Safe Journey the user starts. The privacy
+      // policy says so and the Terms are explicit that SafeHer is not an
+      // emergency service and depends on coverage, Bluetooth and battery.
+      // Onboarding is where someone decides how far to rely on this app, so
+      // copy that claims continuous protection is a safety problem, not a
+      // wording preference.
+      await tester.pumpWidget(_harness());
+      await tester.pumpAndSettle();
+
+      for (final overclaim in [
+        'Always Protected',
+        'every step of the way',
+      ]) {
+        expect(find.textContaining(overclaim, findRichText: true), findsNothing,
+            reason: 'onboarding must not claim "$overclaim"');
+      }
     });
 
     testWidgets('handles tap on Skip and persists onboarding flag', (tester) async {
