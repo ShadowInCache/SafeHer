@@ -422,10 +422,38 @@ class _SafetyStatusCard extends StatelessWidget {
   final ThreatSnapshot? threat;
   final VoidCallback onConnectDevice;
 
+  /// The fused score at which this card stops saying everything is fine.
+  ///
+  /// 0.60 is the fusion engine's own `high` band, and it is the same bar the
+  /// WebSocket branch below already applies to `threatLevel`.
+  static const _elevatedScore = 0.60;
+
+  /// The fusion engine's bands, so the card names a level the same way the
+  /// server does rather than inventing its own vocabulary.
+  static String _bandForScore(double? score) {
+    if (score == null) return 'elevated';
+    if (score >= 0.80) return 'critical';
+    if (score >= 0.60) return 'high';
+    return 'elevated';
+  }
+
   _SafetyLevel get _level {
     if (!hasDevices) return _SafetyLevel.noDevice;
     final level = latestEvent?.threatLevel?.toLowerCase();
     if (level == 'high' || level == 'critical') return _SafetyLevel.elevated;
+
+    // The live score counts too, not only a WebSocket event.
+    //
+    // This card printed "Threat score 92%" directly underneath the words
+    // "You're Safe — all connected devices are operating normally", because
+    // the state was derived purely from `latestEvent` and a dropped or
+    // never-delivered socket message left it at `safe`. A safety app telling
+    // a woman she is fine while showing her a critical score is the worst
+    // failure this screen can have: the number is right there, and the
+    // sentence above it contradicts it.
+    final score = threat?.score;
+    if (score != null && score >= _elevatedScore) return _SafetyLevel.elevated;
+
     if (monitoringStatus != MonitoringConnectionStatus.connected) return _SafetyLevel.starting;
     return _SafetyLevel.safe;
   }
@@ -457,8 +485,11 @@ class _SafetyStatusCard extends StatelessWidget {
       _SafetyLevel.elevated => (
         SaIconGlyph.shield,
         AppColors.coral500,
-        '${latestEvent?.threatLevel?.toUpperCase() ?? 'ELEVATED'} ALERT',
-        latestEvent?.summary ?? 'A threat event was detected.',
+        // Named from the event when there is one, and from the live score when
+        // the card raised itself without a socket message.
+        '${(latestEvent?.threatLevel ?? _bandForScore(threat?.score)).toUpperCase()} ALERT',
+        latestEvent?.summary ??
+            'The current reading is above your alert threshold.',
       ),
     };
 
