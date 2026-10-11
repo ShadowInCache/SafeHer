@@ -22,6 +22,7 @@ import '../../devices/data/weapon_detection_service.dart';
 import '../../../shared/models/threat_level.dart';
 import '../../devices/domain/glove_protocol.dart';
 import '../domain/camera_activation_policy.dart';
+import '../domain/glove_confirmation.dart';
 import 'safety_providers.dart';
 import 'threat_signal_aggregator.dart';
 
@@ -109,6 +110,10 @@ class ThreatPipeline extends _$ThreatPipeline {
   /// so something has to ask whether the dwell has elapsed.
   Timer? _cameraTimer;
 
+  /// Holds back a lone threatening glove reading until a second confirms it.
+  /// See [GloveConfirmation] for the hardware measurement that motivated it.
+  final _gloveConfirmation = GloveConfirmation();
+
   /// Keeps this process alive while a journey is armed.
   ///
   /// Resolved once and held rather than read where it is used: `_stop` runs
@@ -144,10 +149,25 @@ class ThreatPipeline extends _$ThreatPipeline {
         // numbers; the short version is that a connected glove made a visible
         // weapon stop raising the alarm.
         aggregator.retractGlove();
-      } else {
+        // Calm breaks the streak: see `GloveConfirmation.reset`.
+        _gloveConfirmation.reset();
+      } else if (_gloveConfirmation.confirm(DateTime.now())) {
         aggregator.reportGlove(score, label: classification.label);
+      } else {
+        // First hit of a possible streak. Held back from fusion -- a lone
+        // window of FALL bracketed by NORMAL is a misclassification, and with
+        // the glove as the only reporting modality its score becomes the
+        // fused score outright. See `GloveConfirmation` for the measurement.
+        if (kLogThreatSignals) {
+          debugPrint('SafeHer: glove ${classification.label} '
+              '(${score.toStringAsFixed(2)}) awaiting confirmation '
+              '(${_gloveConfirmation.hits}/${_gloveConfirmation.requiredHits})');
+        }
       }
-      // A fall, or force applied by someone else, is reason enough to look.
+      // The camera opens on the *first* reading regardless, because looking is
+      // cheap and reversible, and footage from the window while confirmation
+      // is pending is exactly the evidence that matters if the second reading
+      // arrives. Look immediately; alarm on confirmation.
       if (state.armed && _policy.reportGlove(score, now: DateTime.now())) {
         _openCameraIfNeeded();
       }
@@ -462,6 +482,7 @@ class ThreatPipeline extends _$ThreatPipeline {
     // Cleared rather than left to expire: the next journey must not begin
     // inside this one's dwell or cooldown.
     _policy.reset();
+    _gloveConfirmation.reset();
 
     await _audioSub?.cancel();
     await _weaponSub?.cancel();
