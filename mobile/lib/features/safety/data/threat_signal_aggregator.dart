@@ -213,9 +213,17 @@ class ThreatSignalAggregator {
     final score = body['fused_score'];
     final used = (body['modalities_used'] as List?)?.join(',') ?? 'none';
     final level = (body['live_score'] as Map?)?['level'] ?? '?';
-    // Present and non-null only when the server actually dispatched.
-    final sos = body['auto_sos'] == null ? '' : '  ** AUTO-SOS **';
-    debugPrint('SafeHer: analyze -> $sent => fused $score [$used] $level$sos');
+    // `auto_sos` is always present and always a map -- it reports the decision,
+    // including the decision *not* to dispatch. Reading it for null therefore
+    // claimed an alarm on every single reading. Only `triggered` means a
+    // dispatch actually happened; anything else carries the reason it did not
+    // (below threshold, deduplicated, no signal reported).
+    final sos = body['auto_sos'];
+    final dispatched = sos is Map && sos['triggered'] == true;
+    final verdict = dispatched
+        ? '  ** AUTO-SOS DISPATCHED **'
+        : (sos is Map && sos['reason'] != null ? '  (no sos: ${sos['reason']})' : '');
+    debugPrint('SafeHer: analyze -> $sent => fused $score [$used] $level$verdict');
   }
 
   static String _describe(Map<String, dynamic> payload) {
