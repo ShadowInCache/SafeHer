@@ -325,7 +325,7 @@ class _SearchResults extends StatelessWidget {
               width: double.infinity,
               child: SaDeviceCard(
                 name: device.name,
-                batteryPercent: device.batteryPercent,
+                batteryPercent: device.batteryPercent ?? 0,
                 signalStrength: device.signalStrength,
                 isOnline: device.isOnline,
                 width: double.infinity,

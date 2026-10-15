@@ -16,6 +16,7 @@ import '../../devices/domain/models/device_detail.dart';
 import '../data/monitoring_providers.dart';
 import '../domain/models/realtime_alert_event.dart';
 import 'widgets/camera_feed_panel.dart';
+import '../../devices/data/glove_link_providers.dart';
 
 /// Live Monitoring — driven entirely by the real
 /// `/api/v1/ws/alerts/{user_id}` feed (see `monitoring_providers.dart`).
@@ -44,6 +45,12 @@ class LiveMonitoringScreen extends ConsumerWidget {
     final monitoring = ref.watch(liveMonitoringControllerProvider);
     final devicesAsync = ref.watch(devicesProvider);
     final glassesOnline = devicesAsync.valueOrNull?.any((d) => d.type == DeviceType.glasses && d.isOnline) ?? false;
+
+    // Read from the live BLE link, not the backend registry: the glove talks
+    // Bluetooth to this phone and never calls the server, so `isOnline` from
+    // `/devices/me` is false for a glove that is actively streaming.
+    final gloveLink = ref.watch(gloveLinkProvider);
+    final gloveOnline = gloveLink.isReporting || gloveLink.isListening;
     final latestEvent = monitoring.events.isNotEmpty ? monitoring.events.first : null;
 
     return Scaffold(
@@ -66,6 +73,7 @@ class LiveMonitoringScreen extends ConsumerWidget {
                       events: monitoring.events,
                       latestEvent: latestEvent,
                       glassesOnline: glassesOnline,
+                      gloveOnline: gloveOnline,
                       onRetry: () => ref.read(liveMonitoringControllerProvider.notifier).retry(),
                     ),
                   ),
@@ -139,6 +147,7 @@ class _MonitoringBody extends StatelessWidget {
     required this.events,
     required this.latestEvent,
     required this.glassesOnline,
+    required this.gloveOnline,
     required this.onRetry,
   });
 
@@ -146,6 +155,7 @@ class _MonitoringBody extends StatelessWidget {
   final List<RealtimeAlertEvent> events;
   final RealtimeAlertEvent? latestEvent;
   final bool glassesOnline;
+  final bool gloveOnline;
   final VoidCallback onRetry;
 
   @override
@@ -154,6 +164,7 @@ class _MonitoringBody extends StatelessWidget {
       children: [
         SaThreatGaugeCard(
           score: latestEvent?.gaugeScore,
+          hasConnectedDevice: gloveOnline || glassesOnline,
           componentScores: const [],
           lastUpdated: latestEvent != null ? _formatRelative(latestEvent!.timestamp) : null,
           gaugeSize: 120,

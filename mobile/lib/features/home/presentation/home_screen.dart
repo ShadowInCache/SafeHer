@@ -630,7 +630,7 @@ class _DeviceStatusRow extends StatelessWidget {
       button: true,
       label:
           '${device.name}, ${device.isOnline ? "online" : "offline"}, $syncedLabel'
-          '${device.isOnline ? ", battery ${(device.batteryPercent * 100).round()} percent" : ""}',
+          '${device.isOnline && device.batteryPercent != null ? ", battery ${(device.batteryPercent! * 100).round()} percent" : ""}',
       child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
@@ -668,9 +668,9 @@ class _DeviceStatusRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (device.isOnline)
+              if (device.isOnline && device.batteryPercent != null)
                 Text(
-                  '${(device.batteryPercent * 100).round()}%',
+                  '${(device.batteryPercent! * 100).round()}%',
                   style: AppTypography.monoDataS.copyWith(color: onSurface.withValues(alpha: 0.7)),
                 ),
               const SizedBox(width: AppSpacing.space2),

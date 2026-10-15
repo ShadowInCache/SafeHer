@@ -69,8 +69,14 @@ class DeviceExpandableCardState extends ConsumerState<DeviceExpandableCard> {
     final connectedGloveId = ref.watch(connectedGloveIdProvider);
     final bool isOnline;
     if (device.type == DeviceType.glove && connectedGloveId != null) {
-      isOnline =
-          ref.watch(gloveConnectionStateProvider(connectedGloveId)).valueOrNull == BleConnectionStatus.connected;
+      // A notifying glove is online regardless of what the autoDispose
+      // connection stream has emitted yet -- see the note in the live panel
+      // below. Without this the dot read offline over streaming motion.
+      final link = ref.watch(gloveLinkProvider);
+      isOnline = link.isReporting ||
+          link.isListening ||
+          ref.watch(gloveConnectionStateProvider(connectedGloveId)).valueOrNull ==
+              BleConnectionStatus.connected;
     } else {
       isOnline = device.isOnline;
     }
@@ -107,19 +113,26 @@ class DeviceExpandableCardState extends ConsumerState<DeviceExpandableCard> {
                 ],
               ),
               const SizedBox(height: AppSpacing.space4),
+              // A glove that has never reported a battery level shows a dash,
+              // not an empty bar at 0%. Telling someone her safety device is
+              // flat when nobody ever asked it is the worse of the two errors.
               Row(
                 children: [
-                  Expanded(child: SaBatteryBar(percent: device.batteryPercent)),
+                  Expanded(child: SaBatteryBar(percent: device.batteryPercent ?? 0)),
                   const SizedBox(width: AppSpacing.space3),
                   Text(
-                    '${(device.batteryPercent * 100).round()}%',
+                    device.batteryPercent == null
+                        ? '--'
+                        : '${(device.batteryPercent! * 100).round()}%',
                     style: AppTypography.monoDataS.copyWith(color: onSurface),
                   ),
                 ],
               ),
               const SizedBox(height: AppSpacing.space1),
               Text(
-                '~${device.batteryHoursRemaining}h remaining',
+                device.batteryHoursRemaining == null
+                    ? 'Battery level not reported'
+                    : '~${device.batteryHoursRemaining}h remaining',
                 style: AppTypography.bodyS.copyWith(
                   color: onSurface.withValues(alpha: 0.5),
                 ),
@@ -381,7 +394,21 @@ class _MotionRiskDisplay extends ConsumerWidget {
       // Null (shown as `-- BPM`) whenever the glove has no valid reading; the
       // link clears it on disconnect, so a stale value cannot linger. Never 0.
       heartRateBpm = link.heartRateBpm;
-      connected = ref.watch(gloveConnectionStateProvider(deviceId)).valueOrNull == BleConnectionStatus.connected;
+
+      // `gloveConnectionStateProvider` is an autoDispose stream, so its
+      // `valueOrNull` is null until the first event arrives and again after a
+      // rebuild tears it down. Comparing that null to `connected` rendered
+      // "OFFLINE" over a glove that was visibly streaming motion -- the UI
+      // was reporting *not yet known* as *known to be disconnected*.
+      //
+      // A glove that is notifying is connected, whatever the stream has got
+      // round to saying, so take that as the positive evidence it is.
+      final statusKnown = ref.watch(gloveConnectionStateProvider(deviceId)).valueOrNull;
+      if (link.isReporting || link.isListening) {
+        connected = true;
+      } else {
+        connected = statusKnown == null ? null : statusKnown == BleConnectionStatus.connected;
+      }
       // severity * confidence * 100 — NORMAL is always 0, FALL scores
       // highest, everything else lands in between. See motion_risk_score.dart.
       riskScore = ref.watch(motionRiskScoreProvider(deviceId));

@@ -36,10 +36,12 @@ class DeviceRepositoryRemote implements DeviceRepository {
       name: json['device_name'] as String,
       type: DeviceType.values.byName(_normalizeType(json['device_type'] as String)),
       isOnline: isOnline,
-      batteryPercent: batteryLevel != null ? batteryLevel / 100 : 0,
-      batteryHoursRemaining: 0,
+      // Null, not zero -- same rule as `sensors` below. A glove that has
+      // never reported a battery level is unknown, not flat.
+      batteryPercent: batteryLevel != null ? batteryLevel / 100 : null,
+      batteryHoursRemaining: null,
       signalStrength: json['signal_strength'] as int? ?? 0,
-      firmwareVersion: json['firmware_version'] as String? ?? 'Not reporting',
+      firmwareVersion: json['firmware_version'] as String? ?? 'Unknown',
       updateAvailable: false,
       // Unknown, not zero. The API carries no live sensor values -- those
       // arrive over BLE straight from the glove -- and hardcoding zeros here

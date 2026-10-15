@@ -28,6 +28,7 @@ class SaComponentScore {
 /// a confirmed-safe reading rather than the absence of any reading at all.
 class SaThreatGaugeCard extends StatelessWidget {
   const SaThreatGaugeCard({
+    this.hasConnectedDevice = false,
     required this.score,
     required this.componentScores,
     required this.lastUpdated,
@@ -36,6 +37,15 @@ class SaThreatGaugeCard extends StatelessWidget {
   });
 
   final double? score;
+
+  /// Whether any wearable is currently connected.
+  ///
+  /// The empty state used to tell the user to connect a device whatever was
+  /// paired, because it keys off a WebSocket alert event rather than the
+  /// link: a glove streaming motion with no alert yet read as "Connect a
+  /// Smart Glove". With a device connected the honest message is that
+  /// monitoring is running and nothing has been reported.
+  final bool hasConnectedDevice;
   final List<SaComponentScore> componentScores;
   final String? lastUpdated;
   final double gaugeSize;
@@ -47,7 +57,9 @@ class SaThreatGaugeCard extends StatelessWidget {
 
     if (currentScore == null) {
       return SaCard(
-        semanticsLabel: 'Threat monitoring, waiting for live device data',
+        semanticsLabel: hasConnectedDevice
+            ? 'Threat monitoring running, nothing reported yet'
+            : 'Threat monitoring, waiting for live device data',
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -63,12 +75,16 @@ class SaThreatGaugeCard extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.space3),
             Text(
-              'Waiting for live device data',
+              hasConnectedDevice
+                  ? 'Monitoring is running'
+                  : 'Waiting for live device data',
               style: AppTypography.bodyM.copyWith(color: onSurface.withValues(alpha: 0.7)),
             ),
             const SizedBox(height: AppSpacing.space1),
             Text(
-              'Connect a Smart Glove or Smart Glasses to begin monitoring.',
+              hasConnectedDevice
+                  ? 'Your wearable is connected. Nothing has been reported yet.'
+                  : 'Connect a Smart Glove or Smart Glasses to begin monitoring.',
               style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.5)),
             ),
           ],

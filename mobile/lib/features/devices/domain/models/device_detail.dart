@@ -34,8 +34,8 @@ class DeviceDetail {
     required this.name,
     required this.type,
     required this.isOnline,
-    required this.batteryPercent,
-    required this.batteryHoursRemaining,
+    this.batteryPercent,
+    this.batteryHoursRemaining,
     required this.signalStrength,
     required this.firmwareVersion,
     required this.updateAvailable,
@@ -47,8 +47,16 @@ class DeviceDetail {
   final String name;
   final DeviceType type;
   final bool isOnline;
-  final double batteryPercent;
-  final int batteryHoursRemaining;
+  /// 0.0-1.0, or null when the device has never reported a battery level.
+  ///
+  /// Nullable for the same reason [SensorReading.unknown] exists: the glove
+  /// reports no battery at all, and rendering that as `0%` with `~0h
+  /// remaining` told the user her safety device was flat when nobody had
+  /// ever asked it.
+  final double? batteryPercent;
+
+  /// Estimated hours left, or null when it cannot be worked out.
+  final int? batteryHoursRemaining;
   final int signalStrength;
   final String firmwareVersion;
   final bool updateAvailable;

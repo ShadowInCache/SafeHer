@@ -13,6 +13,7 @@ import 'widgets/ble_pairing_sheet.dart';
 import 'widgets/glasses_status_card.dart';
 import 'widgets/device_expandable_card.dart';
 import 'widgets/pair_device_card.dart';
+import '../../../core/local/app_preferences.dart';
 
 /// Device list + per-device expansion + BLE pairing. Also serves as the
 /// "/devices/:id" deep-link target from the Dashboard — when
@@ -52,7 +53,13 @@ class DeviceManagementScreen extends ConsumerWidget {
                   tooltip: 'Back',
                 ),
                 title: devicesAsync.maybeWhen(
-                  data: (devices) => Text('Devices (${devices.length})'),
+                  // The glasses card is always rendered above this list but
+                  // is not a BLE peripheral, so it is absent from `devices`.
+                  // Counting only the list made the header read "Devices (1)"
+                  // above two visible cards.
+                  data: (devices) => Text(
+                    'Devices (${devices.length + (ref.watch(appPreferencesProvider).glassesHost.isEmpty ? 0 : 1)})',
+                  ),
                   orElse: () => const Text('Devices'),
                 ),
               ),
