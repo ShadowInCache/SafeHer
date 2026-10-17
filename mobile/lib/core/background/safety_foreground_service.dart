@@ -215,6 +215,15 @@ class PluginForegroundService implements SafetyForegroundService {
     );
   }
 
+  /// The service types the running service was actually started with.
+  ///
+  /// Needed because the plugin offers no way to read them back, and starting
+  /// with the wrong set is silent -- see the note in [start].
+  List<ForegroundServiceTypes> _activeTypes = const [];
+
+  static bool _setEquals(List<ForegroundServiceTypes> a, List<ForegroundServiceTypes> b) =>
+      a.length == b.length && a.toSet().containsAll(b);
+
   @override
   Future<bool> start({required Set<WatchReason> reasons}) async {
     assert(reasons.isNotEmpty, 'a service with no reason is a notification over nothing');
@@ -242,6 +251,28 @@ class PluginForegroundService implements SafetyForegroundService {
     final types = await _serviceTypesFor(reasons);
     final notification = _notificationFor(reasons);
 
+    // Restart when the declared types have to change.
+    //
+    // The comment above used to claim `startService` updates a running
+    // service. It does not: flutter_foreground_task 10 throws
+    // `ServiceAlreadyStartedException`, and the service carries on with
+    // whatever types it was first given.
+    //
+    // That silently broke the microphone. Pairing the glove starts the
+    // service with `connectedDevice`; arming a journey then tries to add
+    // `microphone` and throws, so the service keeps running *without* it. On
+    // Android 14+ a foreground service that has not declared `microphone`
+    // gets no microphone, and the speech recogniser returns ERROR_CLIENT --
+    // measured on a Samsung SM M166P across four journeys, where the audio
+    // modality never produced a single reading.
+    //
+    // Neither `updateService` nor `restartService` accepts service types, so
+    // changing them means stopping first. The gap is brief and happens only
+    // when the set actually changes.
+    if (await isRunning() && !_setEquals(types, _activeTypes)) {
+      await _guard(FlutterForegroundTask.stopService, const ServiceRequestSuccess());
+    }
+
     final result = await _guard(
       () => FlutterForegroundTask.startService(
         serviceTypes: types,
@@ -257,6 +288,7 @@ class PluginForegroundService implements SafetyForegroundService {
       debugPrint('SafeHer: foreground service failed to start: ${result.error}');
       return false;
     }
+    _activeTypes = List.of(types);
     // Asked again rather than trusting the success result: this is the value
     // the UI turns into "you can put your phone in your pocket".
     return isRunning();
@@ -264,6 +296,7 @@ class PluginForegroundService implements SafetyForegroundService {
 
   @override
   Future<void> stop() async {
+    _activeTypes = const [];
     if (!await isRunning()) return;
     await _guard(FlutterForegroundTask.stopService, const ServiceRequestSuccess());
   }
