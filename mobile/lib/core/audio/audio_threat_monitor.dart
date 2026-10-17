@@ -196,6 +196,24 @@ class AudioThreatMonitor {
 
   Future<void> _listenOnce() async {
     if (!_wantsToListen || _disposed || _speech.isListening) return;
+
+    // Clear any session the platform is still holding before asking for a new
+    // one.
+    //
+    // Measured on a Samsung SM M166P: after `error_client` the plugin reports
+    // `isListening == false`, but the platform recogniser has not released
+    // the session, so the next `listen()` comes straight back as `error_busy`
+    // -- twice in a row, every time. Cancelling first makes the retry a real
+    // retry instead of a request the service was always going to refuse.
+    if (_failures > 0) {
+      try {
+        await _speech.cancel();
+      } catch (_) {
+        // Nothing to cancel, or the platform refused. Either way the listen
+        // attempt below is no worse off for having asked.
+      }
+    }
+
     try {
       await _speech.listen(
         listenOptions: SpeechListenOptions(
