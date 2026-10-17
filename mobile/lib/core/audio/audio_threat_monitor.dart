@@ -77,7 +77,11 @@ class AudioThreatMonitor {
     Duration listenFor = const Duration(seconds: 20),
     Duration pauseFor = const Duration(seconds: 4),
     Duration restartDelay = const Duration(milliseconds: 400),
+    Duration maxRestartDelay = const Duration(seconds: 30),
+    bool preferOnDevice = true,
   })  : _classifier = classifier,
+        _maxRestartDelay = maxRestartDelay,
+        _preferOnDevice = preferOnDevice,
         _speech = speech ?? SpeechToText(),
         _tone = tone,
         _listenFor = listenFor,
@@ -90,6 +94,28 @@ class AudioThreatMonitor {
   final Duration _listenFor;
   final Duration _pauseFor;
   final Duration _restartDelay;
+
+  /// Ceiling for the exponential backoff below.
+  final Duration _maxRestartDelay;
+
+  /// Whether to ask for on-device recognition.
+  ///
+  /// Measured on a Samsung SM M166P, 17 October: with network recognition the
+  /// platform logged `ONLINE_NO_PROGRESS` 131 times and never returned a
+  /// transcript, because the phone's connection was too unreliable to stream
+  /// audio. A safety feature that stops listening when the network wobbles is
+  /// not much of a safety feature, so on-device is asked for first.
+  ///
+  /// It is a preference, not a requirement: `onDevice: true` makes the
+  /// platform *fail* rather than fall back, so after
+  /// [_onDeviceAttemptsBeforeFallback] consecutive failures this flips to the
+  /// permissive mode for the rest of the session.
+  bool _preferOnDevice;
+
+  static const _onDeviceAttemptsBeforeFallback = 3;
+
+  /// Consecutive failed listen attempts, driving the backoff.
+  int _failures = 0;
 
   final _readings = StreamController<AudioThreatReading>.broadcast();
   final _statuses = StreamController<AudioMonitorStatus>.broadcast();
@@ -117,11 +143,19 @@ class AudioThreatMonitor {
   Future<bool> start() async {
     if (_disposed) return false;
     _wantsToListen = true;
+    _failures = 0;
 
     if (!_initialised) {
       try {
         _initialised = await _speech.initialize(
-          onError: (_) => _scheduleRestart(),
+          onError: (error) {
+            // Previously `(_) => _scheduleRestart()`, which threw the reason
+            // away. The monitor then cycled the microphone roughly twice a
+            // second for a whole journey while reporting nothing, and there
+            // was no way to see why from outside the device.
+            _noteFailure('$error');
+            _scheduleRestart();
+          },
           onStatus: (_) => _scheduleRestart(),
         );
       } catch (_) {
@@ -167,16 +201,39 @@ class AudioThreatMonitor {
         listenOptions: SpeechListenOptions(
           partialResults: false,
           cancelOnError: false,
+          onDevice: _preferOnDevice,
           listenFor: _listenFor,
           pauseFor: _pauseFor,
         ),
         onResult: (result) {
           if (!result.finalResult) return;
+          // A transcript means the recogniser is healthy: drop the backoff so
+          // the next ordinary silence is not punished with a long wait.
+          _failures = 0;
           _score(result.recognizedWords);
         },
       );
-    } catch (_) {
+    } catch (error) {
+      _noteFailure('$error');
       _scheduleRestart();
+    }
+  }
+
+  /// Records a failed attempt and reports it, sparingly.
+  ///
+  /// Logged for the first few and then every tenth, because the failure mode
+  /// this exists to expose produces hundreds of them a minute and a log line
+  /// per failure would bury everything else in the capture.
+  void _noteFailure(String reason) {
+    _failures++;
+    if (_failures <= 3 || _failures % 10 == 0) {
+      debugPrint('SafeHer: speech recogniser failed (#$_failures'
+          '${_preferOnDevice ? ", on-device" : ", network"}): $reason');
+    }
+    if (_preferOnDevice && _failures >= _onDeviceAttemptsBeforeFallback) {
+      _preferOnDevice = false;
+      debugPrint('SafeHer: on-device recognition unavailable, '
+          'falling back to the platform default');
     }
   }
 
@@ -200,7 +257,15 @@ class AudioThreatMonitor {
   void _scheduleRestart() {
     if (!_wantsToListen || _disposed) return;
     _restartTimer?.cancel();
-    _restartTimer = Timer(_restartDelay, _listenOnce);
+    // Exponential backoff. A flat 400 ms retry meant ~2.5 attempts a second;
+    // Android's recognition service caps outstanding requests and began
+    // refusing this app outright -- "#startListening received when the
+    // service's capacity is full - ignoring this call", 256 times in one
+    // journey. Backing off lets the service recover instead of being hammered.
+    final shift = _failures.clamp(0, 16);
+    final delayMs = (_restartDelay.inMilliseconds * (1 << shift))
+        .clamp(_restartDelay.inMilliseconds, _maxRestartDelay.inMilliseconds);
+    _restartTimer = Timer(Duration(milliseconds: delayMs), _listenOnce);
   }
 
   Future<void> dispose() async {
