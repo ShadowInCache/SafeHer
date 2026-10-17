@@ -117,7 +117,20 @@ class WeaponDetectionService {
   void watch(Stream<Uint8List> frames) {
     _subscription?.cancel();
     _droppedFrames = 0;
-    _subscription = frames.listen(_onFrame);
+    // `onError` is not optional here. Without it an error on the frame
+    // stream -- the glasses dropping mid-chunk, a malformed JPEG boundary --
+    // escapes as an unhandled exception, which is what the device logs showed
+    // every time the camera opened. The window is reset rather than ignored:
+    // frames from before a fault must not vote alongside frames from after
+    // it, for the same reason `onStreamLost` exists.
+    _subscription = frames.listen(
+      _onFrame,
+      onError: (Object error) {
+        debugPrint('SafeHer: weapon frame stream error: $error');
+        onStreamLost();
+      },
+      cancelOnError: false,
+    );
   }
 
   /// The video stopped. Forget the window.
