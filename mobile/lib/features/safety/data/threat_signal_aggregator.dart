@@ -168,6 +168,24 @@ class ThreatSignalAggregator {
     };
   }
 
+  /// Whether a failed post carried enough signal to be worth sending again.
+  ///
+  /// Deliberately not the fusion threshold: that lives on the server, is
+  /// user-configurable, and this class has no business second-guessing it.
+  /// This only asks whether any single modality was loud enough that losing
+  /// the reading could plausibly cost an alarm.
+  static bool _worthRetrying(Map<String, dynamic> payload) {
+    for (final key in const ['motion_score', 'audio_score', 'vision_score']) {
+      final value = payload[key];
+      if (value is num && value >= _retryFloor) return true;
+    }
+    return false;
+  }
+
+  /// The same bar the camera activation policy uses for audio. Below it, a
+  /// lost reading is not plausibly the difference between alarm and silence.
+  static const _retryFloor = 0.50;
+
   /// Sends one reading if there is anything fresh to send.
   Future<void> flush() async {
     if (!_armed || _posting) return;
@@ -186,13 +204,38 @@ class ThreatSignalAggregator {
       final response = await _apiClient.dio.post('/alerts/analyze', data: payload);
       if (kLogThreatSignals) _logExchange(payload, response.data);
     } on DioException catch (error) {
+      final reason = error.response?.statusCode ?? error.type.name;
       if (kLogThreatSignals) {
-        debugPrint('SafeHer: analyze -> ${_describe(payload)} | FAILED '
-            '(${error.response?.statusCode ?? error.type.name})');
+        debugPrint('SafeHer: analyze -> ${_describe(payload)} | FAILED ($reason)');
       }
-      // The alarm this feeds is the server's to raise, and a dropped reading
-      // is one the next tick replaces a second later. Retrying would build a
-      // queue of readings that were true when they were taken and are not now.
+      // A dropped reading is usually replaced by the next tick a second
+      // later, and retrying every one would build a queue of readings that
+      // were true when they were taken and are not now. That reasoning holds
+      // for a calm reading. It does not hold for the one that was about to
+      // raise the alarm.
+      //
+      // Measured on 17 October: ten posts failed across four journeys
+      // (connectionTimeout, receiveTimeout, connectionError) on a phone
+      // running a hotspot. Each was discarded in silence. If the failing one
+      // had been the reading that crossed the threshold, there would simply
+      // have been no alarm, and nothing anywhere would have said so.
+      //
+      // So a strong reading gets exactly one immediate retry -- same reading,
+      // well inside its ten-second freshness window, no queue.
+      if (_worthRetrying(payload)) {
+        try {
+          final retry = await _apiClient.dio.post('/alerts/analyze', data: payload);
+          if (kLogThreatSignals) {
+            debugPrint('SafeHer: analyze -> retry succeeded after $reason');
+            _logExchange(payload, retry.data);
+          }
+        } on DioException catch (retryError) {
+          if (kLogThreatSignals) {
+            debugPrint('SafeHer: analyze -> retry also failed '
+                '(${retryError.response?.statusCode ?? retryError.type.name})');
+          }
+        }
+      }
     } finally {
       _posting = false;
     }

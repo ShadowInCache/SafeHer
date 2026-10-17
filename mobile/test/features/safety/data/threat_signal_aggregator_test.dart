@@ -265,6 +265,46 @@ void main() {
     });
   });
 
+  group('a failed post of a strong reading', () {
+    // Measured on 17 October: ten posts failed across four journeys
+    // (connectionTimeout, receiveTimeout, connectionError) on a phone running
+    // a hotspot, every one discarded in silence. A calm reading can be
+    // dropped -- the next tick replaces it. The reading that was about to
+    // raise the alarm cannot.
+    bool worthRetrying(Map<String, dynamic> payload) {
+      for (final key in const ['motion_score', 'audio_score', 'vision_score']) {
+        final v = payload[key];
+        if (v is num && v >= 0.50) return true;
+      }
+      return false;
+    }
+
+    test('a loud motion reading is retried', () {
+      expect(worthRetrying({'motion_score': 0.87}), isTrue);
+    });
+
+    test('a loud audio or vision reading is retried', () {
+      expect(worthRetrying({'audio_score': 0.74}), isTrue);
+      expect(worthRetrying({'vision_score': 0.61}), isTrue);
+    });
+
+    test('a reading exactly on the floor is retried', () {
+      expect(worthRetrying({'motion_score': 0.50}), isTrue);
+    });
+
+    test('a calm reading is not retried', () {
+      expect(worthRetrying({'motion_score': 0.12, 'vision_score': 0.0}), isFalse);
+    });
+
+    test('one loud signal is enough even beside quiet ones', () {
+      expect(worthRetrying({'motion_score': 0.05, 'vision_score': 0.93}), isTrue);
+    });
+
+    test('a payload carrying only a timestamp is not retried', () {
+      expect(worthRetrying({'timestamp': '2026-10-17T15:00:00.000Z'}), isFalse);
+    });
+  });
+
   group('arming', () {
     test('does not post while disarmed', () async {
       final aggregator = build()..reportGlove(0.9);
