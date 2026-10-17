@@ -1,96 +1,91 @@
-/// Requires a threatening glove reading to repeat before it can raise an alarm.
+import 'dart:collection';
+
+/// Requires a threatening glove reading to be *dense*, not merely repeated,
+/// before it can raise an alarm.
 ///
-/// ## Why this exists
+/// ## What the hardware actually emits
 ///
-/// Measured on real hardware, 11 October 2026. With the glove sitting on a
-/// desk and nobody touching it, the fusion engine was driven to `critical`
-/// six times in four minutes. The log shows why:
+/// The glove notifies about twice a second and alternates. A real event looks
+/// like `FALL -> NORMAL -> FALL -> NORMAL`, not a run of consecutive FALLs.
+/// Measured on a Samsung SM M166P, 17 October:
 ///
 /// ```
-/// 23:47:35  glove 0.96 ... => fused 0.96 [motion] critical
-/// 23:47:36  nothing fresh to send
-/// 23:47:39  glove 0.92 ... => fused 0.92 [motion] critical
-/// 23:47:40  nothing fresh to send      (for the next 30+ seconds)
+/// 14:59:56  FALL 0.89     14:59:58  FALL 0.99     14:59:59  FALL 0.98
+/// 15:00:01  FALL 0.84     15:00:03  FALL 0.99
 /// ```
 ///
-/// A reported signal stays fresh in the aggregator for ten seconds, so it can
-/// only disappear on the *very next* one-second tick if it was retracted —
-/// which happens when the glove classifies `NORMAL`. The true sequence was
-/// therefore `NORMAL … NORMAL … one FALL spike … NORMAL … NORMAL`.
+/// — with silent `NORMAL` readings between every pair.
 ///
-/// **A real fall cannot look like that.** Someone who falls stays fallen: the
-/// glove would report several consecutive windows of elevated motion. A single
-/// window of `FALL` bracketed by calm on both sides is a misclassification,
-/// and it was reaching the fusion engine unchallenged because the glove is the
-/// only reporting modality — so its score became the fused score outright.
+/// An earlier version of this class required two *consecutive* non-NORMAL
+/// readings and reset on every `NORMAL`. Against that alternation it could
+/// never accumulate: twenty-plus readings, several at 0.99, every one logged
+/// `awaiting confirmation (1/2)` and **nothing reached fusion at all**. That
+/// is a worse failure than the false alarms it replaced — the glove could not
+/// raise an alarm under any circumstances.
 ///
-/// ## Why this is not a new policy
+/// ## Why density, and why these numbers
 ///
-/// The same rule already exists three times over in this codebase, and the
-/// fusion path was simply the one place it had been left out:
+/// Consecutiveness does not separate a real event from a spurious one, because
+/// both alternate. Rate does. Taking the two captures of the same firmware:
 ///
-/// * the glove firmware debounces `SUDDEN_MOVEMENT` across two windows
-///   (`SUDDEN_MOVEMENT_CONFIRMATION_WINDOWS`) — but never gated `FALL`;
-/// * `GloveThreatDetector` requires two hits in five seconds before it opens
-///   the direct BLE-to-SOS countdown;
-/// * `WeaponScorer` will not call a detection persistent below two qualifying
-///   frames.
+/// | capture                          | readings          | max in any 5 s |
+/// |----------------------------------|-------------------|----------------|
+/// | 11 Oct, glove idle on a desk     | 3 spikes over 8 s | 2              |
+/// | 17 Oct, glove deliberately moved | ~20 over 60 s     | 3 or more      |
+///
+/// So [requiredHits] is 3 within a [window] of 5 seconds: the highest density
+/// the idle glove reached was 2, and a real event clears 3 readily. Both
+/// numbers come from recorded hardware, not from judgement, and the tests
+/// replay both captures tick by tick.
+///
+/// `NORMAL` no longer resets the streak — it is simply a reading that is not
+/// a hit, and ages out of the window like any other.
 ///
 /// ## What this deliberately does not delay
 ///
-/// Only the report that feeds **fusion**, and therefore the automatic SOS.
-/// The camera still opens on the very first reading, because looking is cheap
-/// and reversible and the footage from the pending window is exactly the
-/// evidence that matters if the second reading does arrive. The rule is
-/// *look immediately, alarm on confirmation* — not *wait before doing
-/// anything*.
-///
-/// The cost is roughly half a second on a genuine fall, since the glove
-/// classifies about twice a second. That is the trade the firmware already
-/// accepts for `SUDDEN_MOVEMENT`.
+/// Only the report that feeds fusion, and therefore the automatic SOS. The
+/// camera still opens on the very first reading, because looking is cheap and
+/// reversible and footage from the pending window is the evidence that matters
+/// if the event is real. Look immediately; alarm on confirmation.
 class GloveConfirmation {
   GloveConfirmation({
-    this.requiredHits = 2,
+    this.requiredHits = 3,
     this.window = const Duration(seconds: 5),
   }) : assert(requiredHits >= 1);
 
-  /// Consecutive threatening readings needed before one is reported.
+  /// Threatening readings needed inside [window] before one is reported.
   final int requiredHits;
 
-  /// How long a partial streak stays alive without being completed.
-  ///
-  /// Guards the case where the glove goes silent mid-streak rather than
-  /// reporting `NORMAL`: two spikes a minute apart are two spikes, not a
-  /// sustained event.
+  /// How far back a reading still counts toward the current density.
   final Duration window;
 
-  DateTime? _streakStartedAt;
-  int _hits = 0;
+  final Queue<DateTime> _hits = Queue<DateTime>();
 
-  /// Hits accumulated so far. Exposed for diagnostics and tests.
-  int get hits => _hits;
+  /// Readings still inside the window. Exposed for diagnostics and tests.
+  int get hits => _hits.length;
 
   /// Records a threatening reading. Returns whether it may now be reported.
   bool confirm(DateTime now) {
-    final startedAt = _streakStartedAt;
-    if (startedAt == null || now.difference(startedAt) > window) {
-      // Either the first hit, or the previous streak went stale.
-      _streakStartedAt = now;
-      _hits = 1;
-    } else {
-      _hits++;
-    }
-    return _hits >= requiredHits;
+    _hits.addLast(now);
+    _evict(now);
+    return _hits.length >= requiredHits;
   }
 
-  /// Breaks the streak.
+  /// Ages the window forward without recording a hit.
   ///
-  /// Called when the glove reports `NORMAL`, which is its way of saying there
-  /// is no threatening motion. Calm between two spikes is precisely what
-  /// separates a misclassification from a sustained event, so it must not be
-  /// possible for readings either side of it to combine.
-  void reset() {
-    _streakStartedAt = null;
-    _hits = 0;
+  /// Called when the glove reports `NORMAL`. Unlike the previous version this
+  /// does **not** clear the streak: the glove alternates, so treating calm as
+  /// a reset made confirmation unreachable. Calm simply contributes nothing
+  /// and lets older hits expire.
+  void observeCalm(DateTime now) => _evict(now);
+
+  /// Forgets everything. Used when a journey ends, so the next one cannot
+  /// inherit a partial streak.
+  void reset() => _hits.clear();
+
+  void _evict(DateTime now) {
+    while (_hits.isNotEmpty && now.difference(_hits.first) > window) {
+      _hits.removeFirst();
+    }
   }
 }

@@ -149,8 +149,10 @@ class ThreatPipeline extends _$ThreatPipeline {
         // numbers; the short version is that a connected glove made a visible
         // weapon stop raising the alarm.
         aggregator.retractGlove();
-        // Calm breaks the streak: see `GloveConfirmation.reset`.
-        _gloveConfirmation.reset();
+        // Calm is not a reset: the glove alternates FALL/NORMAL, so treating
+        // calm as a reset made confirmation unreachable. It just ages the
+        // window forward. See `GloveConfirmation.observeCalm`.
+        _gloveConfirmation.observeCalm(DateTime.now());
       } else if (_gloveConfirmation.confirm(DateTime.now())) {
         aggregator.reportGlove(score, label: classification.label);
       } else {

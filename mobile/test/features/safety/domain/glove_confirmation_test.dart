@@ -1,113 +1,130 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:safeher_app/features/safety/domain/glove_confirmation.dart';
 
-/// The measurement behind this class: with the glove sitting on a desk and
-/// nobody touching it, isolated `FALL` windows drove fusion to `critical` six
-/// times in four minutes. Because the glove was the only reporting modality,
-/// its score became the fused score outright.
+/// Both of these are transcribed from real device logs of the same firmware.
+/// The gate has to get both right: suppress the first, pass the second.
+///
+/// The first version of this class was tested only against the capture it had
+/// to suppress. It passed, shipped, and on hardware blocked *everything* --
+/// twenty-plus FALL readings, several at 0.99, none ever confirmed. A gate
+/// tested only against the failure it was built for will happily block the
+/// success nobody checked.
 void main() {
-  late DateTime now;
-  DateTime tick([int seconds = 1]) => now = now.add(Duration(seconds: seconds));
+  late DateTime t0;
+  DateTime at(double seconds) => t0.add(Duration(milliseconds: (seconds * 1000).round()));
 
-  setUp(() => now = DateTime(2026, 10, 11, 23, 47, 30));
+  setUp(() => t0 = DateTime(2026, 10, 17, 15, 0, 0));
 
-  group('a single spike', () {
-    test('is not reported on its own', () {
-      final c = GloveConfirmation();
-      expect(c.confirm(now), isFalse, reason: 'one window is not a fall');
-    });
-
-    test('is forgotten once the glove reports calm', () {
-      final c = GloveConfirmation();
-      expect(c.confirm(now), isFalse);
-      c.reset(); // NORMAL
-      expect(c.confirm(tick()), isFalse,
-          reason: 'calm between two spikes separates them');
-    });
-  });
-
-  group('a sustained event', () {
-    test('is reported on the second consecutive reading', () {
-      final c = GloveConfirmation();
-      expect(c.confirm(now), isFalse);
-      expect(c.confirm(tick()), isTrue);
-    });
-
-    test('keeps reporting while it continues', () {
-      final c = GloveConfirmation();
-      c.confirm(now);
-      expect(c.confirm(tick()), isTrue);
-      expect(c.confirm(tick()), isTrue, reason: 'a fall stays fallen');
-    });
-  });
-
-  group('the streak window', () {
-    test('two spikes far apart do not combine', () {
-      final c = GloveConfirmation(window: Duration(seconds: 5));
-      expect(c.confirm(now), isFalse);
-      expect(c.confirm(tick(30)), isFalse,
-          reason: 'a stale partial streak restarts rather than completing');
-    });
-
-    test('two spikes inside the window do combine', () {
-      final c = GloveConfirmation(window: Duration(seconds: 5));
-      expect(c.confirm(now), isFalse);
-      expect(c.confirm(tick(3)), isTrue);
-    });
-  });
-
-  group('configuration', () {
-    test('requiredHits of 1 reports immediately', () {
-      expect(GloveConfirmation(requiredHits: 1).confirm(now), isTrue);
-    });
-
-    test('requiredHits of 3 needs three', () {
-      final c = GloveConfirmation(requiredHits: 3);
-      expect(c.confirm(now), isFalse);
-      expect(c.confirm(tick()), isFalse);
-      expect(c.confirm(tick()), isTrue);
-    });
-
-    test('hits is observable for diagnostics', () {
-      final c = GloveConfirmation();
-      c.confirm(now);
-      expect(c.hits, 1);
-    });
-  });
-
-  test('replays the recorded false-positive run and suppresses every alarm', () {
-    // Transcribed from the device log of 11 October 2026. Each entry is one
-    // glove classification; `false` is NORMAL, which retracts and resets.
-    final recorded = <(int, bool)>[
-      (0, false), // 23:47:30 calm
-      (1, true), //  23:47:31 FALL 0.96   <- fired critical
-      (1, false), // 23:47:32 NORMAL
-      (3, true), //  23:47:35 FALL 0.96   <- fired critical
-      (1, false), // 23:47:36 NORMAL
-      (3, true), //  23:47:39 FALL 0.92   <- fired critical
-      (1, false), // 23:47:40 NORMAL, then 30+ s of calm
-    ];
-
-    final c = GloveConfirmation();
+  /// Feeds a capture. `hits` are seconds-offsets of threatening readings;
+  /// `calm` are the NORMAL readings between them.
+  int reportsFor(GloveConfirmation c, List<double> hits, {List<double> calm = const []}) {
+    final events = <(double, bool)>[
+      ...hits.map((s) => (s, true)),
+      ...calm.map((s) => (s, false)),
+    ]..sort((a, b) => a.$1.compareTo(b.$1));
     var reported = 0;
-    for (final (gap, threatening) in recorded) {
-      tick(gap);
-      if (threatening) {
-        if (c.confirm(now)) reported++;
+    for (final (s, isHit) in events) {
+      if (isHit) {
+        if (c.confirm(at(s))) reported++;
       } else {
-        c.reset();
+        c.observeCalm(at(s));
       }
     }
+    return reported;
+  }
 
-    expect(reported, 0,
-        reason: 'all three spikes were isolated and must not reach fusion');
+  group('11 October capture — glove idle on a desk', () {
+    // Three isolated spikes over eight seconds, then 30+ seconds of calm.
+    // These drove fusion to `critical` six times with nobody touching it.
+    const spikes = [1.0, 5.0, 9.0];
+    const calm = [0.0, 2.0, 3.0, 6.0, 7.0, 10.0, 12.0, 20.0, 30.0];
+
+    test('is suppressed entirely', () {
+      expect(reportsFor(GloveConfirmation(), spikes, calm: calm), 0);
+    });
+
+    test('stays suppressed even though calm no longer resets the streak', () {
+      // The fix removed reset-on-calm. This pins that the removal did not
+      // quietly let the idle capture through.
+      final c = GloveConfirmation();
+      expect(reportsFor(c, spikes, calm: calm), 0);
+      expect(c.hits, lessThan(c.requiredHits));
+    });
   });
 
-  test('still reports a genuine fall from the same starting state', () {
-    // What a real fall looks like on the same glove: consecutive windows.
-    final c = GloveConfirmation();
-    c.reset();
-    expect(c.confirm(tick()), isFalse, reason: 'first window: look, do not alarm');
-    expect(c.confirm(tick()), isTrue, reason: 'second window confirms it');
+  group('17 October capture — glove deliberately moved', () {
+    // Real timings from the device log, relative to 14:59:56.
+    const readings = [0.0, 2.0, 3.5, 5.5, 7.0, 11.0, 14.0, 16.5, 18.0];
+    // NORMAL readings interleave between every pair -- this is the alternation
+    // that made the consecutive-run version unreachable.
+    const calm = [1.0, 2.7, 4.5, 6.2, 9.0, 12.5, 15.2, 17.2];
+
+    test('is reported, not blocked', () {
+      expect(reportsFor(GloveConfirmation(), readings, calm: calm), greaterThan(0),
+          reason: 'a real event must reach fusion despite interleaved NORMALs');
+    });
+
+    test('interleaved calm does not prevent confirmation', () {
+      final c = GloveConfirmation();
+      c.confirm(at(0.0));
+      c.observeCalm(at(1.0));
+      c.confirm(at(2.0));
+      c.observeCalm(at(2.7));
+      expect(c.confirm(at(3.5)), isTrue,
+          reason: 'three hits inside the window, calm between them');
+    });
+  });
+
+  group('the density rule', () {
+    test('two hits in the window are not enough', () {
+      final c = GloveConfirmation();
+      expect(c.confirm(at(0)), isFalse);
+      expect(c.confirm(at(1)), isFalse);
+    });
+
+    test('three hits inside the window confirm', () {
+      final c = GloveConfirmation();
+      c.confirm(at(0));
+      c.confirm(at(1));
+      expect(c.confirm(at(2)), isTrue);
+    });
+
+    test('three hits spread beyond the window do not', () {
+      final c = GloveConfirmation();
+      expect(c.confirm(at(0)), isFalse);
+      expect(c.confirm(at(4)), isFalse);
+      expect(c.confirm(at(9)), isFalse, reason: 'the first has aged out');
+    });
+
+    test('hits age out of the window', () {
+      final c = GloveConfirmation();
+      c.confirm(at(0));
+      c.confirm(at(1));
+      c.observeCalm(at(10));
+      expect(c.hits, 0);
+    });
+
+    test('a sustained event keeps reporting once confirmed', () {
+      final c = GloveConfirmation();
+      c.confirm(at(0));
+      c.confirm(at(1));
+      expect(c.confirm(at(2)), isTrue);
+      expect(c.confirm(at(3)), isTrue);
+    });
+  });
+
+  group('lifecycle', () {
+    test('reset clears everything for the next journey', () {
+      final c = GloveConfirmation();
+      c.confirm(at(0));
+      c.confirm(at(1));
+      c.reset();
+      expect(c.hits, 0);
+      expect(c.confirm(at(2)), isFalse, reason: 'streak must not survive a reset');
+    });
+
+    test('requiredHits of 1 reports immediately', () {
+      expect(GloveConfirmation(requiredHits: 1).confirm(at(0)), isTrue);
+    });
   });
 }
