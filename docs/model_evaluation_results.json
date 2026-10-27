@@ -1,0 +1,384 @@
+{
+  "schema_version": "1.0",
+  "generated_on": "2026-10-27",
+  "title": "SafeHer model evaluation results",
+  "summary": "Measured accuracy for the four shipped models, plus a false-positive investigation of the weapon detector. Every result carries an `evidence` field; read it before quoting the number.",
+
+  "evidence_grades": {
+    "measured": "Real inference over real data with real ground-truth labels. Reproducible.",
+    "simulated": "Real inference, but over inputs synthesised to stand in for data that was not available. The input distribution is an approximation, so the number describes the model under that approximation and not the field.",
+    "derived": "Not an observed event. Computed by feeding measured values through formulas taken from the deployed source. Sound only insofar as those formulas are what runs.",
+    "documented_not_verified": "Copied from a code comment or training log and NOT re-measured in this evaluation."
+  },
+
+  "scope_and_limits": {
+    "hardware_in_the_loop": "none",
+    "what_was_not_tested": [
+      "No run on the physical devices. No weapon was held in front of the real glasses camera and no speech went through the real phone microphone.",
+      "The APK containing the foreground-service microphone fix (commit ea79fd9) has never been installed, so audio has still never produced a single reading on hardware across any journey.",
+      "No alert was dispatched in any test. No false positive was observed end to end; the auto-SOS risk below is derived, not reproduced.",
+      "Latency, battery, thermal behaviour and frame rate on the real devices are unmeasured.",
+      "The emotion model was not re-measured."
+    ],
+    "honest_characterisation": "This is model-level accuracy testing, not system or integration testing. The accuracy figures are real. The operational consequence drawn from them is a grounded prediction."
+  },
+
+  "environment": {
+    "python": "3.12.5",
+    "onnxruntime": "1.29.0",
+    "ai_edge_litert": "2.3.0",
+    "numpy": "2.3.5",
+    "pillow": "12.3.0",
+    "platform": "win32",
+    "execution_provider": "CPUExecutionProvider"
+  },
+
+  "models": [
+    {
+      "id": "weapon_detector_phone",
+      "role": "Weapon detection on the phone, fed by the glasses MJPEG stream. This is the artifact in the glasses path.",
+      "artifact": "mobile/assets/models/weapon_yolov8n_fp16.tflite",
+      "sha256": "b5625bcf6bc1d86f8780e5acbc989f5759efea0c80d6f1e3fe9761625d87c338",
+      "size_bytes": 6129244,
+      "architecture": "YOLOv8n, 2 classes",
+      "quantisation": "fp16",
+      "runtime": "LiteRT via the ultralytics_yolo plugin",
+      "io": {
+        "input": "[1, 640, 640, 3] float32, NHWC",
+        "output": "[1, 6, 8400] float32",
+        "box_encoding": "cx cy w h normalised to 0..1, verified empirically before use",
+        "preprocessing": "letterbox to 640 with pad value 114, divide by 255"
+      },
+      "classes": ["pistol", "knife"],
+      "test_set": {
+        "evidence": "measured",
+        "path": "D:/SafeHer-ML/weapon_detection/datasets/merged/images/test",
+        "images": 658,
+        "instances": {"pistol": 433, "knife": 350, "total": 783},
+        "note": "Instance counts were reconciled against the label files exactly, which validates the ground-truth parsing.",
+        "match_iou": 0.5
+      },
+      "results_by_confidence": [
+        {"evidence": "measured", "confidence": 0.35, "pistol": {"precision": 0.9422, "recall": 0.8661}, "knife": {"precision": 0.8468, "recall": 0.8371}, "overall": {"precision": 0.8978, "recall": 0.8531, "f1": 0.8749}},
+        {"evidence": "measured", "confidence": 0.45, "pistol": {"precision": 0.9529, "recall": 0.8406}, "knife": {"precision": 0.8750, "recall": 0.8200}, "overall": {"precision": 0.9169, "recall": 0.8314, "f1": 0.8721}},
+        {"evidence": "measured", "confidence": 0.55, "deployed": true, "pistol": {"precision": 0.9673, "recall": 0.8199}, "knife": {"precision": 0.8900, "recall": 0.7857}, "overall": {"precision": 0.9320, "recall": 0.8046, "f1": 0.8636}},
+        {"evidence": "measured", "confidence": 0.65, "pistol": {"precision": 0.9742, "recall": 0.7852}, "knife": {"precision": 0.9039, "recall": 0.7257}, "overall": {"precision": 0.9429, "recall": 0.7586, "f1": 0.8408}}
+      ],
+      "operating_point": {
+        "constant": "WeaponScorer.confidenceFloor",
+        "value": 0.55,
+        "note": "Metrics are reported at the floor the app applies, not at the mAP sweep, because a detection below it never reaches the weapon signal."
+      },
+      "verdict": "Pass on the task it was measured on. fp16 quantisation cost nothing; this artifact is marginally stronger than the int8 one."
+    },
+
+    {
+      "id": "weapon_detector_server",
+      "role": "Weapon detection server-side.",
+      "artifact": "ml_models/weapon_yolov8n_int8.onnx",
+      "sha256": "45811e6a65ab995363f9d97e59cd9f77961b5f914cf5bda9e9133f3fa0e1ff2e",
+      "size_bytes": 3355730,
+      "architecture": "YOLOv8n, 2 classes",
+      "quantisation": "int8",
+      "io": {
+        "input": "images [1, 3, 640, 640] float32, NCHW",
+        "output": "output0 [1, 6, 8400] float32",
+        "box_encoding": "cx cy w h in 640-pixel space"
+      },
+      "classes": ["pistol", "knife"],
+      "results_by_confidence": [
+        {"evidence": "measured", "confidence": 0.25, "pistol": {"precision": 0.9108, "recall": 0.8730}, "knife": {"precision": 0.8132, "recall": 0.8457}, "overall": {"precision": 0.8652, "recall": 0.8608, "f1": 0.8630}},
+        {"evidence": "measured", "confidence": 0.35, "pistol": {"precision": 0.9370, "recall": 0.8591}, "knife": {"precision": 0.8439, "recall": 0.8343}, "overall": {"precision": 0.8937, "recall": 0.8480, "f1": 0.8702}},
+        {"evidence": "measured", "confidence": 0.45, "pistol": {"precision": 0.9474, "recall": 0.8314}, "knife": {"precision": 0.8780, "recall": 0.8229}, "overall": {"precision": 0.9153, "recall": 0.8276, "f1": 0.8692}, "note": "Reproduces the published training figures of 0.9112 / 0.8277, which is how quantisation loss was ruled out."},
+        {"evidence": "measured", "confidence": 0.55, "deployed": true, "counts": {"pistol": {"tp": 352, "fp": 12, "fn": 81}, "knife": {"tp": 273, "fp": 34, "fn": 77}, "overall": {"tp": 625, "fp": 46, "fn": 158}}, "pistol": {"precision": 0.9670, "recall": 0.8129}, "knife": {"precision": 0.8893, "recall": 0.7800}, "overall": {"precision": 0.9314, "recall": 0.7982, "f1": 0.8597}},
+        {"evidence": "measured", "confidence": 0.65, "pistol": {"precision": 0.9738, "recall": 0.7737}, "knife": {"precision": 0.9101, "recall": 0.7229}, "overall": {"precision": 0.9453, "recall": 0.7510, "f1": 0.8370}},
+        {"evidence": "measured", "confidence": 0.75, "pistol": {"precision": 0.9904, "recall": 0.7182}, "knife": {"precision": 0.9810, "recall": 0.5914}, "overall": {"precision": 0.9867, "recall": 0.6616, "f1": 0.7920}}
+      ],
+      "verdict": "Pass on the task it was measured on. int8 quantisation cost nothing measurable."
+    },
+
+    {
+      "id": "audio_phrase_classifier",
+      "role": "Scores an ASR transcript on the phone, in pure Dart. The transcript is classified and discarded.",
+      "artifact": "mobile/assets/models/phrase_classifier.json",
+      "sha256": "18221931a2976a2c60d46078c4e3f0a551eb2aa8e3af196ba841a5c7e2db4200",
+      "size_bytes": 387427,
+      "architecture": "TF-IDF (word n-grams unioned with char_wb n-grams) into logistic regression",
+      "features": 7611,
+      "classes": ["distress", "normal", "threat"],
+      "byte_identical_to_training_export": true,
+      "decision_rule": "elevated = P(threat) + P(distress); elevated >= 0.5. This is the app rule, matching AudioThreatReading.isElevated and CameraActivationPolicy.audioScore. Argmax gives different numbers and is not what ships.",
+      "test_set": {
+        "evidence": "measured",
+        "clips": 714,
+        "split": "held out by phrase, not by clip, so every voice saying a phrase falls on the same side of the split",
+        "source": "D:/SafeHer-ML/audio_threat/runs/transcripts.json and transcripts_degraded.json"
+      },
+      "results": [
+        {
+          "evidence": "measured",
+          "condition": "clean ASR",
+          "accuracy": 0.9202, "recall": 0.9675, "precision": 0.9141, "specificity": 0.8333,
+          "three_class_accuracy": 0.8571,
+          "missed_elevated": "15/462", "false_alarms_on_normal": "42/252"
+        },
+        {
+          "evidence": "measured",
+          "condition": "degraded ASR",
+          "realistic": true,
+          "accuracy": 0.8305, "recall": 0.8831, "precision": 0.8589, "specificity": 0.7341,
+          "three_class_accuracy": 0.7423,
+          "missed_elevated": "54/462", "false_alarms_on_normal": "67/252",
+          "note": "Reproduces the published 0.8305 / 0.8831 exactly, confirming the export is lossless and that these bytes are the model that was measured."
+        }
+      ],
+      "concerns": [
+        "Specificity on degraded ASR is 0.7341, so roughly a quarter of ordinary speech reads as elevated. Audio at 0.50 is what opens the camera, so this is the gate that makes the weapon false-positive path below reachable.",
+        "Gibberish scores above the camera trigger: 'zxqv blorptang mimsy' gives elevated 0.594. The char_wb vectoriser produces signal from unseen character patterns, which is exactly what noisy ASR emits."
+      ],
+      "caveats": [
+        "The corpus is synthetic TTS speech (Azure neural voices), not real distress speech. Recording real distress audio was deliberately descoped. These figures therefore describe the classifier on clean synthesised phrasings and their degraded variants, not on a frightened human voice."
+      ],
+      "verdict": "Pass, and verified against the exact APK bytes. The degraded figure is the one to plan around."
+    },
+
+    {
+      "id": "glove_motion_classifier",
+      "role": "XGBoost on the ESP32, over MPU6050 accelerometer and gyroscope windows. Produces motion_score.",
+      "artifact": "glove/ml/models/glove_5class_v7_merged_pushpulljerk_final/safeher_glove_5class_v7_merged_pushpulljerk_candidate_xgboost.json",
+      "sha256": "5f649215fb15143a4941d4c0b7daa5c93146257f4e381bb15e64285cb6025cfb",
+      "size_bytes": 3278020,
+      "signal_chain": {
+        "sample_rate_hz": 100,
+        "window_samples": 100,
+        "overlap_samples": 50,
+        "reading_interval_seconds": 0.5
+      },
+      "reproduction_check": {
+        "evidence": "measured",
+        "windows": 431,
+        "accuracy": 0.8886,
+        "macro_f1": 0.9001,
+        "published_accuracy": 0.8886,
+        "published_macro_f1": 0.9001,
+        "status": "exact match"
+      },
+      "gate_cascade": {
+        "evidence": "measured",
+        "note": "Each stage is a gate that actually ships. False-positive rate is per NORMAL window; FALL recall is per window.",
+        "stages": [
+          {"stage": "1 raw argmax", "false_positives": 20, "false_positive_rate": 0.135, "as_fall": 13, "fall_recall": 0.758},
+          {"stage": "2 + firmware confidence gate", "false_positives": 11, "false_positive_rate": 0.074, "as_fall": 8, "fall_recall": 0.653},
+          {"stage": "3 + firmware SUDDEN debounce", "false_positives": 8, "false_positive_rate": 0.054, "as_fall": 8, "fall_recall": 0.653},
+          {"stage": "4 + app GloveConfirmation", "false_positives": 3, "false_positive_rate": 0.020, "as_fall": 3, "fall_recall": 0.558}
+        ]
+      },
+      "per_event": {
+        "evidence": "measured",
+        "real_falls_detected": "5/5",
+        "normal_recordings_raising_alarms": "1/7",
+        "caveat": "Small sample. These ratios carry wide confidence intervals and must not be quoted as a field false-positive rate."
+      },
+      "correction_made_during_this_evaluation": {
+        "what": "The evaluation harness modelled the app gate as 2 consecutive hits. The deployed GloveConfirmation is density-based: 3 hits within a rolling 5 s, where a NORMAL in between does not reset the count.",
+        "why_it_changed": "The consecutive rule was replaced after hardware observation: the glove alternates FALL, NORMAL, FALL, so requiring consecutive hits withheld every reading and nothing reached fusion.",
+        "effect": "The published gated false-positive rate of 1.4% described a gate that is no longer deployed. Re-measured with the real gate it is 2.0%, with 5/5 falls still detected.",
+        "caught_by": "tests/test_glove_model_metrics.py drift guard"
+      },
+      "verdict": "Pass. Reproduces exactly, and the gate cascade monotonically reduces false positives as designed."
+    },
+
+    {
+      "id": "emotion_classifier",
+      "role": "Supporting evidence on the incident record only. Barred from the fused score.",
+      "artifact": "ml_models/emotion_mobilenetv3_fp16.onnx",
+      "size_bytes": 3089056,
+      "accuracy": {
+        "evidence": "documented_not_verified",
+        "value": 0.655,
+        "source": "comment in fastapi_app/services/threat_models.py",
+        "warning": "NOT re-measured in this evaluation. Do not quote as a tested figure."
+      },
+      "fusion_input": false,
+      "enforced_by": "tests/test_fusion_architecture.py, which asserts it can never reach the score",
+      "verdict": "Out of scope. Correctly excluded from safety decisions by design, so its accuracy does not gate any alarm."
+    }
+  ],
+
+  "weapon_false_positive_investigation": {
+    "why": "Every one of the 7,539 images in the weapon dataset's train, val and test splits contains a weapon. There are zero background images. The measured precision is therefore precision GIVEN a weapon is present, and nothing in the dataset measures what the detector does on the ordinary frames the glasses spend almost all their time looking at.",
+
+    "negative_set": {
+      "evidence": "measured",
+      "source": "OD-WeaponDetection 'Weapons and similar handled objects' / Sohas_weapon-Classification",
+      "rationale": "Built by the dataset authors as hard negatives: objects held in the hand that are not weapons.",
+      "images_used": 3218,
+      "composition": {"smartphone": 1182, "wallet_purse": 813, "banknote": 777, "card": 446},
+      "excluded": 2,
+      "exclusion_rule": "Any file whose name marks a weapon in the source image (e.g. 1pis1sma) was dropped, so every image scored is weapon-free by construction and any detection is a false positive.",
+      "training_overlap_check": "0 basenames shared with any of the 7,539 train/val/test images",
+      "caveat": "These are tight crops, not full frames. They measure whether a hand-held object is mistaken for a weapon, which is the relevant question when the camera opens on someone holding something. They do NOT measure an empty street, and the rate on real glasses footage is unmeasured."
+    },
+
+    "per_frame_false_positive_rate": {
+      "evidence": "measured",
+      "model": "weapon_yolov8n_int8.onnx",
+      "note": "Fraction of weapon-free images producing at least one detection at the given confidence.",
+      "by_confidence": [
+        {"confidence": 0.35, "smartphone": 0.310, "wallet_purse": 0.394, "banknote": 0.194, "card": 0.231, "all": 0.292},
+        {"confidence": 0.45, "smartphone": 0.240, "wallet_purse": 0.295, "banknote": 0.125, "card": 0.137, "all": 0.212},
+        {"confidence": 0.55, "deployed": true, "smartphone": 0.173, "wallet_purse": 0.207, "banknote": 0.077, "card": 0.083, "all": 0.146},
+        {"confidence": 0.65, "smartphone": 0.120, "wallet_purse": 0.129, "banknote": 0.042, "card": 0.054, "all": 0.094},
+        {"confidence": 0.75, "smartphone": 0.081, "wallet_purse": 0.084, "banknote": 0.015, "card": 0.018, "all": 0.057}
+      ],
+      "at_deployed_floor": {
+        "false_detections_claiming_pistol": 248,
+        "false_detections_claiming_knife": 223,
+        "images_whose_peak_never_reached_0_55": "2748/3218 (85.4%)",
+        "worst_cases": [
+          {"confidence": 0.929, "claimed": "pistol", "actual": "wallet/purse", "file": "monedero_1612_box1.jpg"},
+          {"confidence": 0.924, "claimed": "pistol", "actual": "smartphone", "file": "smartphone_0389_box2.jpg"},
+          {"confidence": 0.917, "claimed": "pistol", "actual": "wallet/purse", "file": "monedero_1027_box1.jpg"},
+          {"confidence": 0.904, "claimed": "knife", "actual": "smartphone", "file": "smartphone_0100_box1.jpg"}
+        ]
+      }
+    },
+
+    "persistence_probe": {
+      "evidence": "simulated",
+      "what_it_tests": "WeaponScorer scores meanConfidence * (hits/window), so one bad frame in five becomes 0.18. That defence assumes false positives are independent between frames. This tests whether they are.",
+      "method": "Each still was expanded into 5 frames by jittering it the way a camera differs frame to frame: translate +/-3%, scale +/-3%, brightness +/-8%, fresh JPEG at quality 70-90. The real WeaponScorer arithmetic was then applied to the 5 results.",
+      "honest_limitation": "The frames are SYNTHESISED, not real video. Real hand motion over a second is larger than the jitter applied, so this measures stability of the error under small perturbation rather than behaviour on real glasses footage. This is the weakest link in the chain below and the first thing real footage should replace.",
+      "sample": {"images": 500, "smartphone": 300, "wallet_purse": 200, "seed": 20261027, "window": 5, "floor": 0.55},
+      "result": {
+        "finding": "bimodal, not independent",
+        "hit_distribution": {"0_of_5": 0.696, "1_of_5": 0.066, "2_of_5": 0.048, "3_of_5": 0.038, "4_of_5": 0.034, "5_of_5": 0.118},
+        "interpretation": "When the model is wrong about an object it is reliably wrong, so five agreeing frames score the full confidence and the window vote passes the error through at full strength.",
+        "weapon_score_distribution": {"ge_0_55": 0.138, "ge_0_70": 0.080, "ge_0_75": 0.042, "ge_0_80": 0.030, "mean": 0.141},
+        "by_object": [
+          {"object": "smartphone", "n": 300, "any_hit": 0.267, "all_five": 0.097, "score_ge_0_55": 0.107, "score_ge_0_70": 0.067, "mean_score": 0.116},
+          {"object": "wallet_purse", "n": 200, "any_hit": 0.360, "all_five": 0.150, "score_ge_0_55": 0.185, "score_ge_0_70": 0.100, "mean_score": 0.178}
+        ],
+        "worst_weapon_score": {"value": 0.908, "frames": "5/5", "claimed": "pistol", "actual": "wallet/purse", "file": "monedero_1612_box1.jpg"}
+      }
+    },
+
+    "auto_sos_exposure": {
+      "evidence": "derived",
+      "not_observed": "No alert was dispatched in any test. This is arithmetic over measured scores using constants read from the deployed source, not a reproduced false alarm.",
+      "constants_used": {
+        "DEFAULT_THREAT_THRESHOLD": 0.75,
+        "EMA_ALPHA": 0.30,
+        "SOLO_SIGNAL_RETENTION": 0.50,
+        "camera_dwell_seconds": 45,
+        "signal_max_age_seconds": 10,
+        "analyze_post_interval_seconds": 1
+      },
+      "chain": [
+        "fuse() renormalises over reporting signals, so a weapon reading with nothing else reporting IS the fused score. The solo floor of 0.50*max is a floor and cannot pull it down.",
+        "The camera opens on audio >= 0.50 or glove >= 0.70, then stays open for a 45 s dwell. The audio signal that opened it goes stale after 10 s and is dropped from the payload, so roughly 35 s of weapon-only reporting is the normal case rather than an edge case.",
+        "Audio specificity on degraded ASR is 0.7341, so about a quarter of ordinary speech is enough to open the camera.",
+        "4.2% of weapon-free hand-held objects sustain a weapon_score >= 0.75 in the simulated probe above.",
+        "auto_sos compares the EMA-smoothed score against 0.75."
+      ],
+      "ema_crossing": {
+        "objects_that_would_eventually_cross": "21/500 (4.2%)",
+        "fastest": {"posts": 5, "seconds": 5, "weapon_score": 0.908, "file": "monedero_1612_box1.jpg"},
+        "median_posts_to_cross": 7,
+        "note": "Seeded from 0.0, the harder case. smooth() takes the first reading of a journey as-is, so a cold start would cross on post one."
+      },
+      "conclusion": "A phone or purse in view during an already-elevated moment could drive an automatic SOS with no weapon present. Grounded prediction, not an observed failure."
+    },
+
+    "root_cause": "The training set, not the threshold. A YOLO model trained without background images has never been shown what 'no weapon' looks like.",
+    "recommended_fix": {
+      "primary": "Retrain with background images (empty label files). The 3,218 hard negatives are already on disk in the same source dataset.",
+      "rejected_alternative": "Raising confidenceFloor to 0.75 cuts the false-positive rate to 5.7% but drops recall to 0.6616. Not worth it.",
+      "open_decision": "Whether a single visual signal should be able to reach auto-SOS unaided. Tightening that would block this path but weakens the lone-weapon case the solo floor was built for."
+    }
+  },
+
+  "documentation_corrections_made": [
+    {
+      "file": "fastapi_app/services/threat_models.py",
+      "was": "weapon mAP@0.5 0.906 on 658 held-out images",
+      "problem": "The training metric is computed on the val split (1458 images), not the test split, and is 0.8949 at the final epoch. 0.906 appears in neither training run.",
+      "now": "States the val-split provenance and adds the measured test-split figures for both artifacts."
+    },
+    {
+      "file": "fastapi_app/services/threat_models.py",
+      "was": "audio 0.905 accuracy at 0.968 recall",
+      "problem": "Clean-ASR figure only, with no indication that the realistic degraded condition is materially worse.",
+      "now": "Both conditions, including specificity 0.734."
+    },
+    {
+      "file": "mobile/lib/features/devices/domain/weapon_scorer.dart",
+      "was": "Precision (0.901) above recall (0.827); recall 0.827 means one weapon in six missed per frame.",
+      "now": "Measured 0.932 / 0.805 at the deployed floor, about one in five, plus a section recording that the window vote does not suppress a correlated false positive."
+    },
+    {
+      "file": "mobile/lib/features/safety/domain/camera_activation_policy.dart",
+      "was": "the scorer votes over 15 frames, roughly three seconds",
+      "problem": "WeaponScorer.window is 5, so about one second.",
+      "now": "Corrected, referencing the constant."
+    },
+    {
+      "file": "mobile/lib/features/safety/data/threat_signal_aggregator.dart",
+      "problem": "The diagnostic printed fused_score, which is the RAW fusion output, while auto-SOS decides on the EMA-smoothed score returned inside auto_sos. A log line could read 'fused 0.91 ... normal', which looks like a banding bug and is really two different scores side by side. This made the hardware logs misleading.",
+      "now": "Prints both, labelled."
+    }
+  ],
+
+  "regression_tests_added": {
+    "tests/test_weapon_model_metrics.py": {
+      "tests": 11,
+      "pins": [
+        "sha256 of both weapon artifacts, so a silent model swap invalidates the file",
+        "classes are exactly pistol and knife (a pair of scissors scoring 0.0 is correct behaviour, and was once misread as a broken pipeline)",
+        "deployed constants: scorer floor 0.55, window 5, auto-SOS threshold 0.75, EMA alpha 0.30, solo retention 0.50",
+        "the scorer arithmetic, showing 1-of-5 scores 0.18 but 5-of-5 scores 0.908",
+        "that a lone weapon reading is the fused score and clears the auto-SOS threshold",
+        "that a sustained false detection crosses the EMA threshold in 5 posts",
+        "false-positive counts on fixed 100-file negative slices: smartphone 16/100, wallet 19/100"
+      ]
+    },
+    "tests/test_glove_model_metrics.py": {
+      "changed": "Drift guard updated from requiredHits 2 to 3, plus a new guard on the 5-second confirmation window."
+    }
+  },
+
+  "test_suite_status": {
+    "python": "568 passed, 7 skipped",
+    "dart": "443 passed across test/core/audio, test/features/safety and test/features/devices",
+    "flutter_analyze": "no issues on all changed files"
+  },
+
+  "dataset_provenance": {
+    "weapon": {
+      "sources": [
+        {"name": "Open Images V7 (Google)", "annotations_licence": "CC BY 4.0", "images_licence": "CC BY 2.0"},
+        {"name": "OD-WeaponDetection (Universidad de Granada, ari-dasci)", "licence_status": "CONFLICT: the repo README states CC BY-SA 4.0 while its LICENSE file states CC BY 4.0. Treated as ShareAlike until the maintainers confirm.", "see": "datasets/od_weapondetection/LICENCE-CONFLICT.md"}
+      ],
+      "split": "70/20/10 by image, seed 20260830",
+      "actual_counts": {"train": 5423, "val": 1458, "test": 658, "total": 7539},
+      "note": "The data.yaml comment records 4598/1313/658, which is stale relative to the directories on disk.",
+      "background_images": 0
+    },
+    "audio": {
+      "corpus": "Synthetic TTS phrases (Azure neural voices), transcribed by ASR, plus degraded variants",
+      "clips": 2436,
+      "note": "Recording real distress speech was deliberately descoped."
+    }
+  },
+
+  "outstanding": [
+    "Install the APK carrying the foreground-service microphone fix and confirm audio produces a reading at all.",
+    "Verify YOLOv8 fires on a real weapon through the real glasses camera.",
+    "Replace the simulated persistence probe with real glasses footage of a hand-held phone.",
+    "Decide on the weapon retrain with background images.",
+    "Decide whether a single visual signal may reach auto-SOS unaided.",
+    "Re-measure the emotion model, or stop quoting 65.5% as if it were tested.",
+    "Redeploy the backend so the timestamp fix is live.",
+    "Credential rotation (user-owned)."
+  ]
+}

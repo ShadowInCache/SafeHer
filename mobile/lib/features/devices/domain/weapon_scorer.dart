@@ -25,11 +25,39 @@
 /// on a phone screen, a poster, or a chef's knife on a worktop would otherwise
 /// inherit that weight and push the fused score most of the way to an alarm.
 ///
-/// The trained detector's own numbers argue for this too: recall 0.827 means
-/// roughly one weapon in six is missed per frame, so a genuine weapon in view
-/// produces an intermittent signal rather than a solid one. A rule demanding an
-/// unbroken run would miss real weapons; a rule accepting one frame would fire
-/// on noise. A vote over a window is the shape that fits both.
+/// The trained detector's own numbers argue for this too: measured recall of
+/// 0.805 at this floor means roughly one weapon in five is missed per frame, so
+/// a genuine weapon in view produces an intermittent signal rather than a solid
+/// one. A rule demanding an unbroken run would miss real weapons; a rule
+/// accepting one frame would fire on noise. A vote over a window is the shape
+/// that fits both.
+///
+/// ## Where this rule does not protect us
+///
+/// The window vote only dilutes an error that happens *once*. It was measured
+/// against errors that repeat, and they are the common kind.
+///
+/// On 3,218 weapon-free hand-held objects — a phone, a purse, a banknote, a
+/// card — 14.6% produced a detection at [confidenceFloor]. Expanding each still
+/// into five frames the way a camera differs frame to frame, the result is
+/// bimodal: 69.6% never fire and **11.8% fire on all five**, with little in
+/// between. A model that mistakes an object does not flicker; it is steadily
+/// wrong, and five agreeing frames score the full confidence.
+///
+/// So 13.8% of weapon-free objects produce a score over 0.55 here, and 4.2%
+/// sustain one at or above 0.75 — which, because `fuse` renormalises over the
+/// signals that reported, *is* the fused score when the camera is the only
+/// thing talking. A purse measured 0.908. That clears the 0.75 auto-SOS
+/// threshold in five one-second posts against a 45-second camera dwell.
+///
+/// Nothing in this class can fix that, and raising [confidenceFloor] only
+/// trades it against recall: at 0.75 the false-positive rate falls to 5.7% but
+/// recall falls to 0.66. The cause is upstream — every one of the 7,539 images
+/// the detector trained on contains a weapon, so it was never shown what "no
+/// weapon" looks like. The fix is background images in the training set, and
+/// the negatives are already on disk.
+///
+/// See `tests/test_weapon_model_metrics.py`, which pins all of the above.
 library;
 
 import 'dart:collection';
@@ -97,11 +125,16 @@ class WeaponScorer {
 
   /// Below this, a detection is not counted at all.
   ///
-  /// Lower than the model's own default operating point on purpose. Precision
-  /// (0.901) runs above recall (0.827), so the detector is already tuned
-  /// conservative; the persistence rule below is a better place to reject noise
-  /// than a high per-frame threshold, because a high threshold discards the
-  /// weak-but-real frames that make a run look persistent.
+  /// Lower than the model's own default operating point on purpose. Measured on
+  /// the 658-image held-out test split at this floor, precision (0.932) runs
+  /// above recall (0.805), so the detector is already tuned conservative; the
+  /// persistence rule below is a better place to reject noise than a high
+  /// per-frame threshold, because a high threshold discards the weak-but-real
+  /// frames that make a run look persistent.
+  ///
+  /// That precision is measured only on images that contain a weapon, which is
+  /// the limit of what the dataset can say. See the class doc above for what
+  /// this floor does on weapon-free frames.
   final double confidenceFloor;
 
   /// How many recent frames vote.

@@ -30,8 +30,9 @@ enum CameraTrigger {
 /// ## What the numbers are for
 ///
 /// [dwell] must comfortably exceed the detector's evidence window — the scorer
-/// votes over 15 frames at about 5 fps, roughly three seconds — or the camera
-/// would close before a score could mean anything. [maxOpen] bounds the damage
+/// votes over `WeaponScorer.window` frames, 5 of them, at about 5 fps, so
+/// roughly a second — or the camera would close before a score could mean
+/// anything. [maxOpen] bounds the damage
 /// of a false trigger that keeps re-extending. [cooldown] stops a chattering
 /// signal from cycling the camera, which would cost more battery than leaving
 /// it open and produce worse evidence than either.
@@ -57,9 +58,9 @@ class CameraActivationPolicy {
   /// whenever something is actually happening; [maxOpen] bounds the total.
   ///
   /// The floor is not arbitrary. It has to comfortably exceed the detector's
-  /// own evidence window — the scorer votes over 15 frames at about 5 fps,
-  /// roughly three seconds — or the camera would close before any score it
-  /// produced could mean anything.
+  /// own evidence window — the scorer votes over `WeaponScorer.window` frames,
+  /// 5 of them, at about 5 fps, so roughly a second — or the camera would close
+  /// before any score it produced could mean anything.
   final Duration dwell;
 
   /// How long after closing before an ordinary trigger may reopen it.

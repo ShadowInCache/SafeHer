@@ -39,6 +39,7 @@ import argparse
 import json
 import sys
 import types
+from collections import deque
 from pathlib import Path
 
 import numpy as np
@@ -57,7 +58,18 @@ META_COLUMNS = {"recording_id", "source_file", "label"}
 # SafeHer_Glove_V5_OnDevice.ino and features/safety/domain/glove_confirmation.dart.
 FALL_CONFIDENCE_THRESHOLD = 0.65
 SUDDEN_MOVEMENT_CONFIRMATION_WINDOWS = 2
-APP_CONFIRMATION_HITS = 2
+
+# `GloveConfirmation` counts hits by density, not in a row: APP_CONFIRMATION_HITS
+# readings within a rolling 5 s, and a NORMAL in between does not reset the
+# count. It was consecutive-2 until the glove was watched on real hardware --
+# it alternates FALL, NORMAL, FALL, so a consecutive rule withheld every
+# reading and nothing reached fusion at all.
+#
+# Windows advance every STEP_SIZE_SAMPLES at 100 Hz (SAMPLE_INTERVAL_US 10000,
+# OVERLAP 50 in SafeHer_Glove_Final.ino), so one reading arrives every 0.5 s and
+# the 5 s window holds 10 of them.
+APP_CONFIRMATION_HITS = 3
+APP_CONFIRMATION_WINDOW_READINGS = 10
 
 WINDOW_SIZE_SAMPLES = 100
 STEP_SIZE_SAMPLES = 50
@@ -113,7 +125,8 @@ def gated_stream(proba: np.ndarray, classes: list[str], order: np.ndarray,
                  confidence: bool, firmware_debounce: bool, app_confirm: bool) -> list[str]:
     """What fusion is told, window by window, for one recording in order."""
     sudden_streak = 0
-    app_streak = 0
+    app_hits: deque[int] = deque()
+    position = 0
     told = []
     for i in order:
         p = proba[i]
@@ -129,12 +142,16 @@ def gated_stream(proba: np.ndarray, classes: list[str], order: np.ndarray,
                 sudden_streak = 0
         reported = cls
         if app_confirm:
-            if cls == "NORMAL":
-                app_streak = 0
-            else:
-                app_streak += 1
-                if app_streak < APP_CONFIRMATION_HITS:
+            # Density over the rolling window, mirroring GloveConfirmation:
+            # a hit is recorded, stale hits are evicted, and the reading is
+            # withheld until the window holds APP_CONFIRMATION_HITS of them.
+            while app_hits and position - app_hits[0] >= APP_CONFIRMATION_WINDOW_READINGS:
+                app_hits.popleft()
+            if cls != "NORMAL":
+                app_hits.append(position)
+                if len(app_hits) < APP_CONFIRMATION_HITS:
                     reported = "NORMAL"  # withheld from fusion
+        position += 1
         told.append(reported)
     return told
 

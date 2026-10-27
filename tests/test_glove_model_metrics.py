@@ -160,7 +160,9 @@ def test_no_real_fall_is_lost_once_the_gates_are_applied(scored):
         (FIRMWARE, r"SUDDEN_MOVEMENT_CONFIDENCE_THRESHOLD[\s=]+([0-9.]+)f?", 0.65,
          "firmware SUDDEN gate"),
         (FIRMWARE, r"SUDDEN_MOVEMENT_CONFIRMATION_WINDOWS[\s=]+(\d+)", 2, "firmware debounce"),
-        (DART_CONFIRMATION, r"requiredHits[\s=]+(\d+)", 2, "app confirmation hits"),
+        (DART_CONFIRMATION, r"requiredHits[\s=]+(\d+)", 3, "app confirmation hits"),
+        (DART_CONFIRMATION, r"window\s*=\s*const Duration\(seconds:\s*(\d+)\)", 5,
+         "app confirmation window seconds"),
     ],
 )
 def test_the_harness_models_the_gates_that_are_actually_deployed(

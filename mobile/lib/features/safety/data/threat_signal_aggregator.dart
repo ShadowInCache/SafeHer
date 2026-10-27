@@ -256,6 +256,15 @@ class ThreatSignalAggregator {
     final score = body['fused_score'];
     final used = (body['modalities_used'] as List?)?.join(',') ?? 'none';
     final level = (body['live_score'] as Map?)?['level'] ?? '?';
+    // `fused_score` and `live_score` are the *raw* fusion output; the alarm is
+    // decided on the EMA-smoothed score, which the server returns inside
+    // `auto_sos`. Printing only the raw number made these lines actively
+    // misleading during hardware runs -- a reading could show 0.91 beside a
+    // level of `normal`, which looks like a bug in the bands and is really
+    // just two different scores side by side. Both are printed now, so a line
+    // says what was measured *and* what the dispatch decision saw.
+    final smoothedValue = (body['auto_sos'] as Map?)?['score'];
+    final smoothed = smoothedValue == null ? '' : ' (smoothed $smoothedValue)';
     // `auto_sos` is always present and always a map -- it reports the decision,
     // including the decision *not* to dispatch. Reading it for null therefore
     // claimed an alarm on every single reading. Only `triggered` means a
@@ -266,7 +275,8 @@ class ThreatSignalAggregator {
     final verdict = dispatched
         ? '  ** AUTO-SOS DISPATCHED **'
         : (sos is Map && sos['reason'] != null ? '  (no sos: ${sos['reason']})' : '');
-    debugPrint('SafeHer: analyze -> $sent => fused $score [$used] $level$verdict');
+    debugPrint('SafeHer: analyze -> $sent => fused $score$smoothed '
+        '[$used] $level$verdict');
   }
 
   static String _describe(Map<String, dynamic> payload) {

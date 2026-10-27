@@ -12,11 +12,27 @@ Where each one runs, and what it measured:
             BLE to the phone, which maps the class onto 0..1 and reports it.
 
     audio   phone microphone ─▶ platform ASR ─▶ TF-IDF + logistic regression
-            On the phone, in pure Dart. 0.905 accuracy at 0.968 recall on the
-            elevated/normal boundary, over held-out phrasings.
+            On the phone, in pure Dart. Measured on the exact JSON in the
+            APK, over phrasings held out by phrase: 0.920 accuracy at 0.968
+            recall on clean ASR transcripts, and 0.831 at 0.883 once the audio
+            is degraded. The degraded figure is the one to plan around -- a
+            street is not a quiet room -- and its specificity is 0.734, so
+            roughly a quarter of ordinary speech reads as elevated.
+            Reproduce: audio_threat/scripts/verify_shipped_json.py.
 
     weapon  glasses camera ─▶ MJPEG over WiFi ─▶ YOLOv8n on the phone
-            mAP@0.5 0.906 on 658 held-out images, LiteRT fp16.
+            Training reported mAP@0.5 0.895, but on the *val* split of 1458
+            images, not the test split. Measured on the 658 held-out test
+            images at the 0.55 floor the app actually applies, the fp16 LiteRT
+            artifact scores precision 0.932 at recall 0.805; the int8 ONNX the
+            server uses scores 0.931 / 0.798, so neither quantisation cost
+            anything meaningful.
+
+            What those numbers do not cover: every image in all three splits
+            contains a weapon, so that precision is precision *given a weapon
+            is present*. On 3,218 weapon-free hand-held objects from the same
+            source dataset, 14.6% produce a detection at 0.55. See
+            `WeaponScorer` for what that means for the score.
 
     emotion  trained (65.5%) and deliberately NOT a fusion input. It is
              supporting evidence only; `test_fusion_architecture.py` enforces
