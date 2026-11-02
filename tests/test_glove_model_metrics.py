@@ -179,3 +179,77 @@ def test_the_harness_models_the_gates_that_are_actually_deployed(
     assert float(m.group(1)) == float(expected), (
         f"{label} is {m.group(1)} in {source.name} but the evaluation harness "
         f"assumes {expected} -- update evaluate_shipped_model.py")
+
+
+# --------------------------------------------------------------------------
+# The weight table is load-bearing in a way that is not obvious from reading it.
+
+DART_PIPELINE = ROOT / "mobile/lib/features/safety/data/threat_pipeline.dart"
+DART_PROTOCOL = ROOT / "mobile/lib/features/devices/domain/glove_protocol.dart"
+
+# threat_fusion.DEFAULT_THREAT_THRESHOLD. Duplicated deliberately: the point of
+# the test is to fail if the relationship between the two files changes.
+AUTO_SOS_THRESHOLD = 0.75
+
+
+def _glove_weights() -> dict[str, float]:
+    """The `ThreatLevel -> weight` table out of `ThreatPipeline.gloveScore`."""
+    text = DART_PIPELINE.read_text(encoding="utf-8", errors="ignore")
+    block = re.search(
+        r"final weight = switch \(classification\.threatLevel\) \{(.+?)\};",
+        text, re.S)
+    assert block, "could not find the weight switch in threat_pipeline.dart"
+    found = dict(re.findall(r"ThreatLevel\.(\w+)\s*=>\s*([0-9.]+)", block.group(1)))
+    assert found, "weight switch matched but no arms parsed"
+    return {k: float(v) for k, v in found.items()}
+
+
+def test_only_a_fall_can_reach_auto_sos_unaided():
+    """Pins the structural protection measured in glove_persistence_probe.py.
+
+    `fuse()` renormalises over reporting signals, so a glove reading arriving
+    alone becomes the fused score outright, and `should_trigger` is a single
+    post at or above the threshold. The only thing stopping a confident
+    SUDDEN_MOVEMENT from raising an unaided alarm is that its weight of 0.7
+    caps the score below 0.75 even at confidence 1.0.
+
+    That is not written down anywhere it would be noticed. Raise the weight to
+    1.0 for a plausible-sounding reason -- "someone shoving you is as urgent as
+    a fall" -- and every confident SUDDEN_MOVEMENT false positive becomes a
+    potential auto-SOS. Measured: 14.3% of normal recordings raise a confirmed
+    glove alert, and the two highest non-FALL scores sit at 0.676 and 0.609,
+    right under the cap.
+    """
+    weights = _glove_weights()
+    assert weights.get("danger") == 1.0, (
+        f"danger weight is {weights.get('danger')}; a FALL must report its own "
+        "confidence")
+    for level in ("elevated", "caution", "safe"):
+        weight = weights.get(level)
+        assert weight is not None, f"no weight for ThreatLevel.{level}"
+        assert weight < AUTO_SOS_THRESHOLD, (
+            f"ThreatLevel.{level} weighs {weight}, so at confidence 1.0 it scores "
+            f"{weight} and can reach the {AUTO_SOS_THRESHOLD} auto-SOS threshold "
+            "with nothing corroborating it. Only FALL is meant to be able to do "
+            "that. If this change is intended, re-run glove_persistence_probe.py "
+            "and update the measured exposure in docs/model_evaluation_results.json")
+
+
+def test_fall_is_the_only_class_mapped_to_danger():
+    """The weight table above is only a protection if FALL alone is `danger`.
+
+    `gloveScore` keys off `threatLevel`, not the label, so promoting another
+    class to `danger` in glove_protocol.dart would hand it weight 1.0 without
+    touching the pipeline at all.
+    """
+    text = DART_PROTOCOL.read_text(encoding="utf-8", errors="ignore")
+    block = re.search(r"ThreatLevel get threatLevel => switch \(label\) \{(.+?)\};",
+                      text, re.S)
+    assert block, "could not find the threatLevel switch in glove_protocol.dart"
+    danger = [
+        line for line in block.group(1).splitlines()
+        if "ThreatLevel.danger" in line
+    ]
+    assert len(danger) == 1, f"expected exactly one danger arm, got {danger}"
+    assert "'FALL'" in danger[0], (
+        f"a class other than FALL is mapped to danger: {danger[0].strip()}")

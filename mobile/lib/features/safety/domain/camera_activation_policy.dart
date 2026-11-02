@@ -29,10 +29,13 @@ enum CameraTrigger {
 ///
 /// ## What the numbers are for
 ///
-/// [dwell] must comfortably exceed the detector's evidence window — the scorer
-/// votes over `WeaponScorer.window` frames, 5 of them, at about 5 fps, so
-/// roughly a second — or the camera would close before a score could mean
-/// anything. [maxOpen] bounds the damage
+/// [dwell] must comfortably exceed the detector's evidence window. The scorer
+/// votes over `WeaponScorer.window` frames, and the window that is actually
+/// deployed is **15** — `ThreatPipeline` builds `WeaponDetectionService`
+/// without a scorer, so its `_defaultScorer()` applies rather than
+/// `WeaponScorer`'s own default of 5. At the on-device rate of 200 ms a frame
+/// that is 15 frames over **about three seconds**. Otherwise the camera would
+/// close before a score could mean anything. [maxOpen] bounds the damage
 /// of a false trigger that keeps re-extending. [cooldown] stops a chattering
 /// signal from cycling the camera, which would cost more battery than leaving
 /// it open and produce worse evidence than either.
@@ -58,9 +61,10 @@ class CameraActivationPolicy {
   /// whenever something is actually happening; [maxOpen] bounds the total.
   ///
   /// The floor is not arbitrary. It has to comfortably exceed the detector's
-  /// own evidence window — the scorer votes over `WeaponScorer.window` frames,
-  /// 5 of them, at about 5 fps, so roughly a second — or the camera would close
-  /// before any score it produced could mean anything.
+  /// own evidence window — the scorer votes over the deployed
+  /// `WeaponScorer.window` of 15 frames, at about 5 fps, so roughly three
+  /// seconds — or the camera would close before any score it produced could
+  /// mean anything.
   final Duration dwell;
 
   /// How long after closing before an ordinary trigger may reopen it.

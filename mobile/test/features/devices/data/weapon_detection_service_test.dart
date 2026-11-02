@@ -36,6 +36,8 @@ class _FakeDetector implements WeaponDetector {
 }
 
 void main() {
+  _deployedWiring();
+
   late _FakeDetector detector;
   late StreamController<Uint8List> frames;
   late DateTime now;
@@ -211,6 +213,78 @@ void main() {
       final service = build();
       await service.dispose();
       expect(detector.disposed, isTrue);
+    });
+  });
+}
+
+/// The scorer the pipeline actually gets, and what its parameters imply.
+///
+/// `ThreatPipeline` builds `WeaponDetectionService` without passing a scorer,
+/// so `_defaultScorer()` applies: **window 15, frameTimeout 5 s** — not the
+/// `WeaponScorer` defaults of 5 and 3 s. Everything downstream of a weapon
+/// score depends on those two numbers, and nothing was pinning them, so a
+/// change here moved the deployed behaviour while every existing test kept
+/// passing.
+void _deployedWiring() {
+  // Read off ThreatPipeline's construction of WeaponDetectionService.
+  const deployedWindow = 15;
+  const deployedTimeout = Duration(seconds: 5);
+  const onDeviceInterval = Duration(milliseconds: 200); // 5 fps
+  const remoteInterval = Duration(seconds: 2); // 0.5 fps
+
+  WeaponScorer deployedScorer() =>
+      WeaponScorer(window: deployedWindow, frameTimeout: deployedTimeout);
+
+  WeaponDetection hit(double c, DateTime at) =>
+      WeaponDetection(label: 'pistol', confidence: c, at: at);
+
+  group('deployed scorer parameters', () {
+    test('persistence divides by the deployed window, not the default', () {
+      final scorer = deployedScorer();
+      final t0 = DateTime(2026, 11, 3, 12);
+      final score = scorer.observe([hit(0.90, t0)], now: t0);
+
+      // 0.90 * 1/15, not 0.90 * 1/5. The difference is the whole question.
+      expect(score.value, closeTo(0.90 / 15, 1e-9));
+      expect(score.value, lessThan(0.90 / 5));
+    });
+
+    test('at 5 fps the window spans the three seconds the rule was designed for',
+        () {
+      expect(onDeviceInterval * deployedWindow, const Duration(seconds: 3));
+    });
+
+    test('a full window of confident frames still scores its confidence', () {
+      final scorer = deployedScorer();
+      var t = DateTime(2026, 11, 3, 12);
+      late var score = const WeaponScore(
+          value: 0, qualifyingFrames: 0, framesConsidered: 0);
+      for (var i = 0; i < deployedWindow; i++) {
+        score = scorer.observe([hit(0.95, t)], now: t);
+        t = t.add(onDeviceInterval);
+      }
+      expect(score.value, closeTo(0.95, 1e-9));
+    });
+
+    test(
+        'on the remote path the cadence and timeout cap the score far below any '
+        'threshold', () {
+      // The web/remote path samples every 2 s while frames expire after 5 s, so
+      // only three can ever be in the window at once: 3/15 persistence. Even a
+      // perfect 1.0 detection on every sample tops out near 0.20, against an
+      // auto-SOS threshold of 0.75. A weapon cannot raise the alarm on this
+      // path — recorded here because it is a property of two numbers chosen
+      // independently, not a decision anyone wrote down.
+      final scorer = deployedScorer();
+      var t = DateTime(2026, 11, 3, 12);
+      late var score = const WeaponScore(
+          value: 0, qualifyingFrames: 0, framesConsidered: 0);
+      for (var i = 0; i < 20; i++) {
+        score = scorer.observe([hit(1.0, t)], now: t);
+        t = t.add(remoteInterval);
+      }
+      expect(score.framesConsidered, lessThanOrEqualTo(3));
+      expect(score.value, lessThanOrEqualTo(0.21));
     });
   });
 }
