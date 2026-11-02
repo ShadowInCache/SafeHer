@@ -43,6 +43,7 @@ from fastapi_app.services.emergency_dispatch import (
 )
 from fastapi_app.services.notifications import send_fcm_notification
 from fastapi_app.services.processor_client import process_threat
+from fastapi_app.time_utils import naive_utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +210,7 @@ async def _auto_dispatch_if_threatened(
         incident.contacts_notified = report.contacts_notified
         incident.contacts_reached = json.dumps(report.reached_contact_ids)
         incident.contacts_failed = json.dumps(report.failed_contact_ids)
-        incident.dispatch_completed_at = datetime.utcnow()
+        incident.dispatch_completed_at = naive_utc_now()
         await session.commit()
         notified = report.contacts_notified
 

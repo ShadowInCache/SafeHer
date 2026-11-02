@@ -4,10 +4,9 @@ from uuid import uuid4
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
 
 from fastapi_app.db import Base
+from fastapi_app.time_utils import naive_utc_now as _utcnow
 
 
-def _utcnow() -> datetime:
-    return datetime.utcnow()
 
 
 class User(Base):

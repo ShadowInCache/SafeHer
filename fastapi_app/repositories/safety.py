@@ -14,6 +14,7 @@ from fastapi_app.models import (
     SafetyPin,
     UserSafetyPreferences,
 )
+from fastapi_app.time_utils import naive_utc_now as _naive_utcnow
 
 # A wrong PIN during an active SOS must not be a free retry loop, but it also
 # must never lock a real user out of cancelling for long — 5 tries, 5 minutes.
@@ -21,9 +22,6 @@ MAX_PIN_ATTEMPTS = 5
 PIN_LOCKOUT = timedelta(minutes=5)
 
 
-def _naive_utcnow() -> datetime:
-    """Model columns are naive UTC (`datetime.utcnow`); keep comparisons consistent."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 # --------------------------------------------------------------------------- PIN

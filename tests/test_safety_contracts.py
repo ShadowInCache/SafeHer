@@ -23,6 +23,7 @@ import httpx
 from fastapi_app.db import init_db
 from fastapi_app.main import app
 from fastapi_app.services import places
+from fastapi_app.time_utils import naive_utc_now
 
 
 class TestSafetyContracts(unittest.IsolatedAsyncioTestCase):
@@ -291,7 +292,7 @@ class TestSafetyContracts(unittest.IsolatedAsyncioTestCase):
 
         async with SessionLocal() as session:
             journey = await session.get(SafeJourney, journey_id)
-            journey.expected_arrival_at = datetime.utcnow() - timedelta(minutes=1)
+            journey.expected_arrival_at = naive_utc_now() - timedelta(minutes=1)
             await session.commit()
 
         escalated = await self.client.post(

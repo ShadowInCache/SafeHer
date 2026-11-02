@@ -16,6 +16,7 @@ from fastapi_app import models
 from fastapi_app.config import get_settings
 from fastapi_app.db import SessionLocal
 from fastapi_app.realtime import manager
+from fastapi_app.time_utils import naive_utc_now
 from fastapi_app.time_utils import utc_now_iso
 
 logger = logging.getLogger(__name__)
@@ -136,7 +137,7 @@ async def _handle_event_message(session: AsyncSession, topic: str, payload: str)
             device.id,
         )
 
-    device.last_seen = datetime.utcnow()
+    device.last_seen = naive_utc_now()
 
     # Persist only actionable event types as incidents.
     incident: Optional[models.Incident] = None

@@ -15,11 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_app.models import EmailVerificationCode, User
 from fastapi_app.security import get_password_hash, verify_password
+from fastapi_app.time_utils import naive_utc_now as _utcnow
 
 # Stored datetimes are naive UTC to match the rest of the schema; comparing a
 # naive column against an aware `now` raises on Postgres.
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 # ---------------------------------------------------------------- login lockout
