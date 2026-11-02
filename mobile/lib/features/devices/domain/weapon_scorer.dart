@@ -70,13 +70,58 @@ class WeaponDetection {
     required this.at,
   });
 
-  /// `pistol` or `knife`, as `assets/models/weapon_labels.txt` orders them.
+  /// `pistol` or `knife` for the shipped detector.
+  ///
+  /// Whatever the detector reports, not a value this app controls. On device
+  /// the name comes from metadata inside the `.tflite`; `weapon_labels.txt` is
+  /// read only by the backend detector and has no effect here. If a model
+  /// without that metadata is bundled, the plugin reports `"class 0"` instead
+  /// and `isWeaponClass` has nothing to match on.
   final String label;
 
   /// 0.0–1.0 from the model.
   final double confidence;
 
   final DateTime at;
+
+  /// Classes a detector may report that are explicitly *not* weapons.
+  ///
+  /// Empty in effect for the shipped 2-class model, which can only ever say
+  /// `pistol` or `knife`. It exists for the 6-class detector, which names the
+  /// objects it used to mistake for weapons — and naming them is the entire
+  /// point of that model. Measured on the 1,385 held-out negatives: it emits
+  /// 10,960 boxes whose best class is one of these four. Counted as weapons,
+  /// they would make the false-positive rate catastrophically worse than the
+  /// 2-class model it replaces; rejected, the frame-level rate is 2.5% on the
+  /// INT8 ONNX and 2.6% on the fp16 TFLite that a phone would actually load.
+  ///
+  /// The filter matches on the class *name*, so it only works if the bundled
+  /// model carries class-name metadata — without it the plugin reports
+  /// `"class 2"`, nothing here matches, and all 10,960 boxes count as weapons.
+  /// That was the live state until 2026-11-02. See
+  /// `tests/test_weapon_model_metadata.py`, which fails if a future export
+  /// drops the metadata again.
+  ///
+  /// The Spanish names are the source dataset's, kept rather than translated so
+  /// they match `data.yaml` and the exported label file exactly.
+  static const nonWeaponLabels = <String>{
+    'smartphone',
+    'monedero', // wallet
+    'billete', // banknote
+    'tarjeta', // card
+  };
+
+  /// Whether this detection is of a class that can raise the alarm.
+  ///
+  /// Deliberately a *reject* list and not an allow list. An allow list of
+  /// {pistol, knife} would mean that a plugin upgrade renaming its classes, or
+  /// a label file read as indices, silently produces "no weapons anywhere" —
+  /// the failure mode where a safety feature keeps running and always reports
+  /// calm. `UltralyticsWeaponDetector.parseDetections` is tolerant for the same
+  /// reason and says so. An unrecognised label therefore still counts; only the
+  /// four classes known to be harmless are dropped.
+  bool get isWeaponClass =>
+      !nonWeaponLabels.contains(label.trim().toLowerCase());
 
   @override
   String toString() => 'WeaponDetection($label, ${confidence.toStringAsFixed(2)})';
@@ -160,8 +205,11 @@ class WeaponScorer {
   WeaponScore observe(List<WeaponDetection> detections, {required DateTime now}) {
     _expire(now);
 
+    // Class first, then confidence. Both detectors build `WeaponDetection`
+    // from their own wire format, so this is the one place every path funnels
+    // through — filtering in either detector would leave the other open.
     final qualifying = detections
-        .where((d) => d.confidence >= confidenceFloor)
+        .where((d) => d.isWeaponClass && d.confidence >= confidenceFloor)
         .toList()
       ..sort((a, b) => b.confidence.compareTo(a.confidence));
 
