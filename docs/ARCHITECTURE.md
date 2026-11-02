@@ -222,12 +222,19 @@ shouting — capped so corroboration alone can never trigger.
   synthetic and degraded TTS; a genuine distress corpus is deferred — no public
   dataset holds it — so its real-world recall is unproven.
 
-**Facial expression** is trained too (MobileNetV3-Small, 65.5% on FER2013,
-`mobile/assets/models/emotion_mobilenetv3_fp16.onnx`) and is **not** in the
-list above, deliberately: it is supporting evidence and cannot reach the score.
-Its `fear` class — the only one with any safety relevance — runs at 47% recall
-and 56% precision, which is close to a coin toss and is the strongest practical
-argument for keeping expression out of the threat decision entirely.
+**Facial expression** is trained too (MobileNetV3-Small,
+`ml_models/emotion_mobilenetv3_fp16.onnx`) and is **not** in the list above,
+deliberately: it is supporting evidence and cannot reach the score. It runs
+**server-side**, on frames the phone has already uploaded, and is not bundled
+into the app.
+Its `fear` class — the only one with any safety relevance — runs at 47% recall,
+which is close to a coin toss and is the strongest practical argument for
+keeping expression out of the threat decision entirely.
+
+Its accuracy figures, 65.5% overall and that 47%, are the **training run's own
+reported numbers and are not verified**. They have not been independently
+re-measured, and the test corpora are no longer on disk, so they must not be
+quoted as tested figures. See `docs/MODEL_TEST_REPORT.md` §4.5.
 
 `threat_models.py` reports which modalities are genuinely live rather than
 letting the UI imply three, and `fuse()` renormalises over whatever reported so
