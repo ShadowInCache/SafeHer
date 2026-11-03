@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "generated_on": "2026-10-27",
   "last_updated": "2026-11-03",
-  "revision_note": "2026-11-02: the 6-class fp16 TFLite export was produced and validated (see remediation_in_progress.weapon_six_class.tflite_export), which answered and removed the not_yet_exported_for_the_app caveat; and the class-name metadata defect was fixed on the shipped 2-class asset (see models[0].class_name_metadata). The shipped asset's whole-file SHA-256 therefore changed. Its graph SHA-256 did not, which is why every accuracy figure in this file still stands unaltered. 2026-11-03: two defects fixed in the auto-SOS path itself -- a missing lock let concurrent readings dispatch to every contact twice (measured: 3 concurrent readings produced 2 dispatches), and smoothing state with no TTL could hold a genuine first spike below the threshold. Also corrected: the claim that a 5-second countdown stands between an automatic trigger and dispatch. It does not. 2026-11-03: recorded the decision that auto-SOS has no cancellation window (see decisions_taken), which accepts the section 5.5 exposure rather than mitigating it. 2026-11-03 (second pass): post-dispatch retraction added, making a false automatic alarm recoverable for the first time -- the alert still leaves the instant the threshold is crossed, and the correction follows to the contacts it reached (see decisions_taken.auto_sos_post_dispatch_retraction). Retracting during the first seconds now stops the alarm fan-out rather than racing it. Building it surfaced the most serious defect in this evaluation: an emergency contact who also used SafeHer raised a NameError in the push branch, which escaped a function documented as never raising and aborted the fan-out in priority order, so that contact and everyone she had ranked below them were never notified (integration_defects.fan_out_aborted_on_a_contact_who_was_also_a_user). No accuracy figure in this file is affected by any of it -- no model, dataset or measurement changed in this pass.",
+  "revision_note": "2026-11-02: the 6-class fp16 TFLite export was produced and validated (see remediation_in_progress.weapon_six_class.tflite_export), which answered and removed the not_yet_exported_for_the_app caveat; and the class-name metadata defect was fixed on the shipped 2-class asset (see models[0].class_name_metadata). The shipped asset's whole-file SHA-256 therefore changed. Its graph SHA-256 did not, which is why every accuracy figure in this file still stands unaltered. 2026-11-03: two defects fixed in the auto-SOS path itself -- a missing lock let concurrent readings dispatch to every contact twice (measured: 3 concurrent readings produced 2 dispatches), and smoothing state with no TTL could hold a genuine first spike below the threshold. Also corrected: the claim that a 5-second countdown stands between an automatic trigger and dispatch. It does not. 2026-11-03: recorded the decision that auto-SOS has no cancellation window (see decisions_taken), which accepts the section 5.5 exposure rather than mitigating it. 2026-11-03 (second pass): post-dispatch retraction added, making a false automatic alarm recoverable for the first time -- the alert still leaves the instant the threshold is crossed, and the correction follows to the contacts it reached (see decisions_taken.auto_sos_post_dispatch_retraction). Retracting during the first seconds now stops the alarm fan-out rather than racing it. Building it surfaced the most serious defect in this evaluation: an emergency contact who also used SafeHer raised a NameError in the push branch, which escaped a function documented as never raising and aborted the fan-out in priority order, so that contact and everyone she had ranked below them were never notified (integration_defects.fan_out_aborted_on_a_contact_who_was_also_a_user). No accuracy figure in this file is affected by any of it -- no model, dataset or measurement changed in this pass. Revision 2026-11-03c: added benchmark_conformance. Every shipped model was re-measured against the target the SRS states for it, in the metric the SRS states it in. Two of those metrics had never been computed from the shipped bytes -- the audio model had no F1 on record at all. Weapon detection meets its mAP@0.5 target on both artifacts; audio meets F1 on clean ASR and misses it on degraded ASR by 0.029; the glove misses its accuracy target by 6.1 points. The audio threshold sweep and the rejected retrain candidate were both measured on the benchmark metric to establish that neither offers a cheap route to it.",
   "title": "SafeHer model evaluation results",
   "summary": "Measured accuracy for the four shipped models, plus a false-positive investigation of the weapon detector. Every result carries an `evidence` field; read it before quoting the number.",
   "evidence_grades": {
@@ -1580,6 +1580,376 @@
       "defect": "POST /alerts/emergency accepts a client-chosen incident_id, which is what makes a retry after a timeout idempotent. Ownership is checked on the replay path, so a stranger's incident is never returned. But when the supplied id exists and belongs to another user, control falls through to inserting a row with a primary key that is already taken, which raises IntegrityError and surfaces as a 500 on an SOS request.",
       "why_it_is_low": "It needs a caller who guesses another user's UUID, and the worst outcome is a failed alert for that caller rather than any exposure of the other user's data.",
       "related_hazard_that_was_fixed": "The same free-form id is interpolated into the retraction's audit-log query. Written first as a raw LIKE pattern, an id containing `_` matched another of her own incidents' rows -- so standing down alert A would have sent a false-alarm message to the contacts of alert B, which may have been live. Changed to startswith(..., autoescape=True) and pinned by test_a_wildcard_in_an_incident_id_does_not_pull_in_another_alert, which was verified to fail with the raw pattern (it swept in two contacts from the other incident). No other SQL LIKE exists in fastapi_app/, so this hazard was confined to the new query."
+    }
+  },
+  "benchmark_conformance": {
+    "measured_on": "2026-11-03",
+    "evidence": "measured",
+    "what_this_is": "Whether each model clears the target the SRS writes against it, in the metric the SRS states it in. Added because two of those metrics had never been computed from the shipped bytes: the SRS fixes the weapon detector at mAP@0.5 > 0.88 and the voice path at F1 > 0.90, and the evaluation had reported the weapon detector at its operating point and the audio classifier without any F1 at all.",
+    "targets": {
+      "weapon_map50": {
+        "value": 0.88,
+        "comparator": ">",
+        "source": "SRS section 6.1"
+      },
+      "audio_f1": {
+        "value": 0.9,
+        "comparator": ">",
+        "source": "SRS section 6.1"
+      },
+      "glove_accuracy": {
+        "value": 0.95,
+        "comparator": ">",
+        "source": "SRS section 6.1"
+      },
+      "system_true_positive_rate": {
+        "value": 0.95,
+        "comparator": ">",
+        "source": "SRS section 1.3"
+      },
+      "system_false_positive_rate": {
+        "value": 0.03,
+        "comparator": "<",
+        "source": "SRS section 1.3"
+      }
+    },
+    "artifact_hashes_verified_before_measuring": true,
+    "weapon": {
+      "method": "ultralytics.YOLO.val on the 658-image locked test split (783 instances), CPU, imgsz=640, batch=1.",
+      "shipped_phone_fp16_tflite": {
+        "map50": 0.9068,
+        "map50_95": 0.6317,
+        "precision": 0.9033,
+        "recall": 0.8306,
+        "per_class_map50": {
+          "pistol": 0.9316,
+          "knife": 0.882
+        },
+        "recorded_map50": 0.9056,
+        "drift_from_recorded": 0.0012,
+        "srs_target_map50": 0.88,
+        "meets_srs_target": true
+      },
+      "shipped_server_int8_onnx": {
+        "map50": 0.9023,
+        "map50_95": 0.6269,
+        "precision": 0.9009,
+        "recall": 0.8268,
+        "per_class_map50": {
+          "pistol": 0.9264,
+          "knife": 0.8781
+        },
+        "recorded_map50": 0.9013,
+        "drift_from_recorded": 0.001,
+        "srs_target_map50": 0.88,
+        "meets_srs_target": true
+      },
+      "sixclass_candidate_not_shipped": {
+        "map50_all_six_classes": 0.8938,
+        "map50_weapon_classes_only": 0.8938,
+        "map50_95_all_six_classes": 0.626,
+        "precision_all": 0.8937,
+        "recall_all": 0.8159,
+        "per_class_map50": {
+          "pistol": 0.9313,
+          "knife": 0.8563
+        },
+        "srs_target_map50": 0.88,
+        "meets_srs_target_on_weapon_classes": true,
+        "shipped_phone_map50_for_comparison": 0.9068,
+        "delta_against_shipped_phone": -0.013
+      },
+      "sixclass_note": "Headline mAP equals weapon-only mAP because the test split holds no instances of the four distractor classes, so ap50 has length 2 and the figure is directly comparable to the shipped artifacts. It sits 0.0130 below the shipped phone model, the cost falling almost entirely on knife (0.8820 -> 0.8563).",
+      "operating_point_at_deployed_floor": {
+        "phone_fp16_tflite": {
+          "confidence_floor": 0.55,
+          "precision": 0.9234,
+          "recall": 0.8077,
+          "per_class_precision": {
+            "pistol": 0.965,
+            "knife": 0.8818
+          },
+          "per_class_recall": {
+            "pistol": 0.8268,
+            "knife": 0.7886
+          },
+          "f1": 0.8617
+        },
+        "server_int8_onnx": {
+          "confidence_floor": 0.55,
+          "precision": 0.9229,
+          "recall": 0.7999,
+          "per_class_precision": {
+            "pistol": 0.9595,
+            "knife": 0.8864
+          },
+          "per_class_recall": {
+            "pistol": 0.8199,
+            "knife": 0.78
+          },
+          "f1": 0.857
+        }
+      },
+      "the_distinction_that_matters": "mAP@0.5 integrates precision over the whole recall curve, including detections below WeaponScorer.confidenceFloor that the app discards before they reach the weapon signal. The app does not operate at 0.9068; at its floor of 0.55 it runs at precision 0.9234 / recall 0.8077. The benchmark is met and the sentence 'the weapon detector achieves 0.9068' must never sit next to a claim about what the app does.",
+      "reproduction": "Both artifacts reproduce their recorded mAP to within 0.0012. The operating-point figures reproduce the published 0.932/0.805 and 0.931/0.798 to within 0.009 using ultralytics' matcher rather than the project's own decoder, which is a stronger reproduction than re-running the same code.",
+      "verdict": "MET by both shipped artifacts and by the six-class candidate."
+    },
+    "audio": {
+      "method": "classify() imported from verify_shipped_json.py -- the harness that already proved the shipped JSON reproduces its training figures -- over 714 held-out clips split by phrase. Nothing re-implemented.",
+      "shipped": {
+        "clean_asr": {
+          "clips": 714,
+          "threshold": 0.5,
+          "counts": {
+            "tp": 447,
+            "fp": 42,
+            "tn": 210,
+            "fn": 15
+          },
+          "accuracy": 0.9202,
+          "elevated_precision": 0.9141,
+          "elevated_recall": 0.9675,
+          "elevated_f1": 0.9401,
+          "normal_precision": 0.9333,
+          "normal_recall": 0.8333,
+          "normal_f1": 0.8805,
+          "macro_f1_binary": 0.9103,
+          "specificity": 0.8333,
+          "three_class_accuracy": 0.8571,
+          "missed_elevated": "15/462",
+          "false_alarms_on_normal": "42/252",
+          "srs_target_f1": 0.9,
+          "meets_srs_target_on_elevated_f1": true,
+          "confusion": {
+            "distress->distress": 180,
+            "distress->normal": 1,
+            "distress->threat": 15,
+            "normal->distress": 14,
+            "normal->normal": 224,
+            "normal->threat": 14,
+            "threat->distress": 30,
+            "threat->normal": 28,
+            "threat->threat": 208
+          }
+        },
+        "degraded_asr": {
+          "clips": 714,
+          "threshold": 0.5,
+          "counts": {
+            "tp": 408,
+            "fp": 67,
+            "tn": 185,
+            "fn": 54
+          },
+          "accuracy": 0.8305,
+          "elevated_precision": 0.8589,
+          "elevated_recall": 0.8831,
+          "elevated_f1": 0.8709,
+          "normal_precision": 0.7741,
+          "normal_recall": 0.7341,
+          "normal_f1": 0.7536,
+          "macro_f1_binary": 0.8122,
+          "specificity": 0.7341,
+          "three_class_accuracy": 0.7423,
+          "missed_elevated": "54/462",
+          "false_alarms_on_normal": "67/252",
+          "srs_target_f1": 0.9,
+          "meets_srs_target_on_elevated_f1": false,
+          "confusion": {
+            "distress->distress": 137,
+            "distress->normal": 35,
+            "distress->threat": 24,
+            "normal->distress": 14,
+            "normal->normal": 201,
+            "normal->threat": 37,
+            "threat->distress": 33,
+            "threat->normal": 41,
+            "threat->threat": 192
+          }
+        }
+      },
+      "degraded_threshold_sweep": [
+        {
+          "threshold": 0.3,
+          "accuracy": 0.7549,
+          "elevated_precision": 0.7478,
+          "elevated_recall": 0.9372,
+          "elevated_f1": 0.8319,
+          "specificity": 0.4206
+        },
+        {
+          "threshold": 0.35,
+          "accuracy": 0.7689,
+          "elevated_precision": 0.7685,
+          "elevated_recall": 0.9199,
+          "elevated_f1": 0.8374,
+          "specificity": 0.4921
+        },
+        {
+          "threshold": 0.4,
+          "accuracy": 0.7885,
+          "elevated_precision": 0.8008,
+          "elevated_recall": 0.8961,
+          "elevated_f1": 0.8458,
+          "specificity": 0.5913
+        },
+        {
+          "threshold": 0.45,
+          "accuracy": 0.8095,
+          "elevated_precision": 0.8286,
+          "elevated_recall": 0.8896,
+          "elevated_f1": 0.858,
+          "specificity": 0.6627
+        },
+        {
+          "threshold": 0.5,
+          "accuracy": 0.8305,
+          "elevated_precision": 0.8589,
+          "elevated_recall": 0.8831,
+          "elevated_f1": 0.8709,
+          "specificity": 0.7341
+        },
+        {
+          "threshold": 0.55,
+          "accuracy": 0.8207,
+          "elevated_precision": 0.8678,
+          "elevated_recall": 0.8528,
+          "elevated_f1": 0.8603,
+          "specificity": 0.7619
+        },
+        {
+          "threshold": 0.6,
+          "accuracy": 0.8193,
+          "elevated_precision": 0.8758,
+          "elevated_recall": 0.8398,
+          "elevated_f1": 0.8575,
+          "specificity": 0.7817
+        },
+        {
+          "threshold": 0.65,
+          "accuracy": 0.8011,
+          "elevated_precision": 0.904,
+          "elevated_recall": 0.7749,
+          "elevated_f1": 0.8345,
+          "specificity": 0.8492
+        },
+        {
+          "threshold": 0.7,
+          "accuracy": 0.7899,
+          "elevated_precision": 0.9084,
+          "elevated_recall": 0.7511,
+          "elevated_f1": 0.8223,
+          "specificity": 0.8611
+        },
+        {
+          "threshold": 0.75,
+          "accuracy": 0.7745,
+          "elevated_precision": 0.9123,
+          "elevated_recall": 0.7208,
+          "elevated_f1": 0.8053,
+          "specificity": 0.873
+        },
+        {
+          "threshold": 0.8,
+          "accuracy": 0.7871,
+          "elevated_precision": 0.9506,
+          "elevated_recall": 0.7078,
+          "elevated_f1": 0.8114,
+          "specificity": 0.9325
+        }
+      ],
+      "best_degraded_f1_over_threshold": {
+        "threshold": 0.5,
+        "accuracy": 0.8305,
+        "elevated_precision": 0.8589,
+        "elevated_recall": 0.8831,
+        "elevated_f1": 0.8709,
+        "specificity": 0.7341
+      },
+      "verdict": "MET on clean ASR (F1 0.9401). NOT MET on degraded ASR (F1 0.8709), which is the realistic condition, so the honest headline is that the voice path misses its benchmark by 0.029 F1.",
+      "no_threshold_fix_exists": "The deployed threshold of 0.50 is already the F1-optimal point in a sweep from 0.30 to 0.80 (best F1 0.8709, at 0.50). The benchmark cannot be reached by tuning the constant; it requires a better model.",
+      "rejected_candidate_measured_on_the_benchmark_metric": {
+        "why": "The corpus-rebalance candidate was rejected by the project's pre-committed ship gate because recall fell. Its F1 had never been computed, so whether the gate had cost anything on the benchmark metric was unknown.",
+        "conditions": {
+          "clean_asr": {
+            "clips": 714,
+            "threshold": 0.5,
+            "counts": {
+              "tp": 446,
+              "fp": 28,
+              "tn": 224,
+              "fn": 16
+            },
+            "accuracy": 0.9384,
+            "elevated_precision": 0.9409,
+            "elevated_recall": 0.9654,
+            "elevated_f1": 0.953,
+            "specificity": 0.8889,
+            "three_class_accuracy": 0.8361,
+            "missed_elevated": "16/462",
+            "false_alarms_on_normal": "28/252",
+            "meets_srs_target_on_elevated_f1": true
+          },
+          "degraded_asr": {
+            "clips": 714,
+            "threshold": 0.5,
+            "counts": {
+              "tp": 391,
+              "fp": 47,
+              "tn": 205,
+              "fn": 71
+            },
+            "accuracy": 0.8347,
+            "elevated_precision": 0.8927,
+            "elevated_recall": 0.8463,
+            "elevated_f1": 0.8689,
+            "specificity": 0.8135,
+            "three_class_accuracy": 0.7353,
+            "missed_elevated": "71/462",
+            "false_alarms_on_normal": "47/252",
+            "meets_srs_target_on_elevated_f1": false
+          }
+        },
+        "best_degraded_f1_over_threshold": {
+          "threshold": 0.45,
+          "accuracy": 0.8389,
+          "elevated_precision": 0.8881,
+          "elevated_recall": 0.8593,
+          "elevated_f1": 0.8735,
+          "specificity": 0.8016
+        },
+        "finding": "Degraded F1 0.8689 at the deployed threshold and 0.8735 at its own best threshold of 0.45 -- a tie with the shipped 0.8709 within noise, and still 0.027 short of the target. The ship gate's rejection cost nothing on the benchmark metric; the gate and the benchmark agree.",
+        "but_it_does_buy_something": "Specificity on degraded ASR 0.7341 -> 0.8135 and clean F1 0.9401 -> 0.9530, which is relevant to the weapon false-positive chain even though it does not move the benchmark."
+      }
+    },
+    "glove": {
+      "method": "glove/ml/scripts/evaluate_shipped_model.py, locked test split.",
+      "accuracy": 0.8886,
+      "macro_f1": 0.9001,
+      "reproduction": "exact match to the published figures",
+      "target": 0.95,
+      "met": false,
+      "verdict": "NOT MET, by 6.1 points. Far outside the range a threshold or a gate could close. The cross-validated per-event figure of 94.3 percent fall detection answers a different question and must not be quoted against a per-window accuracy target."
+    },
+    "system_level_goals_srs_1_3": {
+      "true_positive_rate_target": 0.95,
+      "false_positive_rate_target": 0.03,
+      "evidenced": false,
+      "why": "No individual model reaches 95 percent recall -- the best are audio at 0.9675 on clean ASR only and the glove's cross-validated 94.3 percent fall detection. The fused system's TPR has never been measured end to end, because that needs hardware in the loop. The 3 percent false-positive goal sits against the finding that 20.6 percent of real weapon-free frames fire at the deployed floor on the shipped model."
+    },
+    "summary": {
+      "met": [
+        "weapon phone fp16 TFLite, mAP@0.5 0.9068 > 0.88",
+        "weapon server int8 ONNX, mAP@0.5 0.9023 > 0.88",
+        "weapon six-class candidate (not shipped), mAP@0.5 0.8938 > 0.88",
+        "audio clean ASR, F1 0.9401 > 0.90"
+      ],
+      "not_met": [
+        "audio degraded ASR, F1 0.8709 against > 0.90 -- the realistic condition",
+        "glove accuracy 0.8886 against > 0.95",
+        "system TPR > 95 percent and FP < 3 percent -- not evidenced at all"
+      ],
+      "nothing_was_reframed": "The only metric change is reporting the weapon detector in mAP@0.5 rather than at its operating point, and that is the metric the SRS itself names. Both are recorded and the difference between them is stated explicitly."
     }
   }
 }

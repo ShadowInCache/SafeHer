@@ -98,6 +98,11 @@ invalidates the file rather than quietly invalidating the numbers.
 weapon detector fires on **20.3% of real weapon-free frames** at its deployed
 floor, which no accuracy metric above reveals (§5).
 
+**Whether these clear the targets the SRS commits to is a separate question**,
+answered in §13. Three of the stated per-model benchmarks are met and two are
+not, and the verdicts in the table above — which say whether a model works, not
+whether it hits a number — do not settle it either way.
+
 ---
 
 ## 4. Per-artifact results
@@ -1215,7 +1220,7 @@ actual 7, enumerated with `-rs`:
 All seven are the same underlying condition: no backend was running on this
 machine. These are the **only tests in the suite that exercise the assembled
 system** rather than a model or a unit, so the thing this report is weakest on
-(§13) is also the thing whose tests are inactive. They are not hidden failures —
+(§14) is also the thing whose tests are inactive. They are not hidden failures —
 they are not evidence of anything either, and a green suite summary conceals
 that.
 
@@ -1532,7 +1537,181 @@ see §6.2. The §7.2 metadata defect, also previously open, is fixed.*
 
 ---
 
-## 13. Conclusion
+## 13. Benchmark conformance against the SRS targets
+
+Re-measured 2026-11-03. Every earlier section reports what the models *do*;
+this one asks the narrower question the SRS actually commits to — whether each
+model clears the target written against it in **SRS §1.3** (measurable goals)
+and **SRS §6.1** (AI platform specification).
+
+This section exists because the targets are stated in metrics the evaluation
+had not always computed. The SRS fixes the weapon detector at **mAP@0.5 > 0.88**
+and the voice path at **F1 > 0.90**; §4 reported the weapon detector in
+precision and recall at its deployed confidence floor, and the audio classifier
+in accuracy, recall, precision and specificity — but never an F1. The benchmark
+metric for the audio model had therefore never been computed from the shipped
+bytes at all.
+
+### 13.1 Method
+
+Every figure below comes from the bytes that ship. Hashes were verified against
+§4 before measuring, and all three matched exactly:
+
+| Artifact | SHA-256 (verified) |
+|---|---|
+| `mobile/assets/models/weapon_yolov8n_fp16.tflite` | `afcfbe8c…a347b` (graph `b5625bcf…7c338`) |
+| `ml_models/weapon_yolov8n_int8.onnx` | `45811e6a…1ff2e` |
+| `mobile/assets/models/phrase_classifier.json` | `18221931…b4200` |
+
+The weapon models were measured with `ultralytics.YOLO.val` on the 658-image
+locked test split (783 instances), CPU, `imgsz=640`, `batch=1`. The audio model
+was measured by importing `classify` from `verify_shipped_json.py` — the harness
+that already proved the shipped JSON reproduces its training figures — so the
+numbers describe the model rather than a fresh transcription of it. The glove
+model was measured with `evaluate_shipped_model.py`.
+
+**No figure here was obtained by re-framing an existing measurement.** The one
+metric change that might look like re-framing — reporting the weapon detector in
+mAP@0.5 rather than at its operating point — is reporting it in the metric the
+SRS names, and §13.3 states plainly why the two differ and which one describes
+what a user experiences.
+
+### 13.2 Result
+
+| Model | SRS target | Measured | Met |
+|---|---|---|---|
+| Weapon YOLOv8n, phone fp16 TFLite | mAP@0.5 > 0.88 | **0.9068** | **Yes** |
+| Weapon YOLOv8n, server int8 ONNX | mAP@0.5 > 0.88 | **0.9023** | **Yes** |
+| Weapon YOLOv8n, 6-class candidate (not shipped) | mAP@0.5 > 0.88 | **0.8938** | **Yes** |
+| Audio ASR→TF-IDF→LR, clean ASR | F1 > 0.90 | **0.9401** | **Yes** |
+| Audio ASR→TF-IDF→LR, degraded ASR | F1 > 0.90 | **0.8709** | **No** |
+| Glove XGBoost, 5-class | accuracy > 0.95 | **0.8886** | **No** |
+
+Both weapon artifacts reproduce their recorded mAP to within 0.0012, and the
+glove model reproduces its published accuracy and macro-F1 exactly
+(0.8886 / 0.9001). Nothing has drifted.
+
+Full per-class figures:
+
+| Artifact | mAP@0.5 | mAP@0.5:0.95 | pistol | knife | recorded | drift |
+|---|---|---|---|---|---|---|
+| phone fp16 TFLite | 0.9068 | 0.6317 | 0.9316 | 0.8820 | 0.9056 | +0.0012 |
+| server int8 ONNX | 0.9023 | 0.6269 | 0.9264 | 0.8781 | 0.9013 | +0.0010 |
+| 6-class candidate | 0.8938 | 0.6260 | 0.9313 | 0.8563 | — | — |
+
+The six-class candidate's headline mAP and its weapon-only mAP are the same
+number because the test split contains no instances of the four distractor
+classes, so `ap50` has length 2. Its benchmark figure is therefore directly
+comparable to the two shipped artifacts, and it sits **0.0130 below** the
+shipped phone model — the cost falling almost entirely on knife
+(0.8820 → 0.8563). It still clears 0.88.
+
+### 13.3 The weapon benchmark is met in mAP, and mAP is not the operating point
+
+mAP@0.5 integrates precision over the entire recall curve, including detections
+far below `WeaponScorer.confidenceFloor` that the app discards before they ever
+reach the weapon signal. The app does not operate at 0.9068. Measured at the
+floor it actually applies:
+
+| Artifact | conf | precision | recall | F1 |
+|---|---|---|---|---|
+| phone fp16 TFLite | 0.55 | 0.9234 | 0.8077 | 0.8617 |
+| server int8 ONNX | 0.55 | 0.9229 | 0.7999 | 0.8570 |
+
+These independently reproduce §4's operating-point figures (0.932 / 0.805 and
+0.931 / 0.798) to within 0.009, from a different decoder — ultralytics' matcher
+rather than the project's own — which is a stronger reproduction than re-running
+the same code would have been.
+
+**So: the benchmark is met, and the sentence "the weapon detector achieves
+0.9068" must never be written next to a claim about what the app does.** At the
+deployed floor roughly one weapon instance in five is still missed. Both
+statements are true and the report keeps both.
+
+### 13.4 The audio benchmark is met on clean ASR and missed on degraded
+
+| Condition | acc | precision | recall | **F1** | specificity | 3-class acc |
+|---|---|---|---|---|---|---|
+| clean ASR | 0.9202 | 0.9141 | 0.9675 | **0.9401** | 0.8333 | 0.8571 |
+| degraded ASR | 0.8305 | 0.8589 | 0.8831 | **0.8709** | 0.7341 | 0.7423 |
+
+714 held-out clips, split by phrase. The degraded condition is the realistic
+one — §4 already records that — so **the honest headline is that the voice path
+misses its benchmark by 0.029 F1.**
+
+**The cheap fix does not exist.** The decision threshold is a constant in three
+places, so moving it would have been the zero-cost route. A sweep from 0.30 to
+0.80 shows the deployed 0.50 is *already* the F1-optimal point:
+
+| threshold | 0.40 | 0.45 | **0.50** | 0.55 | 0.60 | 0.65 |
+|---|---|---|---|---|---|---|
+| F1 | 0.8458 | 0.8580 | **0.8709** | 0.8603 | 0.8575 | 0.8345 |
+
+No threshold in the sweep reaches 0.90. The benchmark cannot be reached by
+tuning a constant; it requires a better model.
+
+**The rejected retrain candidate does not reach it either.** §6 records that
+the corpus-rebalance candidate was rejected by the project's pre-committed ship
+gate because recall fell (0.8831 → 0.846). Its F1 had never been computed. It
+is **0.8689** at the deployed threshold and **0.8735** at its own best threshold
+of 0.45 — a tie with the shipped model within noise, and still 0.027 short.
+
+That is worth stating precisely because it closes a question rather than opening
+one: **the ship gate's rejection cost nothing on the benchmark metric.** The
+gate and the benchmark agree. The candidate does, however, buy a real
+improvement elsewhere — specificity 0.7341 → 0.8135 on degraded ASR, and clean
+F1 0.9401 → 0.9530 — which is relevant to §5's false-positive chain even though
+it does not move the benchmark.
+
+### 13.5 The glove benchmark is missed, and the gap is large
+
+Measured accuracy **0.8886** against a target of **> 0.95**, an exact
+reproduction of the published figure. This is a 6.1-point gap, far outside the
+range a threshold or a gate could close, and §4's cross-validated per-event
+figures (94.3% fall detection, CI 81.4–98.4) do not change it: that is a
+different measurement answering a different question, and quoting it against a
+per-window accuracy target would be exactly the re-framing this project has
+committed not to do.
+
+### 13.6 The system-level goals in SRS §1.3 are not evidenced
+
+SRS §1.3 states **true positive rate > 95%** and **false positive rate < 3%**
+for the assembled system. Neither is evidenced by this report:
+
+- No individual model reaches 95% recall. The best are audio at 0.9675 (clean
+  ASR only) and the glove's cross-validated 94.3% fall detection.
+- The fused system's TPR has **never been measured end-to-end**, because that
+  requires hardware in the loop, which §1 records as absent.
+- The 3% false-positive goal sits against §5's finding that 20.6% of real
+  weapon-free frames fire at the deployed floor on the shipped model.
+
+These remain the report's weakest claims and §14 says so.
+
+### 13.7 What would actually close the two open gaps
+
+Both are model problems, not measurement problems.
+
+**Audio (0.8709 → > 0.90).** The gap is specificity, not recall: 67 of 252
+ordinary clips read as elevated. §4 records that the specificity figure rests on
+only **18 distinct held-out normal phrases**, so the first step is not a
+retrain but a wider negative corpus — the current estimate is too thinly based
+to steer a retrain reliably. The rebalance candidate already shows specificity
+is movable (0.7341 → 0.8135) at a cost in recall; a model that moves both needs
+more normal speech, which is the cheapest unblocked work on this list.
+
+**Glove (0.8886 → > 0.95).** A 6.1-point gap on a 5-class problem where §4
+already identifies the failure as concentrated in false FALL. More labelled
+FALL and NORMAL recordings is the route; §12 already carries this.
+
+**Weapon.** Already met. The open decision is whether to ship the six-class
+candidate, which trades 0.0130 mAP for an 8× reduction in the false-positive
+rate that §5 names as the principal finding. On the benchmark alone the shipped
+model is better; on the finding that matters the candidate is better, and both
+clear 0.88.
+
+---
+
+## 14. Conclusion
 
 The four shipped models that gate an alarm all pass on the tasks they were
 measured on, and quantisation cost nothing measurable in any of them.
