@@ -711,7 +711,7 @@ test split.
 
 ## 7. Integration defects found
 
-Nine findings sit in the code around the models rather than in them —
+Eleven findings sit in the code around the models rather than in them —
 in the path from a model's output to the alarm, in the evidence handling beside
 it, and in the tests meant to watch both. **None is visible in any accuracy
 metric**, which is the point of this section: the models were not the risk.
@@ -720,10 +720,11 @@ They are not of equal weight. §7.1–§7.3 could each have affected a real
 incident; §7.4 concealed whether anything worked; §7.5 is hygiene, recorded
 because it is the same mistake in miniature — a handler that catches an
 exception class the code cannot raise. §7.7 and §7.8 are both in the auto-SOS
-path itself and are the most serious here: one called every contact twice, the
-other could have suppressed a genuine first alarm. §7.6 and §7.9 are not
-defects but undecided consequences of numbers chosen independently, and they are
-the two left open.
+path itself: one called every contact twice, the other could have suppressed a
+genuine first alarm. §7.10 is the most serious finding in this report — an
+emergency contact who also used SafeHer aborted the entire fan-out, silently,
+in priority order. §7.6 and §7.9 are not defects but undecided consequences of
+numbers chosen independently; with §7.11 they are the three left open.
 
 ### 7.1 The scorer counted every class as a weapon
 
@@ -1004,6 +1005,88 @@ states and two independent locks, weakening the smoothing *and* reopening §7.7.
 Documented at both definitions. Moving beyond one worker means moving this state
 to Redis or Postgres first.
 
+### 7.10 An emergency contact who also uses SafeHer broke the whole fan-out
+
+Found on 2026-11-03 while building the retraction fan-out, which copies the
+alarm's push block.
+
+`emergency_dispatch.py` called `fcm_credentials(settings)` in the push branch of
+`_notify_contact` **without importing the name**. It is defined in
+`fastapi_app/deps.py` and was never imported into this module, so the call is a
+`NameError`.
+
+```python
+tokens = await _tokens_for_contact(session, contact)
+if tokens and fcm_credentials(settings).is_configured:   # NameError
+```
+
+**Why it survived.** The line is guarded by `tokens`, which is non-empty only
+when a contact's phone or email matches a `User` row that has a registered FCM
+token — that is, when one of her emergency contacts *is herself a SafeHer
+user*. No test in the suite had ever set that up, so the branch was never
+executed and the missing import never surfaced.
+
+**What it would have done.** `_notify_contact` is not wrapped, so the exception
+escapes `dispatch_to_contacts` — whose docstring promises it "never raises" —
+up to `run_dispatch_in_background`, which catches it and marks the incident
+`dispatch_failed`. Contacts are notified in the user's own priority order, so
+the fan-out aborts at the first contact who happens to use the app **and every
+contact ranked below them is never notified at all.** On the inline path (no
+background queue) it surfaces as a 500 from the SOS request.
+
+The likeliest person to install SafeHer on a user's recommendation is a sister,
+a mother, a partner — the same people she is most likely to rank first. The
+defect therefore selects for exactly the contact lists where it does the most
+damage.
+
+**Confirmed, not inferred.** `eval("fcm_credentials", vars(module))` raises
+`NameError`, and
+`test_a_contact_who_is_also_a_safeher_user_does_not_abort_the_fanout`
+reproduces the abort end to end: with the import removed it fails with
+`NameError` at `emergency_dispatch.py:399`; with it restored, both contacts are
+notified.
+
+**Fixed** by importing the name at module scope, with a comment recording what
+the absence cost. The same push block in `retract_to_contacts` is covered by
+the same import.
+
+This is a tenth instance of the shape §7.6 names: **a control that reads as
+protection and governs nothing.** Here the push channel read as a third
+delivery route and was in fact a trapdoor under the other two.
+
+### 7.11 A client-chosen incident id that already belongs to someone else — NOT FIXED
+
+Noticed on 2026-11-03 while hardening the retraction query, and **left alone
+deliberately**: fixing it changes the behaviour of the SOS endpoint itself,
+which is outside what was asked for here.
+
+`POST /alerts/emergency` lets the client choose `incident_id`, which is what
+makes a retry after a timeout idempotent rather than filing a second
+emergency. Ownership *is* checked on the replay path:
+
+```python
+existing = await session.get(Incident, requested_id)
+if existing is not None and existing.user_id == current_user.id:
+    return await _incident_response(session, existing)
+```
+
+There is no data leak — a stranger's incident is not returned. But when the id
+exists and belongs to *someone else*, control falls through to
+`incident_id = requested_id or str(uuid4())` and inserts a row with a primary
+key that is already taken, which raises `IntegrityError` and surfaces as a 500
+on an SOS request.
+
+**Severity: low.** It needs a caller who guesses another user's UUID, and the
+worst outcome is a failed alert for that caller rather than any exposure of the
+other user's data. It is recorded because the shape matters: the id is
+free-form client input that is then used as a database key, and §7.10 is a
+reminder that untested branches in this path are where the real failures hide.
+The retraction query was written with `startswith(..., autoescape=True)` rather
+than a `LIKE` pattern for the same reason — an id containing `_` would
+otherwise have matched another of her own incidents' audit rows and sent a
+false-alarm message to the contacts of an alert that was still live. That one
+*is* fixed and tested; this one is listed in §12.
+
 ---
 
 ## 8. Regression tests added
@@ -1017,6 +1100,9 @@ to Redis or Postgres first.
 | `tests/test_time_utils.py` | 6 | The §7.3 defect. Asserts `utc_epoch_seconds()` is real epoch time, that the naive storage convention holds, and that exactly one definition of the helper remains where five existed. Its load-bearing test is a **source guard** — `datetime.utcnow()` must not reappear in `fastapi_app/` or `tests/` — because the direct assertion is *vacuous on a UTC host*, where the broken and correct expressions return the same number |
 | `mobile/test/.../weapon_detection_service_test.dart` | 13 (4 added) | The §9.1 gap: what the **deployed** scorer parameters imply, not the declared defaults — that persistence divides by 15, that 15 frames at 200 ms is the three seconds the rule was designed around, and the §7.6 cap on the web path |
 | `mobile/test/.../weapon_scorer_test.dart` | 15 | Four added for the distractor filter, including that a weapon is still scored when a distractor outranks it (proving the filter runs before the sort) |
+| `tests/test_incident_retraction.py` | 26 | The §11 retraction decision and the §7.10 defect. Covers that the correction reaches exactly the contacts the alarm reached, that retracting mid-fan-out *stops* the remaining alarm messages rather than racing them, that it is idempotent, that a dismissed prompt is not a retraction, that the stand-down is logged distinctly so it is never read back as evidence the alarm got through, and that no server-side deadline is enforced. Includes the cross-language pin tying the Dart prompt constant to `RETRACTION_PROMPT_SECONDS` |
+| `mobile/test/.../auto_sos_retraction_test.dart` | 13 | That the app notices its *own* automatic alert at all — the phone learns this only from the `/analyze` response — that a non-triggering verdict reports nothing, that one incident is reported once however many readings name it, and the notifier's failure path |
+| `mobile/test/.../auto_sos_retraction_banner_test.dart` | 8 | That the prompt actually appears, that tapping it sends the correction, that a failure says *"your contacts still think you need help"* rather than a soft error, and that hiding the banner does not stand a real emergency down |
 
 Both new guards were checked against the failure they exist to catch, not only
 against the healthy case. The `utcnow` source guard was verified by planting a
@@ -1024,6 +1110,30 @@ file containing the broken call: it fails and names the offending line, and
 passes once the file is removed. The timezone-dependent test that *demonstrates*
 the bug skips on a UTC host and says so — which is exactly why the source guard,
 not that test, is the one CI relies on.
+
+**The two retraction tests that carry weight were likewise checked against
+their own failure**, because both would otherwise have been vacuous:
+
+- `test_a_contact_who_is_also_a_safeher_user_does_not_abort_the_fanout` — with
+  the §7.10 import removed, it fails with `NameError` at
+  `emergency_dispatch.py:399`, which is the real defect and not a stand-in for
+  it.
+- `test_retracting_mid_fanout_stops_the_remaining_contacts` — with the
+  `should_continue` check replaced by `if False`, it fails reporting all three
+  contacts alarmed instead of one. Without that demonstration the test proves
+  only that a predicate *can* be passed, not that it is honoured.
+
+**A third one passed in isolation for the wrong reason, and the full suite
+caught it.** `test_a_wildcard_in_an_incident_id_does_not_pull_in_another_alert`
+first used fixed incident ids. `tests/conftest.py` points the suite at
+`./test_safeher.db`, a **file that is not dropped between runs**, so those ids
+accumulated audit rows from every previous run's user and the test passed
+alone while failing inside the suite. The ids are now derived from a fresh
+`uuid4()` stem per run, and the test was re-checked against the raw `LIKE`
+afterwards to confirm the change had not also removed its ability to fail.
+Recorded because it is the §7 shape turned on the tests themselves: a green
+run that proved nothing. Any new test in this suite that hard-codes a row key
+is making the same mistake.
 
 **The metadata test was checked against the failure it exists to catch**, rather
 than only against the healthy case. Pointed at the 6-class artifact *before*
@@ -1045,9 +1155,30 @@ that are easy to remove by accident:
   `glove_protocol.dart` would hand it weight 1.0 without touching the pipeline.
   Both files must change together for the protection to hold.
 
-**Suite status:** 587 Python passed / 7 skipped (17 subtests passed, 1,042 s);
-451 Dart passed across `test/core/audio`, `test/features/safety` and
-`test/features/devices`; `flutter analyze` clean on all changed files.
+**Suite status:** **614 Python passed / 7 skipped** (17 subtests passed, 376 s)
+and **1,125 Dart passed**; `flutter analyze` clean on `lib` and `test`.
+
+Two notes on those numbers, because both changed meaning in this pass:
+
+- The Python delta is exactly the 27 new tests in
+  `tests/test_incident_retraction.py` (587 → 614), so nothing was lost or
+  renamed to get there.
+- The Dart figure is now the **whole** suite. Earlier revisions of this report
+  quoted 451, which was a scoped run over `test/core/audio`,
+  `test/features/safety` and `test/features/devices` — a real number, but not
+  the one the label implied. 1,125 is `flutter test` with no path argument.
+
+The 7 skips are not ML-extras guards. Enumerated with `-rs` rather than
+described from memory, **all seven now read "API Gateway not running"** —
+three in `tests/test_api_gateway.py` and four in `tests/test_integration.py`.
+
+That is a change worth stating precisely, because an earlier revision of this
+section said four were reachability and three were "Authentication failed".
+Both were true when written. §7.4 turned the authentication case into a
+*failure* rather than a skip, so with no gateway listening on port 5000 those
+tests now stop at the reachability guard instead — which is the correct
+ordering: a server that is absent is a skip, a server that answers and rejects
+a valid login is a regression.
 
 **Release build verified.** `flutter build apk --release` succeeds against the
 configured release keystore, and the APK was opened and inspected rather than
@@ -1199,6 +1330,14 @@ that remain are the 0.75 threshold, the EMA, and the 120-second deduplication
 window. A false alarm under this decision is **not recoverable by the user** —
 it reaches her contacts.
 
+> **Superseded in part, 2026-11-03.** That last sentence was true when it was
+> written and is no longer. The decision below makes a false automatic alarm
+> recoverable *after* dispatch rather than before it. The alert still goes out
+> with nothing to dismiss, so the decision above stands unchanged; what has
+> changed is that it is no longer irreversible. Left in place rather than
+> rewritten, because the accepted cost is what justified the decision and
+> editing it away would make the decision look cheaper than it was.
+
 That makes two things matter more than they did, and both are already open
 items: the §5.4 persistence re-measurement, because the false-positive
 behaviour of the visual signal is now the dominant risk in this path; and the
@@ -1212,7 +1351,80 @@ that test and has to return to this decision rather than quietly reverse it.
 
 A post-dispatch *retraction* — contacts told immediately, then told it was a
 false alarm if she says so within seconds — is a different mechanism, since it
-delays nothing. It was not part of this decision and remains unasked.
+delays nothing. It was not part of this decision. ~~It remains unasked.~~ It
+was asked on 2026-11-03 and answered; see the decision below.
+
+### A false automatic alarm is retractable after dispatch — decided 2026-11-03
+
+**Asked because the decision above named an unrecoverable cost, and answered
+by choosing the route that does not reintroduce a delay.** Three options were
+put: a pre-dispatch cancellation window, a post-dispatch retraction, or leaving
+dispatch alone and closing the exposure by re-measuring the visual signal. The
+second was chosen.
+
+**What it does.** `POST /alerts/emergency/{id}/retract` stands an alert down
+and sends the contacts it reached a stand-down on every channel that alarmed
+them. Dispatch timing is untouched: the alert still leaves the instant the
+threshold is crossed.
+
+**Why not the pre-dispatch window.** It would have reversed the decision above
+for no gain in the cases that matter. If she is grabbed, pinned or unconscious
+she cannot cancel either, so in a genuine emergency a window buys nothing and
+costs delay; only in a false alarm does it help. A correction after the fact
+helps the false alarm *without* charging the genuine one.
+
+**Note on the phrasing "before" in the request that prompted this.** There was
+no earlier state to restore. Git history carries no cancellation window in the
+automatic path at any commit — the only match for `countdown` in
+`fastapi_app/routers/alerts.py` is the comment added in `5833c84` noting that
+the path has none. The 5-second countdown gates manual and shake SOS only,
+which is what §9.1 corrected. Adding a window would have been new behaviour,
+not a rollback, which is why it was put as a decision rather than performed as
+one.
+
+**Two ordering properties that the mechanism is worthless without**, both
+tested rather than asserted:
+
+1. **The correction must not overtake the alarm.** `retracted_at` is committed
+   *before* anything is sent, and the alarm fan-out re-reads it between
+   contacts through a new `should_continue` predicate. Retracting during the
+   first seconds therefore *stops* the remaining alarm messages. Without this,
+   contacts further down the priority list would receive "FALSE ALARM" and
+   then "EMERGENCY" — an ordering worse than no retraction at all. Verified by
+   disabling the check and watching all three contacts get alarmed.
+2. **It must correct the right people.** Who was reached is read from the
+   notification log, which commits per contact per channel as the fan-out runs,
+   unioned with `incidents.contacts_reached`, which is complete but only
+   written at the end. Neither alone is both current and complete. The union
+   errs towards over-inclusion deliberately: a contact who gets a stand-down
+   for an alarm they never saw is briefly confused, while a contact who got the
+   alarm and no stand-down may call the police.
+
+**What it deliberately does not do.** There is no server-side deadline. The
+60-second `RETRACTION_PROMPT_SECONDS` is how long the app keeps the action in
+front of her, not a window after which the server refuses. A deadline's only
+possible effect would be to withhold a correction she has decided to send, and
+there is no reading of this product where that is safer. A test asserts the
+constant appears in neither the handler nor the service, so a future change
+that starts enforcing it fails.
+
+**The cost, named.** Her contacts may receive two messages. SMS is charged per
+message, so a retraction is not free — and it is sent on SMS anyway, unlike
+the evidence follow-up, which is email-only on exactly those cost grounds.
+That trade is different here: a contact holding a text saying she is in danger
+has to be corrected on the channel they are holding.
+
+**Pinned in code:** `tests/test_incident_retraction.py` (26 tests),
+`mobile/test/features/safety/data/auto_sos_retraction_test.dart` (13), and
+`mobile/test/features/safety/presentation/auto_sos_retraction_banner_test.dart`
+(8). A cross-language test pins the Dart prompt constant to the Python one, so
+the banner and the server cannot drift apart silently.
+
+**Still open:** whether a *contact* should be able to ask her to confirm, and
+what happens to evidence already uploaded against a retracted incident. The
+recording is kept — a retraction is her saying she is safe, not a request to
+erase what was captured — but nothing yet marks it as belonging to a
+withdrawn alert.
 
 ---
 
@@ -1271,19 +1483,34 @@ see §6.2. The §7.2 metadata defect, also previously open, is fixed.*
     reach auto-SOS alone on that path. Either confirm the cap deliberately and
     document the number, or change the cadence or the timeout. Right now it is
     an accident of three independent choices.
+12. **Should a retracted incident's evidence be marked as such?** The recording
+    is kept — a retraction is her saying she is safe, not a request to erase
+    what was captured — but nothing on the media rows says the alert they
+    belong to was withdrawn. An incident report generated later reads as a
+    live emergency.
+13. **Should a contact be able to see that a retraction was sent *to someone
+    else*?** Today each contact learns only about their own message. If the
+    stand-down reaches two of three contacts, the third is left believing she
+    is in danger and the other two have no way to know that.
+14. **Fix §7.11, or constrain the client-chosen incident id?** A supplied id
+    that already belongs to another user falls through to an insert on a taken
+    primary key and 500s an SOS request. Either reject the collision explicitly
+    or require the id to be a UUID the caller derives from their own namespace.
+    Left unfixed here because it changes the SOS endpoint's behaviour, which is
+    outside what this pass was asked to do.
 
 ### 12.4 Infrastructure
 
-12. Redeploy the backend so the timestamp fix is live. **This now also carries
+15. Redeploy the backend so the timestamp fix is live. **This now also carries
     the §7.3 evidence-signing fix**, which is the strongest reason yet to
     redeploy: until it ships, signed uploads keep failing on any non-UTC host.
-13. Migrate `@app.on_event` to a lifespan handler. Deprecated and scheduled for
+16. Migrate `@app.on_event` to a lifespan handler. Deprecated and scheduled for
     removal, the last remaining deprecation in the suite, and deliberately not
     done in this pass: it changes startup and shutdown ordering, which is where
     the §7.5 fix lives, and it deserves its own change rather than riding along
     with a safety fix.
-14. Credential rotation.
-15. Machine stability: eight unexpected shutdowns since early September, two
+17. Credential rotation.
+18. Machine stability: eight unexpected shutdowns since early September, two
     during the 6-class training run, Kernel-Power 41 with no bugcheck. 74 °C mean
     is not dangerous for the GPU in question, and with 55 W average draw against
     an 80 W limit and no bugcheck on any crash, power delivery is a better suspect
@@ -1317,29 +1544,38 @@ the system does with a model's output rather than how accurate the model is:
   reporting signals. One sensor can reach the auto-SOS threshold on a single
   post. **Nothing in that path asks her first** — the 5-second cancellable
   countdown gates the manual SOS only, and the automatic dispatch notifies
-  contacts server-side without consulting the phone (§5.5).
+  contacts server-side without consulting the phone (§5.5). That is now a
+  recorded decision rather than an accident, and since 2026-11-03 it is no
+  longer irreversible: a false automatic alarm can be retracted after the
+  fact, which corrects the contacts it reached without delaying the alert
+  (§11).
 - The weapon detector fires on **20.3% of real weapon-free frames** at its
   deployed floor — a defect invisible to every accuracy metric, because the
   training set contains no weapon-free images.
 - **4.76% of normal glove recordings** reach the auto-SOS threshold unaided,
   mitigated only structurally by a weight table that makes non-FALL classes
   incapable of triggering alone.
-- **Nine findings sat around the models rather than in them**, none visible to
+- **Eleven findings sat around the models rather than in them**, none visible to
   any accuracy metric (§7). The second would have made the fix for the first
   govern nothing. The third broke evidence upload signing on any server not
   running in UTC. The fourth was an end-to-end test that skipped on precisely
   the failure it existed to catch. **Two were in the auto-SOS path itself**: one
   called every emergency contact twice when two readings arrived together, the
   other could have held a genuine first spike below the threshold and suppressed
-  the alarm entirely. Seven are fixed; §7.6 and §7.9 are decisions and
-  constraints, not bugs.
+  the alarm entirely. **The tenth is the worst of them**: an emergency contact
+  who also used SafeHer raised a `NameError` in the push branch, which escaped
+  a function documented as never raising and aborted the fan-out — so that
+  contact *and every contact she had ranked below them* were never notified at
+  all. It survived because no test had ever made a contact a user. Eight are
+  fixed; §7.6 and §7.9 are decisions and constraints rather than bugs, and §7.11 is a low-severity defect left deliberately unfixed.
 
-  Five of them share one shape: **a control that reads as protection and
+  Six of them share one shape: **a control that reads as protection and
   governs nothing** — a name-based filter with no names to match, a handler for
   an exception that cannot be raised, a skip that covers both a missing
-  environment and a real regression, and a constant pinned where it is
-  *declared* rather than where it is *set*. That shape, not model accuracy, is
-  what this evaluation kept finding.
+  environment and a real regression, a constant pinned where it is *declared*
+  rather than where it is *set*, and a third delivery channel that was in fact
+  a trapdoor under the other two. That shape, not model accuracy, is what this
+  evaluation kept finding.
 
 - **This report got one wrong, and §9.1 says so.** An earlier pass read
   `WeaponScorer`'s declared default of 5 frames, concluded that a source comment

@@ -137,6 +137,33 @@ class Incident(Base):
     contacts_failed = Column(Text, nullable=True)
     dispatch_completed_at = Column(DateTime, nullable=True)
 
+    # The way back from an automatic alert that should not have gone out.
+    #
+    # Auto-SOS has no cancellable countdown in front of it -- that was a
+    # deliberate decision, because the cases it exists for are the ones where
+    # she cannot reach the phone to confirm anything. The cost of that
+    # decision is that a false automatic alarm reaches her contacts before
+    # she can stop it, so the correction has to travel the same way the alarm
+    # did: afterwards, to the same people.
+    #
+    # NULL means not retracted, which is the normal state of a real
+    # emergency. Set once and never cleared: "she said she was safe" is a
+    # fact about what happened, and un-saying it would leave an incident
+    # whose contacts were told a false alarm but whose row denies it.
+    #
+    # This is also the signal an in-flight fan-out checks between contacts,
+    # which is why it is a column and not in-memory state -- the fan-out runs
+    # in a background task on its own session, so a flag the request held
+    # would not be visible to it.
+    retracted_at = Column(DateTime, nullable=True)
+    # The state of the *retraction* fan-out, in the same vocabulary as
+    # `dispatch_status`. Tracked separately because the two can disagree in
+    # the way that matters most: an alarm that reached three contacts and a
+    # correction that reached two is not a retracted incident, and a row that
+    # could not express that would hide the one failure worth chasing.
+    retraction_status = Column(String, nullable=True)
+    retraction_contacts_notified = Column(Integer, nullable=True)
+
     created_at = Column(DateTime, nullable=False, default=_utcnow)
     updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
 

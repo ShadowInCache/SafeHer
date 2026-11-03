@@ -23,6 +23,7 @@ import '../../../shared/models/threat_level.dart';
 import '../../devices/domain/glove_protocol.dart';
 import '../domain/camera_activation_policy.dart';
 import '../domain/glove_confirmation.dart';
+import 'auto_sos_retraction.dart';
 import 'safety_providers.dart';
 import 'threat_signal_aggregator.dart';
 
@@ -37,6 +38,13 @@ Future<ThreatPhraseClassifier> threatPhraseClassifier(Ref ref) =>
 ThreatSignalAggregator threatSignalAggregator(Ref ref) {
   final aggregator = ThreatSignalAggregator(
     apiClient: ref.watch(apiClientProvider),
+    // The one place the phone finds out that the *server* raised an alarm.
+    // Auto-SOS is decided inside the response to a reading this aggregator
+    // posted, so if this is not wired, an automatic alert reaches her
+    // contacts and nothing in the app ever knows — which is what left a
+    // false automatic alarm with no way back.
+    onAutoDispatch: (incidentId) =>
+        ref.read(autoSosRetractionProvider.notifier).noticeDispatch(incidentId),
   );
   ref.onDispose(aggregator.dispose);
   return aggregator;

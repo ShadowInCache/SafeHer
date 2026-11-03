@@ -369,6 +369,13 @@ class TestRouteRegistry(unittest.TestCase):
 
     REGISTRY = {
         "/api/v1/alerts/emergency/{}/dispatch": OWNER,
+        # Standing an alert down is owner-checked and answers 404 rather than
+        # 403, so an incident id is not confirmed to exist to someone who does
+        # not own it. Isolation proved by
+        # `test_incident_retraction.py::test_someone_elses_incident_is_not_found`,
+        # which also asserts the incident is left un-retracted -- the failure
+        # that would matter here is a stranger standing down a live emergency.
+        "/api/v1/alerts/emergency/{}/retract": OWNER,
         "/api/v1/devices/{}": OWNER,
         "/api/v1/devices/{}/heartbeat": OWNER,
         "/api/v1/incidents/{}": OWNER,

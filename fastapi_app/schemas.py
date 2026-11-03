@@ -260,6 +260,18 @@ class IncidentPublic(BaseModel):
     # dispatch was ever attempted for this incident.
     dispatch_status: Optional[str] = None
 
+    # Set when the owner stood this alert down as a false alarm. None is the
+    # normal state of a real emergency, so this must never be rendered as
+    # "not yet retracted".
+    #
+    # Carried on every incident response, not just the retract one, because
+    # the history screen would otherwise show a corrected false alarm as an
+    # emergency that happened — and a woman scrolling her own incident list
+    # should not have to re-read an alert she already took back.
+    retracted_at: Optional[UtcDatetime] = None
+    retraction_status: Optional[str] = None
+    retraction_contacts_notified: Optional[int] = None
+
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("contacts_reached", "contacts_failed", mode="before")

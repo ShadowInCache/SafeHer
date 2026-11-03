@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "generated_on": "2026-10-27",
   "last_updated": "2026-11-03",
-  "revision_note": "2026-11-02: the 6-class fp16 TFLite export was produced and validated (see remediation_in_progress.weapon_six_class.tflite_export), which answered and removed the not_yet_exported_for_the_app caveat; and the class-name metadata defect was fixed on the shipped 2-class asset (see models[0].class_name_metadata). The shipped asset's whole-file SHA-256 therefore changed. Its graph SHA-256 did not, which is why every accuracy figure in this file still stands unaltered. 2026-11-03: two defects fixed in the auto-SOS path itself -- a missing lock let concurrent readings dispatch to every contact twice (measured: 3 concurrent readings produced 2 dispatches), and smoothing state with no TTL could hold a genuine first spike below the threshold. Also corrected: the claim that a 5-second countdown stands between an automatic trigger and dispatch. It does not. 2026-11-03: recorded the decision that auto-SOS has no cancellation window (see decisions_taken), which accepts the section 5.5 exposure rather than mitigating it.",
+  "revision_note": "2026-11-02: the 6-class fp16 TFLite export was produced and validated (see remediation_in_progress.weapon_six_class.tflite_export), which answered and removed the not_yet_exported_for_the_app caveat; and the class-name metadata defect was fixed on the shipped 2-class asset (see models[0].class_name_metadata). The shipped asset's whole-file SHA-256 therefore changed. Its graph SHA-256 did not, which is why every accuracy figure in this file still stands unaltered. 2026-11-03: two defects fixed in the auto-SOS path itself -- a missing lock let concurrent readings dispatch to every contact twice (measured: 3 concurrent readings produced 2 dispatches), and smoothing state with no TTL could hold a genuine first spike below the threshold. Also corrected: the claim that a 5-second countdown stands between an automatic trigger and dispatch. It does not. 2026-11-03: recorded the decision that auto-SOS has no cancellation window (see decisions_taken), which accepts the section 5.5 exposure rather than mitigating it. 2026-11-03 (second pass): post-dispatch retraction added, making a false automatic alarm recoverable for the first time -- the alert still leaves the instant the threshold is crossed, and the correction follows to the contacts it reached (see decisions_taken.auto_sos_post_dispatch_retraction). Retracting during the first seconds now stops the alarm fan-out rather than racing it. Building it surfaced the most serious defect in this evaluation: an emergency contact who also used SafeHer raised a NameError in the push branch, which escaped a function documented as never raising and aborted the fan-out in priority order, so that contact and everyone she had ranked below them were never notified (integration_defects.fan_out_aborted_on_a_contact_who_was_also_a_user). No accuracy figure in this file is affected by any of it -- no model, dataset or measurement changed in this pass.",
   "title": "SafeHer model evaluation results",
   "summary": "Measured accuracy for the four shipped models, plus a false-positive investigation of the weapon detector. Every result carries an `evidence` field; read it before quoting the number.",
   "evidence_grades": {
@@ -1430,12 +1430,50 @@
         "distractor matching ignores case and surrounding whitespace."
       ],
       "all_passing": true
+    },
+    "tests/test_incident_retraction.py": {
+      "tests": 26,
+      "pins": [
+        "the correction reaches exactly the contacts the alarm reached, and not the ones it failed to reach",
+        "retracting mid-fan-out stops the remaining alarm messages rather than racing them -- verified by disabling the check, which alarmed all three contacts instead of one",
+        "retraction is idempotent, so a double tap or a retry does not send every contact a second stand-down",
+        "the stand-down is logged under its own statuses, so a correction is never read back as evidence the alarm got through",
+        "a contact reached only by push is still corrected, which is why the reached-set unions the log with incidents.contacts_reached",
+        "no server-side deadline is enforced: RETRACTION_PROMPT_SECONDS appears in neither the handler nor the service",
+        "the cross-language pin tying the Dart kAutoSosRetractionPrompt to RETRACTION_PROMPT_SECONDS",
+        "the section 7.10 defect: a contact who is also a SafeHer user no longer aborts the fan-out -- fails with NameError when the import is removed"
+      ]
+    },
+    "mobile/test/features/safety/data/auto_sos_retraction_test.dart": {
+      "tests": 13,
+      "pins": [
+        "that the app notices its own automatic alert at all: the phone learns this only from the /alerts/analyze response, and the verdict used to be read only inside a logging call gated on kLogThreatSignals -- so a build with SAFEHER_LOG_SIGNALS=false could not have noticed its own alarm",
+        "a verdict that did not trigger reports nothing (auto_sos is always present and always a map, so reading it for null would claim an alarm on every reading)",
+        "one incident is reported once however many readings name it",
+        "a verdict carrying no incident id is not reported, since there would be nothing to retract",
+        "the notifier's failure path keeps the action available instead of clearing the prompt",
+        "dismissing is not retracting"
+      ]
+    },
+    "mobile/test/features/safety/presentation/auto_sos_retraction_banner_test.dart": {
+      "tests": 8,
+      "pins": [
+        "the prompt actually appears when an automatic alert is noticed",
+        "tapping it sends the correction and reports how many contacts were told, omitting the count rather than guessing zero while the fan-out is unfinished",
+        "a failure says 'your contacts still think you need help' rather than a soft error",
+        "hiding the banner does not stand a real emergency down",
+        "the countdown shown is the prompt window, rounded up so the first frame does not read 59s"
+      ]
     }
   },
   "test_suite_status": {
-    "python": "568 passed, 7 skipped",
-    "dart": "443 passed across test/core/audio, test/features/safety and test/features/devices",
-    "flutter_analyze": "no issues on all changed files"
+    "python": "614 passed, 7 skipped (17 subtests passed, 376 s)",
+    "python_delta": "587 -> 614 is exactly the 27 new tests in tests/test_incident_retraction.py; nothing was lost or renamed to get there.",
+    "dart": "1125 passed (the whole suite: `flutter test` with no path argument)",
+    "dart_figure_note": "Earlier revisions recorded 443 and then 451, which were scoped runs over test/core/audio, test/features/safety and test/features/devices -- real numbers, but not the whole suite the label implied.",
+    "skips": "All seven read 'API Gateway not running' -- three in tests/test_api_gateway.py and four in tests/test_integration.py -- enumerated with -rs rather than described from memory. None is an ML-extras guard. An earlier revision recorded four reachability skips and three 'Authentication failed'; both were true when written, and report section 7.4 turned the authentication case into a failure rather than a skip, so with no gateway on port 5000 those tests now stop at the reachability guard instead.",
+    "flutter_analyze": "no issues on lib and test",
+    "migration_0015_incident_retraction": "upgrade and downgrade both verified on a scratch SQLite database"
   },
   "dataset_provenance": {
     "weapon": {
@@ -1479,7 +1517,10 @@
     "Decide the audio trade: +0.079 specificity for -0.037 recall against the shipped model. The pre-committed gate rejects it; accepting it would be a conscious override and must be recorded as one.",
     "Re-measure the emotion model, or stop quoting 65.5% as if it were tested.",
     "Export the 6-class model to fp16 TFLite and validate it, since the app loads TFLite and the box/layout conventions differ from ONNX.",
-    "Machine stability (user-owned): eight unexpected shutdowns since early September, two of them during this training run, Kernel-Power 41 with no bugcheck. This blocks any long training run and is a hardware question, not a SafeHer one."
+    "Machine stability (user-owned): eight unexpected shutdowns since early September, two of them during this training run, Kernel-Power 41 with no bugcheck. This blocks any long training run and is a hardware question, not a SafeHer one.",
+    "Decide whether a retracted incident's evidence should be marked as belonging to a withdrawn alert. The recording is kept deliberately, but an incident report generated later reads as a live emergency.",
+    "Decide whether a contact should be able to see that a retraction reached the other contacts, so a third contact the stand-down missed is not left alone believing she is in danger.",
+    "Fix report section 7.11, or constrain the client-chosen incident id: reject the collision explicitly, or require the id to be a UUID derived from the caller's own namespace."
   ],
   "decisions_taken": {
     "auto_sos_cancellation_window": {
@@ -1492,7 +1533,53 @@
         "The open decision on whether a solo visual signal may trigger unaided, which is the remaining lever on the same exposure."
       ],
       "pinned_by": "tests/test_threat_fusion.py::TestAutoSosEndToEnd::test_an_automatic_alert_has_no_cancellation_window requires the dispatch fan-out to be underway when the request returns, so a later hold-off fails a test rather than quietly reversing the decision.",
-      "not_part_of_this_decision": "A post-dispatch retraction -- contacts told immediately, then told it was a false alarm if she says so within seconds -- is a different mechanism because it delays nothing. It was not asked and remains open."
+      "not_part_of_this_decision": "A post-dispatch retraction -- contacts told immediately, then told it was a false alarm if she says so within seconds -- is a different mechanism because it delays nothing. It was not asked and remains open.",
+      "cost_accepted_superseded_in_part_on": "2026-11-03",
+      "cost_accepted_correction": "The clause 'NOT recoverable by the user' no longer holds: see decisions_taken.auto_sos_post_dispatch_retraction. The original wording is left intact because the accepted cost is what justified the decision, and editing it away would make the decision look cheaper than it was."
+    },
+    "auto_sos_post_dispatch_retraction": {
+      "decided_on": "2026-11-03",
+      "decision": "A false automatic alarm is retractable AFTER dispatch. POST /alerts/emergency/{id}/retract stands the alert down and sends the contacts it reached a stand-down on every channel that alarmed them. Dispatch timing is untouched: the alert still leaves the instant the threshold is crossed.",
+      "supersedes_in_part": "auto_sos_cancellation_window.cost_accepted asserted that a false alarm is NOT recoverable by the user. That was true when written and is no longer. The cancellation-window decision itself stands unchanged -- the alert still goes out with nothing to dismiss -- but it is no longer irreversible.",
+      "options_considered": [
+        "A pre-dispatch cancellation window (rejected: it would reverse the cancellation-window decision for no gain in the cases that matter, since a woman who is grabbed, pinned or unconscious cannot cancel either -- so in a genuine emergency a window buys nothing and costs delay).",
+        "A post-dispatch retraction (chosen: it helps the false alarm without charging the genuine one).",
+        "Leaving dispatch alone and closing the exposure by re-measuring the visual signal (still an open item regardless; it reduces false alarms but does not reduce the cost of one)."
+      ],
+      "no_earlier_state_was_restored": "The request that prompted this asked to make it 'like before'. Git history carries no cancellation window in the automatic path at any commit: the only match for 'countdown' in fastapi_app/routers/alerts.py is the comment added in 5833c84 noting the path has none. The 5-second countdown gates manual and shake SOS only, which is what report section 9.1 corrected. Adding a window would have been new behaviour, not a rollback.",
+      "ordering_properties_tested": [
+        "The correction must not overtake the alarm. retracted_at is committed before anything is sent, and the alarm fan-out re-reads it between contacts via a should_continue predicate, so retracting during the first seconds stops the remaining alarm messages. Without it, contacts further down the priority list would receive FALSE ALARM and then EMERGENCY. Verified by disabling the check: all three contacts were alarmed instead of one.",
+        "It must correct the right people. Who was reached is read from the notification log -- committed per contact per channel as the fan-out runs -- unioned with incidents.contacts_reached, which is complete but written only at the end. The union errs towards over-inclusion deliberately: a contact who gets a stand-down for an alarm they never saw is briefly confused, while a contact who got the alarm and no stand-down may call the police."
+      ],
+      "no_server_side_deadline": "RETRACTION_PROMPT_SECONDS = 60 is how long the app keeps the action in front of her, not a window after which the server refuses. A deadline's only possible effect would be withholding a correction she has decided to send. A test asserts the constant appears in neither the handler nor the service.",
+      "cost_accepted": "Her contacts may receive two messages, and the retraction is sent on SMS, which is charged per message. The evidence follow-up is email-only on exactly those cost grounds; the trade differs here because a contact holding a text saying she is in danger has to be corrected on the channel they hold.",
+      "pinned_by": "tests/test_incident_retraction.py (26 tests); mobile/test/features/safety/data/auto_sos_retraction_test.dart (13); mobile/test/features/safety/presentation/auto_sos_retraction_banner_test.dart (8). A cross-language test pins the Dart prompt constant to the Python one.",
+      "still_open": [
+        "Whether a retracted incident's evidence should be marked as belonging to a withdrawn alert. The recording is kept deliberately, but an incident report generated later reads as a live emergency.",
+        "Whether a contact should be able to see that a retraction reached the other contacts. Today each learns only about their own message, so a third contact the stand-down missed is left believing she is in danger with no way for the other two to know."
+      ],
+      "migration": "alembic 0015_incident_retraction (upgrade and downgrade both verified)"
+    }
+  },
+  "integration_defects": {
+    "fan_out_aborted_on_a_contact_who_was_also_a_user": {
+      "found_on": "2026-11-03",
+      "report_section": "7.10",
+      "severity": "highest in this report",
+      "defect": "fastapi_app/services/emergency_dispatch.py called fcm_credentials(settings) in the push branch of _notify_contact without importing the name. It is defined in fastapi_app/deps.py and was never imported into that module, so the call raised NameError.",
+      "why_it_survived": "The line is guarded by a non-empty token list, which happens only when a contact's phone or email matches a User row with a registered FCM token -- that is, when one of her emergency contacts is herself a SafeHer user. No test had ever set that up, so the branch never executed.",
+      "consequence": "_notify_contact is not wrapped, so the exception escaped dispatch_to_contacts -- whose docstring promises it never raises -- up to run_dispatch_in_background, which marked the incident dispatch_failed. Contacts are notified in the user's own priority order, so the fan-out aborted at the first contact who used the app and every contact ranked below them was never notified at all. On the inline path it surfaced as a 500 from the SOS request. The people most likely to install SafeHer on her recommendation are the ones she is most likely to rank first.",
+      "confirmed_how": "eval('fcm_credentials', vars(module)) raises NameError, and test_a_contact_who_is_also_a_safeher_user_does_not_abort_the_fanout reproduces the abort end to end: with the import removed it fails with NameError at emergency_dispatch.py:399; with it restored both contacts are notified.",
+      "fix": "Imported at module scope, with a comment recording what the absence cost."
+    },
+    "client_chosen_incident_id_collides_on_the_primary_key": {
+      "found_on": "2026-11-03",
+      "report_section": "7.11",
+      "severity": "low",
+      "status": "NOT FIXED -- deliberately, because fixing it changes the SOS endpoint's behaviour, which is outside what this pass was asked to do",
+      "defect": "POST /alerts/emergency accepts a client-chosen incident_id, which is what makes a retry after a timeout idempotent. Ownership is checked on the replay path, so a stranger's incident is never returned. But when the supplied id exists and belongs to another user, control falls through to inserting a row with a primary key that is already taken, which raises IntegrityError and surfaces as a 500 on an SOS request.",
+      "why_it_is_low": "It needs a caller who guesses another user's UUID, and the worst outcome is a failed alert for that caller rather than any exposure of the other user's data.",
+      "related_hazard_that_was_fixed": "The same free-form id is interpolated into the retraction's audit-log query. Written first as a raw LIKE pattern, an id containing `_` matched another of her own incidents' rows -- so standing down alert A would have sent a false-alarm message to the contacts of alert B, which may have been live. Changed to startswith(..., autoescape=True) and pinned by test_a_wildcard_in_an_incident_id_does_not_pull_in_another_alert, which was verified to fail with the raw pattern (it swept in two contacts from the other incident). No other SQL LIKE exists in fastapi_app/, so this hazard was confined to the new query."
     }
   }
 }

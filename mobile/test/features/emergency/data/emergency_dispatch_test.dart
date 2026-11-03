@@ -48,6 +48,13 @@ class _RecordingRepository implements EmergencyRepository {
   Future<DispatchOutcome> fetchDispatchStatus(String incidentId) async =>
       DispatchOutcome(incidentId: incidentId, progress: DispatchProgress.complete);
 
+
+  /// Not exercised by this test. Present because [EmergencyRepository]
+  /// requires it -- a fake that threw here would fail for a reason unrelated
+  /// to what the test is checking.
+  @override
+  Future<RetractionOutcome> retractAlert(String incidentId) async =>
+      RetractionOutcome(incidentId: incidentId, retractedAt: DateTime.now());
 }
 
 ProviderContainer _container(_RecordingRepository repository, {required bool offline}) {

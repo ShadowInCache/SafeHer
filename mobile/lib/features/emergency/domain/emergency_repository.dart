@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// How far along the server's fan-out to emergency contacts is.
 enum DispatchProgress {
   /// The server has the emergency and is still working through the contacts.
@@ -101,6 +103,45 @@ class DispatchOutcome {
   );
 }
 
+/// How standing an alert down went.
+///
+/// Separate from [DispatchOutcome] because the two describe different events
+/// and can disagree in the way that matters most: an alarm that reached three
+/// contacts and a correction that reached two is not a retracted emergency,
+/// and a type that could not express that would hide the one failure worth
+/// acting on — a contact still believing she is in danger.
+@immutable
+class RetractionOutcome {
+  const RetractionOutcome({
+    required this.incidentId,
+    this.retractedAt,
+    this.contactsNotified,
+    this.alreadyRetracted = false,
+    this.settled = false,
+  });
+
+  final String incidentId;
+
+  /// When the stand-down was recorded. Null means the server did not say —
+  /// which must not be rendered as "not retracted", because the request
+  /// succeeded.
+  final DateTime? retractedAt;
+
+  /// How many of the alarmed contacts the correction reached. Null while the
+  /// correction is still fanning out, which is the normal first answer.
+  final int? contactsNotified;
+
+  /// True when this incident had already been stood down before this call.
+  ///
+  /// Surfaced rather than hidden so the screen can say "already done" instead
+  /// of claiming her tap sent something — on a screen whose whole job is
+  /// reassurance, those are different messages.
+  final bool alreadyRetracted;
+
+  /// Whether the correction's own fan-out has finished.
+  final bool settled;
+}
+
 /// Dispatches an emergency alert to the backend.
 ///
 /// `POST /api/v1/alerts/emergency` creates the incident, stores the location,
@@ -143,4 +184,23 @@ abstract class EmergencyRepository {
   /// Polled by the Emergency screen while it shows "Help is on the way", so
   /// the contact list stops being a guess and starts being a report.
   Future<DispatchOutcome> fetchDispatchStatus(String incidentId);
+
+  /// Stands an alert down and has the contacts it reached told she is safe.
+  ///
+  /// This is the only way back from an **automatic** alert. Auto-SOS has no
+  /// cancellable countdown in front of it — a deliberate decision, because
+  /// the situations it exists for are the ones where she cannot reach the
+  /// screen to confirm anything — so a false automatic alarm reaches her
+  /// contacts before she can stop it. Without this, her sister had been told
+  /// she was in danger and nothing she did afterwards said otherwise.
+  ///
+  /// Safe to call twice. The server is idempotent, so a double tap or a retry
+  /// on a flaky connection reports [RetractionOutcome.alreadyRetracted]
+  /// rather than sending every contact a second stand-down.
+  ///
+  /// Retracting during the first seconds also *stops* the alarm fan-out
+  /// server-side, so contacts further down the priority list are never
+  /// alarmed at all — rather than receiving the correction first and the
+  /// emergency after it.
+  Future<RetractionOutcome> retractAlert(String incidentId);
 }

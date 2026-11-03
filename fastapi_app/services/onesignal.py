@@ -181,3 +181,33 @@ line-height:1.5;color:#18181B">
 contact your local emergency services.</p>
 </body></html>"""
     return subject, body
+
+
+def build_retraction_email(*, user_name: str, contact_name: str, local_time: str) -> tuple[str, str]:
+    """Returns `(subject, html_body)` for the correction after a false alarm.
+
+    The subject carries the whole message for the same reason the alert's
+    does: on a locked phone it is all that shows. It leads with "FALSE
+    ALARM" and names her, so a contact who has both messages in a list can
+    tell which is which without opening either.
+
+    There is deliberately no location link and no evidence link. This
+    message exists to stand the alarm down, and anything that invites the
+    reader to go looking works against that.
+    """
+    safe_user = html.escape(user_name)
+    safe_contact = html.escape(contact_name)
+    subject = f"FALSE ALARM: {user_name} is safe"
+
+    body = f"""<html><body style="font-family:system-ui,-apple-system,sans-serif;
+line-height:1.5;color:#18181B">
+<p style="margin:0 0 8px">Hi {safe_contact},</p>
+<h2 style="margin:0 0 8px;color:#2E7D32">{safe_user} is safe. The earlier alert was a false alarm.</h2>
+<p style="margin:0 0 12px">SafeHer raised that alert automatically, from its
+sensors, without {safe_user} asking it to. {safe_user} has since confirmed
+she is fine and stood it down at {html.escape(local_time)}.</p>
+<p style="margin:16px 0;color:#666">You do not need to do anything. If you
+have already contacted emergency services, please let them know it was a
+false alarm.</p>
+</body></html>"""
+    return subject, body

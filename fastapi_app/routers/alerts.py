@@ -36,6 +36,7 @@ from fastapi_app.schemas import (
 )
 from fastapi_app.security import get_current_user
 from fastapi_app.time_utils import to_utc_iso, utc_now_iso
+from fastapi_app.services import emergency_dispatch as dispatch
 from fastapi_app.services import threat_fusion, threat_models, weapon_detector
 from fastapi_app.services.emergency_dispatch import (
     DISPATCH_COMPLETE,
@@ -656,6 +657,120 @@ async def get_dispatch_status(
             if incident.dispatch_completed_at
             else None
         ),
+    }
+
+
+@router.post("/emergency/{incident_id}/retract", status_code=status.HTTP_202_ACCEPTED)
+async def retract_emergency(
+    incident_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: UserPublic = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+):
+    """Stands an alert down and tells the contacts it reached that she is safe.
+
+    This is the only way back from an automatic alert. Auto-SOS has no
+    cancellable countdown in front of it -- a recorded decision, because the
+    situations it exists for are the ones where she cannot reach the screen
+    to confirm anything -- so a false automatic alarm reaches her contacts
+    before she can stop it. Without this endpoint her sister had been told
+    she was in danger and nothing she could do afterwards said otherwise.
+
+    Two things happen, in this order, and the order is the point:
+
+    1. `retracted_at` is committed *before* anything is sent. An in-flight
+       fan-out re-reads that column between contacts, so committing first
+       stops the remaining alarm messages. Sending first and committing
+       afterwards would let the correction overtake the alarm, leaving a
+       contact with "FALSE ALARM" followed by "EMERGENCY".
+    2. The correction fans out in the background, for the same reason the
+       alarm does: three channels per contact with retries is not something
+       to hold a request open for.
+
+    Idempotent. A double tap, or a retry from a flaky connection, must not
+    send every contact two stand-downs -- so an already-retracted incident
+    answers with what the first call produced.
+
+    Deliberately *not* restricted to automatic alerts. A manual SOS already
+    has a countdown, so this matters less there, but a woman who dispatched
+    by mistake and let the countdown run out needs the same way back.
+    """
+    incident = await session.get(Incident, incident_id)
+    if incident is None or incident.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
+
+    if incident.retracted_at is not None:
+        return _retraction_response(incident, already=True)
+
+    # Step 1: make the stand-down durable and visible to the running fan-out.
+    incident.retracted_at = naive_utc_now()
+    incident.retraction_status = dispatch.RETRACTION_IN_PROGRESS
+    await session.commit()
+    await session.refresh(incident)
+
+    logger.warning(
+        "Incident %s retracted by its owner (auto_dispatched=%s)",
+        incident_id,
+        incident.auto_dispatched,
+    )
+
+    # Step 2: correct the people who were actually told.
+    if background_tasks is not None:
+        background_tasks.add_task(
+            dispatch.run_retraction_in_background,
+            settings=settings,
+            user_id=current_user.id,
+            incident_id=incident_id,
+        )
+    else:
+        # No background queue (a direct internal call, or a test driving this
+        # handler). Run inline rather than marking the incident retracted and
+        # never telling anyone -- a retraction nobody receives is the one
+        # outcome this endpoint cannot leave behind.
+        owner = await session.get(User, current_user.id)
+        if owner is None:
+            # The account went away between authenticating and here. The
+            # stand-down is already committed, which is the part that matters;
+            # there is simply nobody to send it on behalf of.
+            incident.retraction_status = dispatch.RETRACTION_FAILED
+            await session.commit()
+            await session.refresh(incident)
+            return _retraction_response(incident, already=False)
+
+        contact_ids = await dispatch.reached_contacts_for_incident(
+            session, incident_id=incident_id, incident=incident
+        )
+        report = await dispatch.retract_to_contacts(
+            session=session,
+            settings=settings,
+            user=owner,
+            incident_id=incident_id,
+            contact_ids=contact_ids,
+        )
+        incident.retraction_status = dispatch.RETRACTION_COMPLETE
+        incident.retraction_contacts_notified = report.contacts_notified
+        await session.commit()
+        await session.refresh(incident)
+
+    return _retraction_response(incident, already=False)
+
+
+def _retraction_response(incident: Incident, *, already: bool) -> dict:
+    """What a retract call reports back.
+
+    `already_retracted` is reported rather than hidden so the client can tell
+    "your tap did this" from "this was already stood down" -- on a screen
+    whose whole job is reassurance, those are different messages.
+    """
+    return {
+        "incident_id": incident.id,
+        "retracted_at": (
+            to_utc_iso(incident.retracted_at) if incident.retracted_at else None
+        ),
+        "retraction_status": incident.retraction_status,
+        "contacts_notified": incident.retraction_contacts_notified,
+        "already_retracted": already,
     }
 
 
