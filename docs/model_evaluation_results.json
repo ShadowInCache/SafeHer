@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
   "generated_on": "2026-10-27",
-  "last_updated": "2026-11-02",
-  "revision_note": "2026-11-02: the 6-class fp16 TFLite export was produced and validated (see remediation_in_progress.weapon_six_class.tflite_export), which answered and removed the not_yet_exported_for_the_app caveat; and the class-name metadata defect was fixed on the shipped 2-class asset (see models[0].class_name_metadata). The shipped asset's whole-file SHA-256 therefore changed. Its graph SHA-256 did not, which is why every accuracy figure in this file still stands unaltered.",
+  "last_updated": "2026-11-03",
+  "revision_note": "2026-11-02: the 6-class fp16 TFLite export was produced and validated (see remediation_in_progress.weapon_six_class.tflite_export), which answered and removed the not_yet_exported_for_the_app caveat; and the class-name metadata defect was fixed on the shipped 2-class asset (see models[0].class_name_metadata). The shipped asset's whole-file SHA-256 therefore changed. Its graph SHA-256 did not, which is why every accuracy figure in this file still stands unaltered. 2026-11-03: two defects fixed in the auto-SOS path itself -- a missing lock let concurrent readings dispatch to every contact twice (measured: 3 concurrent readings produced 2 dispatches), and smoothing state with no TTL could hold a genuine first spike below the threshold. Also corrected: the claim that a 5-second countdown stands between an automatic trigger and dispatch. It does not.",
   "title": "SafeHer model evaluation results",
   "summary": "Measured accuracy for the four shipped models, plus a false-positive investigation of the weapon detector. Every result carries an `evidence` field; read it before quoting the number.",
   "evidence_grades": {
@@ -642,8 +642,10 @@
         },
         "comparison_to_the_weapon_path": "The weapon path was measured at 4.2 percent of weapon-free frames sustaining a score at or above 0.75. The glove sits at 4.8 percent of normal recordings. Two independent signals each carry roughly a 1-in-20 solo false-trigger exposure on benign data, and because fuse() renormalises, either can reach auto-SOS without the other.",
         "mitigation_that_exists": "A 5-second cancellable countdown (kDefaultCountdownSeconds = 5) stands between the trigger and dispatch. That is the only thing between a false confirmed FALL and an alert; nothing in fusion stops it, since should_trigger is smoothed >= threshold on a single post with only a 120 s dedup window. Five seconds assumes the phone is reachable, which a phone in a bag is not.",
-        "script": "glove_persistence_probe.py"
-      }
+        "script": "glove_persistence_probe.py",
+        "mitigation_that_exists_correction": "CORRECTED 2026-11-03: there is NO countdown on the automatic path. The 5-second cancellable countdown (kDefaultCountdownSeconds) lives in emergency_screen.dart and gates the MANUAL and shake-initiated SOS only. An automatic dispatch runs server-side in _auto_dispatch_if_threatened, which notifies every emergency contact as soon as the smoothed score crosses the threshold; the phone is not consulted and cannot cancel. This correction runs the dangerous way -- it removes a mitigation previously claimed here, so the exposure is LESS constrained than was reported, not more. The mitigations that actually exist are the 0.75 threshold, the EMA, and the 120-second deduplication window, none of which is a chance for her to say 'I am fine'. Whether auto-SOS should have a cancellation window is an open decision; see docs/MODEL_TEST_REPORT.md sections 5.5 and 11."
+      },
+      "verdict_correction": "CORRECTED 2026-11-03: there is NO countdown on the automatic path. The 5-second cancellable countdown (kDefaultCountdownSeconds) lives in emergency_screen.dart and gates the MANUAL and shake-initiated SOS only. An automatic dispatch runs server-side in _auto_dispatch_if_threatened, which notifies every emergency contact as soon as the smoothed score crosses the threshold; the phone is not consulted and cannot cancel. This correction runs the dangerous way -- it removes a mitigation previously claimed here, so the exposure is LESS constrained than was reported, not more. The mitigations that actually exist are the 0.75 threshold, the EMA, and the 120-second deduplication window, none of which is a chance for her to say 'I am fine'. Whether auto-SOS should have a cancellation window is an open decision; see docs/MODEL_TEST_REPORT.md sections 5.5 and 11."
     },
     {
       "id": "emotion_classifier",

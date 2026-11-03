@@ -474,9 +474,26 @@ the EMA from 0.0, which is the harder case — `smooth()` takes the first readin
 of a journey as-is, so a cold start would cross on post one.
 
 **Conclusion:** a phone or purse in view during an already-elevated moment could
-drive an automatic SOS with no weapon present. The only mitigation in the path is
-`kDefaultCountdownSeconds = 5`, a cancellable countdown. Grounded prediction, not
-an observed failure.
+drive an automatic SOS with no weapon present. Grounded prediction, not an
+observed failure.
+
+> **Correction, 2026-11-03.** This section previously said the mitigation in the
+> path was `kDefaultCountdownSeconds = 5`, a cancellable countdown. **There is
+> no countdown on the automatic path.** The countdown lives in
+> `emergency_screen.dart` and gates the *manual* and shake-initiated SOS. An
+> automatic dispatch runs server-side in `_auto_dispatch_if_threatened`, which
+> notifies every emergency contact as soon as the smoothed score crosses the
+> threshold; the comment beside its background fan-out says so outright — *"an
+> automatic alert has no countdown absorbing the wait"*. The phone is not
+> consulted and cannot cancel: it learns the alarm fired from the `auto_sos`
+> block in the response, after dispatch has already started.
+>
+> This correction runs the dangerous way. It removes a mitigation the report
+> claimed, so the exposure described above is **less constrained** than it was
+> presented, not more. The mitigations that do exist are the 0.75 threshold, the
+> EMA, and the 120-second deduplication window — none of which is a chance for
+> her to say "I'm fine". Whether auto-SOS should have a cancellation window is a
+> decision, not a defect, and it is now §11's first decision item.
 
 ### 5.6 Root cause
 
@@ -690,7 +707,7 @@ test split.
 
 ## 7. Integration defects found
 
-Six findings sit in the code around the models rather than in them —
+Nine findings sit in the code around the models rather than in them —
 in the path from a model's output to the alarm, in the evidence handling beside
 it, and in the tests meant to watch both. **None is visible in any accuracy
 metric**, which is the point of this section: the models were not the risk.
@@ -698,9 +715,11 @@ metric**, which is the point of this section: the models were not the risk.
 They are not of equal weight. §7.1–§7.3 could each have affected a real
 incident; §7.4 concealed whether anything worked; §7.5 is hygiene, recorded
 because it is the same mistake in miniature — a handler that catches an
-exception class the code cannot raise. §7.6 is not a defect at all but an
-undecided consequence of three numbers chosen independently, and it is the only
-one here left open.
+exception class the code cannot raise. §7.7 and §7.8 are both in the auto-SOS
+path itself and are the most serious here: one called every contact twice, the
+other could have suppressed a genuine first alarm. §7.6 and §7.9 are not
+defects but undecided consequences of numbers chosen independently, and they are
+the two left open.
 
 ### 7.1 The scorer counted every class as a weapon
 
@@ -922,6 +941,65 @@ timeout, a window length and a polling interval picked in three different files
 for three unrelated reasons. A cap on a safety signal should be a decision with
 a number attached, not a coincidence — so it is listed in §11 as a decision.
 
+### 7.7 Concurrent readings dispatched to every contact twice
+
+The deduplication window is read from the database — correctly, because
+in-process state would forget it across a restart and *"forgetting it would mean
+alerting every contact twice"*. But nothing held a lock between reading it and
+writing the `auto_dispatched` flag that closes it, and several awaits sit in
+between. The phone posts to `/analyze` every second, and `/heartbeat` and
+`/process-threat` can land alongside it.
+
+**Measured, not reasoned about:** three concurrent readings at a triggering
+score produced **two dispatches** and two incident records. Every emergency
+contact would have been called twice for one emergency — the precise failure the
+window exists to prevent, by a route the window could not see.
+
+**Fixed** with one `asyncio.Lock` per user, held across read-decide-write.
+Keyed per user so one woman's emergency never queues behind another's. The
+concurrency test fails without it and passes with it.
+
+### 7.8 A stale score could hold a genuine first spike below the threshold
+
+`smooth()` takes a first reading as-is, deliberately: seeding the EMA at zero
+would halve the very first sample, the one most likely to be the emergency. That
+protection only holds if "first" means first *of this episode*, and the store
+had no notion of age.
+
+The phone drops any signal older than 10 s and posts nothing when nothing is
+fresh, so gaps are routine rather than exceptional. A smoothed score left from
+an abandoned session was therefore used as `previous` however old it was.
+
+**The direction is a missed alarm.** A stale previous of 0.70 turns a genuine
+first spike of 0.80 into `0.30×0.80 + 0.70×0.70 = 0.73` — below the 0.75
+threshold. The alarm that should have fired on the first sample does not fire.
+
+**Fixed** with `SMOOTHING_STATE_TTL_SECONDS = 30`: past that, the next reading
+begins a new episode and is taken at full strength. Thirty seconds is three
+times the device's own freshness window, long enough to ride out a retry and
+short enough that an abandoned session does not bleed into the next one. Erring
+towards an unsmoothed reading errs towards raising an alarm, which is the trade
+this codebase already makes for losing the store on restart.
+
+Two tests, because one alone would have been satisfied by deleting the store
+entirely: a stale entry must be ignored, **and** a recent one must still damp.
+
+> The first version of the staleness test aged the entry by
+> `SMOOTHING_STATE_TTL_SECONDS + 1`, which is stale relative to whatever the
+> constant happens to be — it passed with the TTL raised to thirty years. It
+> asserted that the comparison worked, not that any bound existed. It now ages
+> by a fixed ten minutes and was checked against a disabled TTL before being
+> relied on.
+
+### 7.9 Deployment constraint: this is correct for one worker
+
+`_smoothing_state` and the per-user locks are process-local. That is right for
+the single uvicorn worker `app.py` starts, and it is a hard limit on scaling:
+with two workers a user's readings would split across two independent EMA
+states and two independent locks, weakening the smoothing *and* reopening §7.7.
+Documented at both definitions. Moving beyond one worker means moving this state
+to Redis or Postgres first.
+
 ---
 
 ## 8. Regression tests added
@@ -931,6 +1009,7 @@ a number attached, not a coincidence — so it is listed in §11 as a decision.
 | `tests/test_weapon_model_metrics.py` | 12 | Pins the ONNX by SHA-256 and the TFLite twice over — its graph and the whole asset, separately, so a metadata change and a detector change fail with different messages (§7.2) — plus the class list, the deployed constants (floor 0.55, window 5, threshold 0.75, EMA alpha 0.30, solo retention 0.50), the scorer arithmetic, that a lone weapon reading is the fused score, and false-positive counts on fixed negative slices |
 | `tests/test_glove_model_metrics.py` | 13 | Drift guard on the confirmation gate; `test_only_a_fall_can_reach_auto_sos_unaided`; `test_fall_is_the_only_class_mapped_to_danger` |
 | `tests/test_weapon_model_metadata.py` | 3 | The §7.2 invariant: *either the model names its classes, or every class it emits is a weapon* |
+| `tests/test_threat_fusion.py` | 25 (3 added) | The §7.7 race — three concurrent readings must not dispatch more than once — and the §7.8 TTL in both directions: a stale smoothed score is ignored, a recent one still damps |
 | `tests/test_time_utils.py` | 6 | The §7.3 defect. Asserts `utc_epoch_seconds()` is real epoch time, that the naive storage convention holds, and that exactly one definition of the helper remains where five existed. Its load-bearing test is a **source guard** — `datetime.utcnow()` must not reappear in `fastapi_app/` or `tests/` — because the direct assertion is *vacuous on a UTC host*, where the broken and correct expressions return the same number |
 | `mobile/test/.../weapon_detection_service_test.dart` | 13 (4 added) | The §9.1 gap: what the **deployed** scorer parameters imply, not the declared defaults — that persistence divides by 15, that 15 frames at 200 ms is the three seconds the rule was designed around, and the §7.6 cap on the web path |
 | `mobile/test/.../weapon_scorer_test.dart` | 15 | Four added for the distractor filter, including that a weapon is still scored when a distractor outranks it (proving the filter runs before the sort) |
@@ -962,7 +1041,7 @@ that are easy to remove by accident:
   `glove_protocol.dart` would hand it weight 1.0 without touching the pipeline.
   Both files must change together for the protection to hold.
 
-**Suite status:** 583 Python passed / 7 skipped (17 subtests passed, 408 s);
+**Suite status:** 586 Python passed / 7 skipped (17 subtests passed, 302 s);
 451 Dart passed across `test/core/audio`, `test/features/safety` and
 `test/features/devices`; `flutter analyze` clean on all changed files.
 
@@ -974,14 +1053,15 @@ same SHA-256 as the repository asset, and its appended archive reads
 is the one thing a re-implementation of the plugin's reader could not establish.
 
 Both counts moved since the previous run, and in each case the delta is
-accounted for rather than assumed. Python went **572 → 574 → 580 → 583**. The first
+accounted for rather than assumed. Python went **572 → 574 → 580 → 583 → 586**. The first
 step added one test when the TFLite pin was split into graph and whole-file
 (§7.2), and resolved one that had been skipping, because
 `test_every_named_non_weapon_is_on_the_dart_reject_list` skips when the model
 exposes no class names and the model now exposes them — which is also why the
 skip count fell from 8 to 7. The second step is the six tests in
 `test_time_utils.py` (§7.3), and the third is three added pins on the
-**deployed** scorer constants (§9.1). Dart went 443 → 447 → 451: the four
+**deployed** scorer constants (§9.1), and the fourth is the three auto-SOS
+tests for §7.7 and §7.8. Dart went 443 → 447 → 451: the four
 distractor-filter tests in the table above, counted before they landed, then
 the four deployed-wiring tests.
 
@@ -1132,14 +1212,34 @@ see §6.2. The §7.2 metadata defect, also previously open, is fixed.*
 
 ### 11.3 Decisions, not measurements
 
-8. **May a single visual signal reach auto-SOS unaided?** Tightening this would
+8. **Should an automatic SOS have a cancellation window at all?** This is the
+    first decision now, because §5.5's correction removed the mitigation the
+    report had credited. Today the server notifies every contact the moment the
+    smoothed score crosses the threshold, and the phone cannot intervene.
+
+    The case against a window is FR-EMG-02 itself: its acceptance criterion is
+    *zero user interaction required*, for exactly the situations where she
+    cannot act, and `test_a_sustained_threat_dispatches_without_a_single_tap`
+    pins that. A window an incapacitated woman cannot dismiss delays help, and
+    one an attacker can dismiss is worse than none.
+
+    The case for it is §5.5: a phone or a purse in view during an
+    already-elevated moment can drive a dispatch with no weapon present, and
+    every false alarm spends the credibility the real one depends on.
+
+    A middle option exists and is not currently built: dispatch immediately but
+    push a "cancel" to the phone that, if she presses it inside a few seconds,
+    sends contacts a retraction. That keeps zero-interaction dispatch while
+    making a false alarm recoverable. Costed as a decision, not proposed as a
+    fix.
+9. **May a single visual signal reach auto-SOS unaided?** Tightening this would
    block the §5.5 path but weakens the lone-weapon case the solo floor was built
    for.
-9. **May a solo confirmed glove FALL reach auto-SOS unaided?** The same decision,
+10. **May a solo confirmed glove FALL reach auto-SOS unaided?** The same decision,
    now that the exposure is measured at 4.76% of normal recordings.
-10. **Accept the audio trade (§6.3)?** The pre-committed gate rejects it.
+11. **Accept the audio trade (§6.3)?** The pre-committed gate rejects it.
     Acceptance must be recorded as a conscious override.
-11. **Is the web path's weapon cap (§7.6) intended?** At a 2 s cadence against a
+12. **Is the web path's weapon cap (§7.6) intended?** At a 2 s cadence against a
     5 s frame timeout the weapon score cannot exceed ~0.20, so it can never
     reach auto-SOS alone on that path. Either confirm the cap deliberately and
     document the number, or change the cadence or the timeout. Right now it is
@@ -1147,16 +1247,16 @@ see §6.2. The §7.2 metadata defect, also previously open, is fixed.*
 
 ### 11.4 Infrastructure
 
-12. Redeploy the backend so the timestamp fix is live. **This now also carries
+13. Redeploy the backend so the timestamp fix is live. **This now also carries
     the §7.3 evidence-signing fix**, which is the strongest reason yet to
     redeploy: until it ships, signed uploads keep failing on any non-UTC host.
-13. Migrate `@app.on_event` to a lifespan handler. Deprecated and scheduled for
+14. Migrate `@app.on_event` to a lifespan handler. Deprecated and scheduled for
     removal, the last remaining deprecation in the suite, and deliberately not
     done in this pass: it changes startup and shutdown ordering, which is where
     the §7.5 fix lives, and it deserves its own change rather than riding along
     with a safety fix.
-14. Credential rotation.
-15. Machine stability: eight unexpected shutdowns since early September, two
+15. Credential rotation.
+16. Machine stability: eight unexpected shutdowns since early September, two
     during the 6-class training run, Kernel-Power 41 with no bugcheck. 74 °C mean
     is not dangerous for the GPU in question, and with 55 W average draw against
     an 80 W limit and no bugcheck on any crash, power delivery is a better suspect
@@ -1188,22 +1288,26 @@ the system does with a model's output rather than how accurate the model is:
 
 - A solo signal **is** the fused score, because `fuse()` renormalises over
   reporting signals. One sensor can reach the auto-SOS threshold on a single
-  post, with a 5-second cancellable countdown as the only thing in the way.
+  post. **Nothing in that path asks her first** — the 5-second cancellable
+  countdown gates the manual SOS only, and the automatic dispatch notifies
+  contacts server-side without consulting the phone (§5.5).
 - The weapon detector fires on **20.3% of real weapon-free frames** at its
   deployed floor — a defect invisible to every accuracy metric, because the
   training set contains no weapon-free images.
 - **4.76% of normal glove recordings** reach the auto-SOS threshold unaided,
   mitigated only structurally by a weight table that makes non-FALL classes
   incapable of triggering alone.
-- **Six findings sat around the models rather than in them**, none visible to
+- **Nine findings sat around the models rather than in them**, none visible to
   any accuracy metric (§7). The second would have made the fix for the first
-  govern nothing, and proving that fix safe required showing it did not disturb
-  the §4.1 measurements — which it does not, bitwise. The third broke evidence
-  upload signing on any server not running in UTC. The fourth was an end-to-end
-  test that skipped on precisely the failure it existed to catch. Five are
-  fixed; the sixth (§7.6) is a decision, not a bug.
+  govern nothing. The third broke evidence upload signing on any server not
+  running in UTC. The fourth was an end-to-end test that skipped on precisely
+  the failure it existed to catch. **Two were in the auto-SOS path itself**: one
+  called every emergency contact twice when two readings arrived together, the
+  other could have held a genuine first spike below the threshold and suppressed
+  the alarm entirely. Seven are fixed; §7.6 and §7.9 are decisions and
+  constraints, not bugs.
 
-  Four of them share one shape: **a control that reads as protection and
+  Five of them share one shape: **a control that reads as protection and
   governs nothing** — a name-based filter with no names to match, a handler for
   an exception that cannot be raised, a skip that covers both a missing
   environment and a real regression, and a constant pinned where it is
