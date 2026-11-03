@@ -186,6 +186,12 @@ class TestAutoSosEndToEnd(unittest.IsolatedAsyncioTestCase):
             "/api/v1/auth/login", json={"email": email, "password": "TestPass123!"}
         )
         self.headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        # The smoothing store is keyed by user id, and the tests below reach
+        # into it to age an entry. Read the id rather than assuming this is
+        # the only user in a module-level dict shared by every test.
+        me = await self.client.get("/api/v1/users/me", headers=self.headers)
+        self.assertEqual(me.status_code, 200, me.text)
+        self.user_id = me.json()["id"]
 
     async def asyncTearDown(self):
         await self.client.aclose()
@@ -242,6 +248,96 @@ class TestAutoSosEndToEnd(unittest.IsolatedAsyncioTestCase):
         # A report that cannot say whether a human or the system raised the
         # alarm is not forensic-grade, whatever else is in it.
         self.assertEqual(detail.json()["title"], "Automatic SOS")
+
+    async def test_a_stale_smoothed_score_is_not_smoothed_against(self):
+        """A reading after a long gap begins a new episode, at full strength.
+
+        `smooth` takes a first reading as-is on purpose: seeding at zero would
+        halve the very first sample, the one most likely to be the emergency.
+        That only holds if "first" means first of *this* episode. The store had
+        no notion of age, so a score left from an abandoned session was used as
+        `previous` however old it was.
+
+        The direction was towards missing an alarm, which is why this is a test
+        and not a tidy-up. Establish 0.60, let it go stale, then send 0.80:
+        smoothed against the stale value that is 0.3*0.80 + 0.7*0.60 = 0.66 and
+        no alarm fires, where the reading on its own clears the 0.75 threshold.
+        """
+        from fastapi_app.routers import alerts as alerts_router
+
+        first = await self._heartbeat(60.0)
+        self.assertFalse(first["auto_sos"]["triggered"])
+        self.assertAlmostEqual(first["auto_sos"]["score"], 0.60, places=2)
+
+        # Age the stored state by a fixed, realistic gap rather than sleeping.
+        #
+        # Deliberately NOT `SMOOTHING_STATE_TTL_SECONDS + 1`. Ageing by the
+        # constant makes the entry stale relative to whatever the constant
+        # happens to be, so the test would pass even with the TTL raised to
+        # thirty years -- it would assert that the comparison works, not that
+        # there is a bound at all. Ten minutes is a gap any real abandoned
+        # session exceeds, and it fails if the TTL is removed or set absurdly
+        # high. Checked against exactly that before being relied on.
+        self.assertLess(tf.SMOOTHING_STATE_TTL_SECONDS, 600)
+        state = alerts_router._smoothing_state[self.user_id]
+        state.at = state.at - timedelta(minutes=10)
+
+        resumed = await self._heartbeat(80.0)
+
+        self.assertAlmostEqual(
+            resumed["auto_sos"]["score"], 0.80, places=2,
+            msg="the reading was smoothed against a stale score instead of "
+                "being taken as the first of a new episode",
+        )
+        self.assertTrue(
+            resumed["auto_sos"]["triggered"],
+            f"0.80 should clear the 0.75 threshold on its own; got "
+            f"{resumed['auto_sos']}",
+        )
+
+    async def test_a_recent_smoothed_score_is_still_smoothed_against(self):
+        """The other half: inside the TTL the EMA must still damp.
+
+        Without this, deleting the smoothing store entirely would pass the test
+        above, and the EMA that stops one noisy frame raising an alarm would be
+        gone.
+        """
+        first = await self._heartbeat(60.0)
+        self.assertAlmostEqual(first["auto_sos"]["score"], 0.60, places=2)
+
+        second = await self._heartbeat(80.0)
+
+        # 0.30*0.80 + 0.70*0.60
+        self.assertAlmostEqual(second["auto_sos"]["score"], 0.66, places=2)
+        self.assertFalse(second["auto_sos"]["triggered"])
+
+    async def test_concurrent_readings_do_not_dispatch_twice(self):
+        """TC-EMG-05 under concurrency, which the sequential test cannot reach.
+
+        The deduplication window is read from the database -- the right choice,
+        because in-process state would forget it on restart. But nothing holds
+        a lock across the read and the write that sets `auto_dispatched`, and
+        the phone posts a reading every second while `/heartbeat` and
+        `/analyze` can arrive together. Two requests can therefore both see
+        "no previous auto alert", both pass the window check, and both raise
+        the alarm.
+
+        The cost of that is the exact thing the window exists to prevent:
+        every emergency contact called twice for one emergency.
+        """
+        import asyncio
+
+        results = await asyncio.gather(
+            self._heartbeat(100.0), self._heartbeat(100.0), self._heartbeat(100.0)
+        )
+        dispatched = [r for r in results if r["auto_sos"]["triggered"]]
+        self.assertLessEqual(
+            len(dispatched), 1,
+            f"{len(dispatched)} of 3 concurrent readings each raised the alarm; "
+            f"the deduplication window was bypassed and every contact would be "
+            f"notified {len(dispatched)} times for one emergency",
+        )
+
 
     async def test_a_second_alert_is_deduplicated(self):
         # SRS §6.2 / TC-EMG-05. Every contact of a woman already in an

@@ -1,6 +1,8 @@
+import asyncio
 import json
 import logging
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import uuid4
 
@@ -52,15 +54,59 @@ router = APIRouter(prefix="/api/v1/alerts", tags=["alerts"])
 _latest_scores: dict[str, dict[str, Any]] = {}
 
 # SRS §6.2 smoothing needs the previous smoothed value. In memory, like
-# `_latest_scores`: losing it on restart costs one unsmoothed reading, which
-# errs towards raising an alarm rather than missing one. The deduplication
-# window is deliberately *not* kept here -- that one is read from the
-# database, because forgetting it would mean alerting every contact twice.
-_smoothed_scores: dict[str, float] = {}
-# The banded level each user was last in. Held only so `level_for` can apply
-# hysteresis on the way down; losing it on restart costs one un-damped band
-# transition, never a missed alarm.
-_threat_levels: dict[str, 'threat_fusion.ThreatLevel'] = {}
+# The smoothing state for each user: the last smoothed score, the band it was
+# in, and *when* that was recorded.
+#
+# Losing it on restart costs one unsmoothed reading, which errs towards raising
+# an alarm rather than missing one. The deduplication window is deliberately
+# *not* kept here -- that one is read from the database, because forgetting it
+# would mean alerting every contact twice.
+#
+# The timestamp is load-bearing rather than diagnostic. Without it a score left
+# over from an earlier session was used as `previous` however old it was, which
+# defeated `smooth`'s rule that a first reading is taken as-is and could hold a
+# genuine first spike below the threshold. See
+# `threat_fusion.SMOOTHING_STATE_TTL_SECONDS`.
+#
+# Both this and the lock below are per-process. That is correct for the single
+# uvicorn worker this runs on (see `app.py`), and it is a real constraint on
+# scaling out: with two workers a user's readings would split across two
+# independent EMA states and two independent locks, which would both weaken
+# smoothing and reopen the double-dispatch race below. Moving to more than one
+# worker means moving this state to Redis or Postgres first.
+@dataclass
+class _SmoothingState:
+    smoothed: float
+    level: 'threat_fusion.ThreatLevel'
+    at: datetime
+
+
+_smoothing_state: dict[str, _SmoothingState] = {}
+
+# One lock per user, held across "read the last auto alert, decide, write the
+# incident".
+#
+# The deduplication window is read from the database and the flag that closes
+# it is written several awaits later. Two requests arriving together -- the
+# phone posts to `/analyze` every second and `/heartbeat` can land alongside
+# it -- could both read "no previous auto alert", both clear the window check,
+# and both raise the alarm. Measured before this existed: three concurrent
+# readings produced two dispatches, so every emergency contact would have been
+# called twice for one emergency, which is the precise failure the window was
+# written to prevent.
+_user_locks: dict[str, asyncio.Lock] = {}
+
+
+def _lock_for(user_id: str) -> asyncio.Lock:
+    """The lock for one user, created on first use.
+
+    Keyed per user so one woman's emergency never waits behind another's.
+    """
+    lock = _user_locks.get(user_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _user_locks[user_id] = lock
+    return lock
 
 
 async def _auto_dispatch_if_threatened(
@@ -83,6 +129,37 @@ async def _auto_dispatch_if_threatened(
     told unless she pressed SOS herself, which is precisely the case
     FR-EMG-02 covers: the situations where she cannot.
     """
+    # Everything from here to the commit that sets `auto_dispatched` is one
+    # critical section. See `_user_locks` for the double dispatch this closes.
+    async with _lock_for(user_id):
+        return await _auto_dispatch_locked(
+            background_tasks=background_tasks,
+            session=session,
+            settings=settings,
+            user_id=user_id,
+            signals=signals,
+            incident=incident,
+            weapon_confidence=weapon_confidence,
+            in_high_risk_zone=in_high_risk_zone,
+            scores=scores,
+            weapon_label=weapon_label,
+        )
+
+
+async def _auto_dispatch_locked(
+    *,
+    background_tasks: Optional[BackgroundTasks],
+    session: AsyncSession,
+    settings: Settings,
+    user_id: str,
+    signals: threat_fusion.ThreatSignals,
+    incident: Optional[Incident],
+    weapon_confidence: float,
+    in_high_risk_zone: bool,
+    scores: Optional[threat_models.ModalityScores],
+    weapon_label: Optional[str],
+) -> dict[str, Any]:
+    """The body of [_auto_dispatch_if_threatened], under that user's lock."""
     owner = await session.get(User, user_id)
     if owner is None:
         return {"triggered": False, "reason": "no such user"}
@@ -117,17 +194,29 @@ async def _auto_dispatch_if_threatened(
     # `weapon_confidence` and `in_high_risk_zone` are still not inputs to the
     # score -- see the module doc in `threat_fusion` for why context was
     # removed -- and are recorded on the incident as supporting evidence.
+    # A score from an abandoned session must not be smoothed against. Past the
+    # TTL this reading begins a new episode and `smooth` takes it as-is, which
+    # is what keeps a genuine first spike at full strength.
+    now = datetime.now(timezone.utc)
+    previous = _smoothing_state.get(user_id)
+    if previous is not None and (
+        now - previous.at
+    ) > timedelta(seconds=threat_fusion.SMOOTHING_STATE_TTL_SECONDS):
+        previous = None
+
     decision = threat_fusion.evaluate(
         signals=signals,
-        previous_smoothed=_smoothed_scores.get(user_id),
-        previous_level=_threat_levels.get(user_id),
+        previous_smoothed=previous.smoothed if previous else None,
+        previous_level=previous.level if previous else None,
         threshold=threshold,
+        moment=now,
         last_alert_at=last_auto,
     )
     if decision is None:
         return {"triggered": False, "reason": "no signal reported"}
-    _smoothed_scores[user_id] = decision.smoothed_score
-    _threat_levels[user_id] = decision.level
+    _smoothing_state[user_id] = _SmoothingState(
+        smoothed=decision.smoothed_score, level=decision.level, at=now
+    )
 
     if not decision.should_trigger:
         if decision.suppressed_by_dedup:
