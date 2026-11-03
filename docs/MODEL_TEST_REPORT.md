@@ -409,7 +409,7 @@ claimed *knife*. 1,651 of 2,072 frames (79.7%) never reached it.
 > attenuate them the way an independence assumption predicts. That finding does
 > not depend on the window size. What it predicts at window 15 is unmeasured,
 > because modelling a 15-frame window needs 15 jittered frames per still and
-> this probe generated 5. See §11.
+> this probe generated 5. See §12.
 >
 > Scaling 5 frames to 15 by arithmetic would assume the independence this
 > section exists to disprove, so it is not done here.
@@ -493,7 +493,11 @@ observed failure.
 > presented, not more. The mitigations that do exist are the 0.75 threshold, the
 > EMA, and the 120-second deduplication window — none of which is a chance for
 > her to say "I'm fine". Whether auto-SOS should have a cancellation window is a
-> decision, not a defect, and it is now §11's first decision item.
+> decision, not a defect. **It has since been taken: no cancellation window,
+> decided 2026-11-03 on FR-EMG-02's zero-interaction criterion — see §11.**
+> The exposure measured in this section is therefore accepted rather than
+> pending, and a false alarm raised this way is not recoverable by the user: it
+> reaches her contacts.
 
 ### 5.6 Root cause
 
@@ -669,7 +673,7 @@ both key sets, at a cost of 14 bytes.
 
 **Status: strong candidate, not shipped.** The export is now measured and the
 §7.2 metadata defect is fixed, so what remains before shipping is a decision and
-a device test, not an open technical question. See §7 and §11.
+a device test, not an open technical question. See §7 and §12.
 
 ### 6.3 Audio corpus rebalance — REJECTED by the project's own gate
 
@@ -869,7 +873,7 @@ practical argument for not letting a suite accumulate 1,898 of anything.
 The 7 that remain are a different deprecation — FastAPI's `@app.on_event`,
 superseded by lifespan handlers — plus one from `starlette`. That is left
 deliberately: migrating app lifecycle is a behavioural change to startup and
-shutdown ordering, not a one-line substitution, and it is listed in §11 rather
+shutdown ordering, not a one-line substitution, and it is listed in §12 rather
 than done hastily alongside a safety fix.
 
 ### 7.4 An end-to-end test skipped on the failure it existed to catch
@@ -939,7 +943,7 @@ weaker promise, and the code says so. What makes it worth recording is that
 nobody appears to have chosen it. It is an emergent property of a frame
 timeout, a window length and a polling interval picked in three different files
 for three unrelated reasons. A cap on a safety signal should be a decision with
-a number attached, not a coincidence — so it is listed in §11 as a decision.
+a number attached, not a coincidence — so it is listed in §12 as a decision.
 
 ### 7.7 Concurrent readings dispatched to every contact twice
 
@@ -1041,7 +1045,7 @@ that are easy to remove by accident:
   `glove_protocol.dart` would hand it weight 1.0 without touching the pipeline.
   Both files must change together for the protection to hold.
 
-**Suite status:** 586 Python passed / 7 skipped (17 subtests passed, 302 s);
+**Suite status:** 587 Python passed / 7 skipped (17 subtests passed, 1,042 s);
 451 Dart passed across `test/core/audio`, `test/features/safety` and
 `test/features/devices`; `flutter analyze` clean on all changed files.
 
@@ -1053,7 +1057,7 @@ same SHA-256 as the repository asset, and its appended archive reads
 is the one thing a re-implementation of the plugin's reader could not establish.
 
 Both counts moved since the previous run, and in each case the delta is
-accounted for rather than assumed. Python went **572 → 574 → 580 → 583 → 586**. The first
+accounted for rather than assumed. Python went **572 → 574 → 580 → 583 → 586 → 587**. The first
 step added one test when the TFLite pin was split into graph and whole-file
 (§7.2), and resolved one that had been skipping, because
 `test_every_named_non_weapon_is_on_the_dart_reject_list` skips when the model
@@ -1061,7 +1065,8 @@ exposes no class names and the model now exposes them — which is also why the
 skip count fell from 8 to 7. The second step is the six tests in
 `test_time_utils.py` (§7.3), and the third is three added pins on the
 **deployed** scorer constants (§9.1), and the fourth is the three auto-SOS
-tests for §7.7 and §7.8. Dart went 443 → 447 → 451: the four
+tests for §7.7 and §7.8, and the fifth is the test pinning the §11 decision
+that auto-SOS has no cancellation window. Dart went 443 → 447 → 451: the four
 distractor-filter tests in the table above, counted before they landed, then
 the four deployed-wiring tests.
 
@@ -1079,7 +1084,7 @@ actual 7, enumerated with `-rs`:
 All seven are the same underlying condition: no backend was running on this
 machine. These are the **only tests in the suite that exercise the assembled
 system** rather than a model or a unit, so the thing this report is weakest on
-(§12) is also the thing whose tests are inactive. They are not hidden failures —
+(§13) is also the thing whose tests are inactive. They are not hidden failures —
 they are not evidence of anything either, and a green suite summary conceals
 that.
 
@@ -1169,9 +1174,51 @@ descoped.
 
 ---
 
-## 11. Open items
+## 11. Decisions taken
 
-### 11.1 Measurement still outstanding
+A decision recorded here is a choice someone made on a date, with the cost
+named. The alternative — a default that nobody chose, defended afterwards as
+though it had been — is how §7.6's web-path cap came about.
+
+### Auto-SOS has no cancellation window — decided 2026-11-03
+
+**Asked explicitly and answered no.** An automatic alert notifies every
+emergency contact as soon as the smoothed score crosses the threshold. The
+phone is not consulted, there is no hold-off, and there is nothing to dismiss.
+
+**Reasoning.** FR-EMG-02's acceptance criterion is *zero user interaction
+required*, and it exists for the situations where she cannot act. A window an
+incapacitated woman cannot dismiss only delays help. A window an attacker can
+dismiss is worse than none, because it converts a raised alarm into a silenced
+one.
+
+**The cost, accepted rather than hidden.** §5.5 measures it: a phone or a purse
+in view during an already-elevated moment can drive an automatic dispatch with
+no weapon present, and nothing in the path now asks her first. The mitigations
+that remain are the 0.75 threshold, the EMA, and the 120-second deduplication
+window. A false alarm under this decision is **not recoverable by the user** —
+it reaches her contacts.
+
+That makes two things matter more than they did, and both are already open
+items: the §5.4 persistence re-measurement, because the false-positive
+behaviour of the visual signal is now the dominant risk in this path; and the
+§12 decision on whether a solo visual signal may trigger unaided, which is the
+remaining lever on the same exposure.
+
+**Pinned in code**, not just written down:
+`test_an_automatic_alert_has_no_cancellation_window` requires the fan-out to be
+underway when the request returns. A later change that adds a hold-off fails
+that test and has to return to this decision rather than quietly reverse it.
+
+A post-dispatch *retraction* — contacts told immediately, then told it was a
+false alarm if she says so within seconds — is a different mechanism, since it
+delays nothing. It was not part of this decision and remains unasked.
+
+---
+
+## 12. Open items
+
+### 12.1 Measurement still outstanding
 
 1. **Re-measure the emotion model** — *blocked on data, not effort.* The second
    half of this item, "or stop quoting 65.5%", is **done**: the figure is now
@@ -1196,7 +1243,7 @@ descoped.
 *The fp16 TFLite export, previously listed here, is complete and measured —
 see §6.2. The §7.2 metadata defect, also previously open, is fixed.*
 
-### 11.2 Requires hardware
+### 12.2 Requires hardware
 
 4. Install the APK carrying the foreground-service microphone fix and confirm
    audio produces a reading at all.
@@ -1210,53 +1257,33 @@ see §6.2. The §7.2 metadata defect, also previously open, is fixed.*
 7. A glove recording session for subject, surface and fit diversity — no longer a
    sample-size question, now a generalisation one.
 
-### 11.3 Decisions, not measurements
+### 12.3 Decisions, not measurements
 
-8. **Should an automatic SOS have a cancellation window at all?** This is the
-    first decision now, because §5.5's correction removed the mitigation the
-    report had credited. Today the server notifies every contact the moment the
-    smoothed score crosses the threshold, and the phone cannot intervene.
-
-    The case against a window is FR-EMG-02 itself: its acceptance criterion is
-    *zero user interaction required*, for exactly the situations where she
-    cannot act, and `test_a_sustained_threat_dispatches_without_a_single_tap`
-    pins that. A window an incapacitated woman cannot dismiss delays help, and
-    one an attacker can dismiss is worse than none.
-
-    The case for it is §5.5: a phone or a purse in view during an
-    already-elevated moment can drive a dispatch with no weapon present, and
-    every false alarm spends the credibility the real one depends on.
-
-    A middle option exists and is not currently built: dispatch immediately but
-    push a "cancel" to the phone that, if she presses it inside a few seconds,
-    sends contacts a retraction. That keeps zero-interaction dispatch while
-    making a false alarm recoverable. Costed as a decision, not proposed as a
-    fix.
-9. **May a single visual signal reach auto-SOS unaided?** Tightening this would
+8. **May a single visual signal reach auto-SOS unaided?** Tightening this would
    block the §5.5 path but weakens the lone-weapon case the solo floor was built
    for.
-10. **May a solo confirmed glove FALL reach auto-SOS unaided?** The same decision,
+9. **May a solo confirmed glove FALL reach auto-SOS unaided?** The same decision,
    now that the exposure is measured at 4.76% of normal recordings.
-11. **Accept the audio trade (§6.3)?** The pre-committed gate rejects it.
+10. **Accept the audio trade (§6.3)?** The pre-committed gate rejects it.
     Acceptance must be recorded as a conscious override.
-12. **Is the web path's weapon cap (§7.6) intended?** At a 2 s cadence against a
+11. **Is the web path's weapon cap (§7.6) intended?** At a 2 s cadence against a
     5 s frame timeout the weapon score cannot exceed ~0.20, so it can never
     reach auto-SOS alone on that path. Either confirm the cap deliberately and
     document the number, or change the cadence or the timeout. Right now it is
     an accident of three independent choices.
 
-### 11.4 Infrastructure
+### 12.4 Infrastructure
 
-13. Redeploy the backend so the timestamp fix is live. **This now also carries
+12. Redeploy the backend so the timestamp fix is live. **This now also carries
     the §7.3 evidence-signing fix**, which is the strongest reason yet to
     redeploy: until it ships, signed uploads keep failing on any non-UTC host.
-14. Migrate `@app.on_event` to a lifespan handler. Deprecated and scheduled for
+13. Migrate `@app.on_event` to a lifespan handler. Deprecated and scheduled for
     removal, the last remaining deprecation in the suite, and deliberately not
     done in this pass: it changes startup and shutdown ordering, which is where
     the §7.5 fix lives, and it deserves its own change rather than riding along
     with a safety fix.
-15. Credential rotation.
-16. Machine stability: eight unexpected shutdowns since early September, two
+14. Credential rotation.
+15. Machine stability: eight unexpected shutdowns since early September, two
     during the 6-class training run, Kernel-Power 41 with no bugcheck. 74 °C mean
     is not dangerous for the GPU in question, and with 55 W average draw against
     an 80 W limit and no bugcheck on any crash, power delivery is a better suspect
@@ -1278,7 +1305,7 @@ see §6.2. The §7.2 metadata defect, also previously open, is fixed.*
 
 ---
 
-## 12. Conclusion
+## 13. Conclusion
 
 The four shipped models that gate an alarm all pass on the tasks they were
 measured on, and quantisation cost nothing measurable in any of them.

@@ -28,6 +28,7 @@ import httpx
 from fastapi_app.db import init_db
 from fastapi_app.main import app
 from fastapi_app.services import threat_fusion as tf
+from fastapi_app.services import emergency_dispatch as dispatch
 
 
 class TestFusionArithmetic(unittest.TestCase):
@@ -234,6 +235,45 @@ class TestAutoSosEndToEnd(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(body["auto_sos"]["triggered"], body["auto_sos"])
         self.assertIn("incident_id", body["auto_sos"])
+
+    async def test_an_automatic_alert_has_no_cancellation_window(self):
+        """A decision, recorded 2026-11-03: auto-SOS dispatches immediately.
+
+        Asked explicitly, and answered no. The reasoning is FR-EMG-02's own
+        acceptance criterion -- zero user interaction required -- for the
+        situations where she cannot act: a window an incapacitated woman cannot
+        dismiss only delays help, and one an attacker can dismiss is worse than
+        none at all.
+
+        This pins the decision rather than merely describing it. The fan-out
+        must already be underway when the endpoint returns, with no
+        intermediate state waiting on a confirmation that may never come. If
+        someone later adds a hold-off before dispatch, this fails and they have
+        to come back to the decision instead of quietly reversing it.
+
+        The cost of the decision is accepted, not hidden: section 5.5 of the
+        report measures how a phone or purse in view during an already-elevated
+        moment can drive this, and nothing in the path now asks her first.
+        """
+        for _ in range(10):
+            body = await self._heartbeat(100.0)
+            if body["auto_sos"]["triggered"]:
+                break
+        self.assertTrue(body["auto_sos"]["triggered"], body["auto_sos"])
+
+        self.assertIn(
+            body["auto_sos"]["dispatch_status"],
+            (dispatch.DISPATCH_IN_PROGRESS, dispatch.DISPATCH_COMPLETE),
+            msg=(
+                "the alarm fired but the dispatch was not already running when "
+                "the request returned. Auto-SOS is specified to notify contacts "
+                "with zero user interaction; a status that waits on anything "
+                "else is a cancellation window by another name, and that was "
+                "decided against on 2026-11-03."
+            ),
+        )
+        # And it reports who it is contacting, not a promise to decide later.
+        self.assertIn("contacts_total", body["auto_sos"])
 
     async def test_the_incident_is_marked_as_system_raised(self):
         for _ in range(10):

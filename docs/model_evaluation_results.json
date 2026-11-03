@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "generated_on": "2026-10-27",
   "last_updated": "2026-11-03",
-  "revision_note": "2026-11-02: the 6-class fp16 TFLite export was produced and validated (see remediation_in_progress.weapon_six_class.tflite_export), which answered and removed the not_yet_exported_for_the_app caveat; and the class-name metadata defect was fixed on the shipped 2-class asset (see models[0].class_name_metadata). The shipped asset's whole-file SHA-256 therefore changed. Its graph SHA-256 did not, which is why every accuracy figure in this file still stands unaltered. 2026-11-03: two defects fixed in the auto-SOS path itself -- a missing lock let concurrent readings dispatch to every contact twice (measured: 3 concurrent readings produced 2 dispatches), and smoothing state with no TTL could hold a genuine first spike below the threshold. Also corrected: the claim that a 5-second countdown stands between an automatic trigger and dispatch. It does not.",
+  "revision_note": "2026-11-02: the 6-class fp16 TFLite export was produced and validated (see remediation_in_progress.weapon_six_class.tflite_export), which answered and removed the not_yet_exported_for_the_app caveat; and the class-name metadata defect was fixed on the shipped 2-class asset (see models[0].class_name_metadata). The shipped asset's whole-file SHA-256 therefore changed. Its graph SHA-256 did not, which is why every accuracy figure in this file still stands unaltered. 2026-11-03: two defects fixed in the auto-SOS path itself -- a missing lock let concurrent readings dispatch to every contact twice (measured: 3 concurrent readings produced 2 dispatches), and smoothing state with no TTL could hold a genuine first spike below the threshold. Also corrected: the claim that a 5-second countdown stands between an automatic trigger and dispatch. It does not. 2026-11-03: recorded the decision that auto-SOS has no cancellation window (see decisions_taken), which accepts the section 5.5 exposure rather than mitigating it.",
   "title": "SafeHer model evaluation results",
   "summary": "Measured accuracy for the four shipped models, plus a false-positive investigation of the weapon detector. Every result carries an `evidence` field; read it before quoting the number.",
   "evidence_grades": {
@@ -1480,5 +1480,19 @@
     "Re-measure the emotion model, or stop quoting 65.5% as if it were tested.",
     "Export the 6-class model to fp16 TFLite and validate it, since the app loads TFLite and the box/layout conventions differ from ONNX.",
     "Machine stability (user-owned): eight unexpected shutdowns since early September, two of them during this training run, Kernel-Power 41 with no bugcheck. This blocks any long training run and is a hardware question, not a SafeHer one."
-  ]
+  ],
+  "decisions_taken": {
+    "auto_sos_cancellation_window": {
+      "decided_on": "2026-11-03",
+      "decision": "NO cancellation window. An automatic alert notifies every emergency contact as soon as the smoothed score crosses the threshold. The phone is not consulted, there is no hold-off, and there is nothing to dismiss.",
+      "reasoning": "FR-EMG-02's acceptance criterion is zero user interaction required, and it exists for the situations where she cannot act. A window an incapacitated woman cannot dismiss only delays help, and a window an attacker can dismiss is worse than none because it converts a raised alarm into a silenced one.",
+      "cost_accepted": "The exposure measured in weapon_false_positive_investigation and in report section 5.5 is accepted, not mitigated: a phone or purse in view during an already-elevated moment can drive an automatic dispatch with no weapon present, and nothing in the path asks her first. A false alarm under this decision is NOT recoverable by the user -- it reaches her contacts. The remaining mitigations are the 0.75 threshold, the EMA, and the 120-second deduplication window.",
+      "raises_the_stakes_on": [
+        "Re-measuring the section 5.4 persistence probe at the deployed window of 15: the visual signal's false-positive behaviour is now the dominant risk in this path.",
+        "The open decision on whether a solo visual signal may trigger unaided, which is the remaining lever on the same exposure."
+      ],
+      "pinned_by": "tests/test_threat_fusion.py::TestAutoSosEndToEnd::test_an_automatic_alert_has_no_cancellation_window requires the dispatch fan-out to be underway when the request returns, so a later hold-off fails a test rather than quietly reversing the decision.",
+      "not_part_of_this_decision": "A post-dispatch retraction -- contacts told immediately, then told it was a false alarm if she says so within seconds -- is a different mechanism because it delays nothing. It was not asked and remains open."
+    }
+  }
 }
