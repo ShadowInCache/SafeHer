@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' show Size;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:safeher_app/features/devices/data/weapon_detection_service.dart';
@@ -33,6 +34,12 @@ class _FakeDetector implements WeaponDetector {
 
   @override
   Future<void> dispose() async => disposed = true;
+
+  /// Settable so a test can make the detector report a frame size, or refuse
+  /// to — the overlay must cope with a detector that never says how big the
+  /// picture was, because the server-side one never does.
+  @override
+  Size? lastFrameSize;
 }
 
 void main() {

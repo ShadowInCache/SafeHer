@@ -8,6 +8,8 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/components/icons/sa_icon.dart';
 import '../../data/glasses_preview_providers.dart';
 import '../../data/mjpeg_client.dart';
+import '../../data/weapon_overlay_providers.dart';
+import 'weapon_detection_overlay.dart';
 
 /// A live view of what the glasses can see.
 ///
@@ -68,6 +70,14 @@ class _GlassesLivePreviewState extends ConsumerState<GlassesLivePreview> {
   }
 }
 
+/// How the video is painted into the preview box.
+///
+/// Named once and shared with the overlay, because the two must agree. The
+/// overlay undoes exactly this fit to place its boxes, so a change here that
+/// did not reach the overlay would move every box off its target — silently,
+/// and by an amount that depends on the device's aspect ratio.
+const BoxFit _videoFit = BoxFit.cover;
+
 class _PreviewSurface extends ConsumerWidget {
   const _PreviewSurface();
 
@@ -85,13 +95,24 @@ class _PreviewSurface extends ConsumerWidget {
         onSurface: onSurface,
       );
     } else if (frame != null && status != GlassesStreamStatus.disconnected) {
-      body = Image.memory(
-        frame,
-        // Without this the widget blanks between frames and the preview
-        // strobes instead of playing.
-        gaplessPlayback: true,
-        fit: BoxFit.cover,
-        width: double.infinity,
+      // The video and the boxes are separate layers on purpose. Painting the
+      // boxes into the image would couple the overlay's rate to the video's,
+      // and a slow inference would then hold up a frame that is ready to show.
+      // Stacked, the video plays at whatever rate it arrives and the boxes
+      // land on top of whichever frame is current.
+      body = Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.memory(
+            frame,
+            // Without this the widget blanks between frames and the preview
+            // strobes instead of playing.
+            gaplessPlayback: true,
+            fit: _videoFit,
+            width: double.infinity,
+          ),
+          const _DetectionLayer(fit: _videoFit),
+        ],
       );
     } else if (status == GlassesStreamStatus.disconnected) {
       // Never keep showing the last frame here: a still picture presented as
@@ -119,8 +140,12 @@ class _PreviewSurface extends ConsumerWidget {
             ),
           ),
         ),
-        if (source?.isShared ?? false) ...[
+        if (source != null) ...[
           const SizedBox(height: AppSpacing.space2),
+          _DetectionStatus(onSurface: onSurface),
+        ],
+        if (source?.isShared ?? false) ...[
+          const SizedBox(height: AppSpacing.space1),
           Text(
             'This is the same video weapon detection is scoring.',
             style: AppTypography.bodyS.copyWith(color: onSurface.withValues(alpha: 0.6)),
@@ -129,6 +154,100 @@ class _PreviewSurface extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// The boxes, and nothing else.
+///
+/// Separated from [_PreviewSurface] so that a rebuild caused by a new
+/// detection repaints only this layer, leaving the `Image.memory` above it
+/// untouched. Rebuilding the image on every inference would decode the JPEG
+/// again five times a second for no visible change.
+class _DetectionLayer extends ConsumerWidget {
+  const _DetectionLayer({required this.fit});
+
+  final BoxFit fit;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(weaponOverlayStateProvider).valueOrNull;
+    if (state == null) return const SizedBox.shrink();
+
+    // Asked at paint time rather than tracked by a timer: this layer rebuilds
+    // with the video, so an inference that stopped arriving ages out on the
+    // next frame rather than waiting for a clock to notice.
+    final visible = state.visibleAt(DateTime.now());
+    if (visible.isEmpty) return const SizedBox.shrink();
+
+    return WeaponDetectionOverlay(
+      detections: visible,
+      frameSize: state.frameSize,
+      fit: fit,
+    );
+  }
+}
+
+/// A one-line statement of what the detector is doing, under the picture.
+///
+/// Present because a preview with no boxes is ambiguous: it could mean the
+/// model looked and saw nothing, or that nothing is running at all. Those are
+/// very different things for a user deciding whether to trust the system, and
+/// the second one is the failure this project has hit five times.
+class _DetectionStatus extends ConsumerWidget {
+  const _DetectionStatus({required this.onSurface});
+
+  final Color onSurface;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!canRunWeaponDetectorOnDevice) {
+      return _StatusLine(
+        text: 'Weapon detection does not run on this platform.',
+        colour: onSurface.withValues(alpha: 0.6),
+      );
+    }
+
+    final detector = ref.watch(weaponOverlayDetectorProvider);
+    if (detector == null) {
+      return _StatusLine(
+        text: 'Weapon detection is not running.',
+        colour: onSurface.withValues(alpha: 0.6),
+      );
+    }
+
+    final state = ref.watch(weaponOverlayStateProvider).valueOrNull;
+    final visible = state?.visibleAt(DateTime.now()) ?? const [];
+    if (visible.isEmpty) {
+      return _StatusLine(
+        text: 'Watching — no weapon detected.',
+        colour: onSurface.withValues(alpha: 0.6),
+      );
+    }
+
+    final strongest = visible.reduce(
+      (a, b) => b.confidence > a.confidence ? b : a,
+    );
+    return _StatusLine(
+      text: visible.length == 1
+          ? 'Weapon detected: ${strongest.label} '
+              '${(strongest.confidence * 100).round()}%'
+          : '${visible.length} weapons detected — strongest '
+              '${strongest.label} ${(strongest.confidence * 100).round()}%',
+      colour: AppColors.coral500,
+    );
+  }
+}
+
+class _StatusLine extends StatelessWidget {
+  const _StatusLine({required this.text, required this.colour});
+
+  final String text;
+  final Color colour;
+
+  @override
+  Widget build(BuildContext context) => Text(
+        text,
+        style: AppTypography.bodyS.copyWith(color: colour),
+      );
 }
 
 class _Message extends StatelessWidget {

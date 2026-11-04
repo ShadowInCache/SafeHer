@@ -62,12 +62,54 @@ library;
 
 import 'dart:collection';
 
+/// Where in the frame a detection sat, in normalised 0..1 coordinates.
+///
+/// **Normalised rather than pixels, deliberately.** The overlay has to land on
+/// a widget whose size is decided by the layout and whose aspect ratio rarely
+/// matches the camera's, so a pixel box would have to be re-scaled by whoever
+/// drew it and would be wrong the moment the frame size changed. Fractions of
+/// the source frame survive every resize, and the one transform that remains —
+/// the `BoxFit` the preview uses — is applied once, where the painting happens.
+///
+/// The fields are the plugin's `x1_norm`/`y1_norm`/`x2_norm`/`y2_norm`, which
+/// `YOLOPlugin.kt` computes by dividing the box by the decoded bitmap's own
+/// width and height. They are not clamped here: a model may legitimately put an
+/// edge slightly outside the frame, and clamping is the painter's business
+/// because only the painter knows what is visible after cropping.
+class WeaponBox {
+  const WeaponBox({
+    required this.left,
+    required this.top,
+    required this.right,
+    required this.bottom,
+  });
+
+  final double left;
+  final double top;
+  final double right;
+  final double bottom;
+
+  double get width => right - left;
+  double get height => bottom - top;
+
+  /// A box with no area tells the overlay nothing and would paint as a line.
+  bool get isUsable =>
+      width > 0 && height > 0 && left.isFinite && top.isFinite &&
+      right.isFinite && bottom.isFinite;
+
+  @override
+  String toString() => 'WeaponBox(${left.toStringAsFixed(3)}, '
+      '${top.toStringAsFixed(3)}, ${right.toStringAsFixed(3)}, '
+      '${bottom.toStringAsFixed(3)})';
+}
+
 /// One thing the detector claims to have seen in one frame.
 class WeaponDetection {
   const WeaponDetection({
     required this.label,
     required this.confidence,
     required this.at,
+    this.box,
   });
 
   /// `pistol` or `knife` for the shipped detector.
@@ -83,6 +125,17 @@ class WeaponDetection {
   final double confidence;
 
   final DateTime at;
+
+  /// Where it sat in the frame, when the detector reported a position.
+  ///
+  /// **Nullable, and scoring must never read it.** The server path
+  /// (`/alerts/weapon-frame`) returns only a label and a confidence, so a web
+  /// detection genuinely has no box, and a detector that invented one would be
+  /// drawing a rectangle nobody measured. `WeaponScorer` ignores this field
+  /// entirely: a detection with a box and a detection without one are worth
+  /// exactly the same to the alarm, because position is a display concern and
+  /// persistence is the safety concern.
+  final WeaponBox? box;
 
   /// Classes a detector may report that are explicitly *not* weapons.
   ///

@@ -116,3 +116,31 @@ MJPEG stream and the pairing sheet verifies a device answers as a SafeHer
 camera. What remains unproven is the end-to-end path against **real** glasses
 hardware: the video path has only been exercised against a synthetic MJPEG
 stream.
+
+### The detections are now also drawn (2026-11-04)
+
+Nothing above changes: inference still runs on the phone, and the overlay adds
+no new inference to an armed journey. It draws what the existing detector
+already produced — the boxes used to be discarded by `parseDetections`, which
+read only the class name and the confidence.
+
+There are now **two places a detector can exist**, and the difference between
+them is the whole safety argument:
+
+| Owner | When | Feeds fusion |
+|---|---|---|
+| `ThreatPipeline` | a Safe Journey is armed | **yes** |
+| `weaponOverlayDetectorProvider` | the live preview is open with no journey | **no** |
+
+The preview's detector exists so the system can be shown working without
+triggering a real emergency flow. Its `scores` stream has no listener, so
+nothing it sees can reach `ThreatSignals.weapon`, raise a threat level or
+dispatch an alert; it feeds a rectangle. When a journey is armed the preview
+borrows the pipeline's detector instead, so the two never run at once.
+
+The overlay is deliberately **more eager than the alarm**. It draws at the
+detector's own reporting threshold (0.35) while the scorer counts nothing below
+0.55 and then demands persistence across a window of frames. A single frame
+with a knife in it therefore draws a box immediately and moves the score hardly
+at all. That is intended: a box is what the model saw, the score is what the
+system believes, and drawing is not an accusation.

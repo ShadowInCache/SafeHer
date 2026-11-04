@@ -17,6 +17,7 @@ import '../../../core/network/network_providers.dart';
 import '../../devices/data/glove_link_providers.dart';
 import '../../devices/data/mjpeg_client.dart';
 import '../../devices/data/remote_weapon_detector.dart';
+import '../../devices/data/weapon_overlay_providers.dart';
 import '../../devices/data/ultralytics_weapon_detector.dart';
 import '../../devices/data/weapon_detection_service.dart';
 import '../../../shared/models/threat_level.dart';
@@ -401,6 +402,10 @@ class ThreatPipeline extends _$ThreatPipeline {
           onDevice ? const Duration(milliseconds: 200) : const Duration(seconds: 2),
     );
     _weapons = service;
+    // Published so the live preview can draw this detector's boxes instead of
+    // starting a second model. Read-only to everything outside this class:
+    // the overlay subscribes to `overlayFrames` and touches nothing else.
+    ref.read(activeWeaponDetectionServiceProvider.notifier).state = service;
 
     _weaponSub = service.scores.listen((score) {
       // A score computed from an empty window is not an observation. The
@@ -510,6 +515,10 @@ class ThreatPipeline extends _$ThreatPipeline {
     // Cleared before anything else can borrow a stopped stream and render its
     // last frame as though the camera were still watching.
     ref.read(activeGlassesVideoStreamProvider.notifier).state = null;
+    // Same reasoning for the detector: a disposed service must not stay
+    // published, or the overlay would hold a reference to a dead stream and
+    // keep its last boxes on screen.
+    ref.read(activeWeaponDetectionServiceProvider.notifier).state = null;
 
     ref.read(threatSignalAggregatorProvider).disarm();
     ref.read(microphoneArbiterProvider.notifier).releaseThreatListening();

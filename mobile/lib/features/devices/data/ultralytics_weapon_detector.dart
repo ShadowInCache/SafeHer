@@ -1,4 +1,6 @@
 
+import 'dart:ui' show Size;
+
 import 'package:flutter/foundation.dart';
 import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 
@@ -82,8 +84,18 @@ class UltralyticsWeaponDetector implements WeaponDetector {
       jpegFrame,
       confidenceThreshold: _reportingThreshold,
     );
-    return parseDetections(raw, at: DateTime.now());
+    final frameSize = parseFrameSize(raw);
+    // Remembered rather than recomputed: the overlay needs it to undo the
+    // preview's `BoxFit`, and decoding the JPEG again purely to ask its
+    // dimensions would double the per-frame cost for a number the plugin
+    // already told us.
+    if (frameSize != null) _lastFrameSize = frameSize;
+    return parseDetections(raw, at: DateTime.now(), frameSize: frameSize);
   }
+
+  @override
+  Size? get lastFrameSize => _lastFrameSize;
+  Size? _lastFrameSize;
 
   /// Reads the plugin's result map into the scorer's vocabulary.
   ///
@@ -95,6 +107,7 @@ class UltralyticsWeaponDetector implements WeaponDetector {
   static List<WeaponDetection> parseDetections(
     Map<String, dynamic> raw, {
     required DateTime at,
+    Size? frameSize,
   }) {
     final boxes = raw['boxes'] ?? raw['detections'] ?? raw['results'];
     if (boxes is! List) return const [];
@@ -109,10 +122,72 @@ class UltralyticsWeaponDetector implements WeaponDetector {
       if (label == null || confidence == null) continue;
 
       detections.add(
-        WeaponDetection(label: label, confidence: confidence, at: at),
+        WeaponDetection(
+          label: label,
+          confidence: confidence,
+          at: at,
+          box: parseBox(entry, frameSize: frameSize),
+        ),
       );
     }
     return detections;
+  }
+
+  /// Reads one detection's normalised box, or null when there is not one.
+  ///
+  /// `YOLOPlugin.kt` emits both `x1..y2` in bitmap pixels and `x1_norm..y2_norm`
+  /// already divided by the bitmap's width and height. The normalised pair is
+  /// read first because it is the one that survives the frame changing size.
+  ///
+  /// Falling back to the pixel pair would need the frame dimensions to be
+  /// correct, and a box silently divided by the wrong size is exactly the class
+  /// of error that once made this model score mAP 0.0 while being perfectly
+  /// healthy — confident, precisely drawn, entirely wrong. So the fallback
+  /// divides by a frame size only when the response actually states one, and
+  /// otherwise returns null: no box at all is a visible failure, a misplaced
+  /// box is an invisible one.
+  @visibleForTesting
+  static WeaponBox? parseBox(Map<dynamic, dynamic> entry, {Size? frameSize}) {
+    final left = _toDouble(entry['x1_norm']);
+    final top = _toDouble(entry['y1_norm']);
+    final right = _toDouble(entry['x2_norm']);
+    final bottom = _toDouble(entry['y2_norm']);
+    if (left != null && top != null && right != null && bottom != null) {
+      final box = WeaponBox(left: left, top: top, right: right, bottom: bottom);
+      return box.isUsable ? box : null;
+    }
+
+    if (frameSize == null || frameSize.width <= 0 || frameSize.height <= 0) {
+      return null;
+    }
+    final x1 = _toDouble(entry['x1']);
+    final y1 = _toDouble(entry['y1']);
+    final x2 = _toDouble(entry['x2']);
+    final y2 = _toDouble(entry['y2']);
+    if (x1 == null || y1 == null || x2 == null || y2 == null) return null;
+    final box = WeaponBox(
+      left: x1 / frameSize.width,
+      top: y1 / frameSize.height,
+      right: x2 / frameSize.width,
+      bottom: y2 / frameSize.height,
+    );
+    return box.isUsable ? box : null;
+  }
+
+  /// The decoded frame's pixel size, as the plugin reported it.
+  ///
+  /// Carried so the overlay can work out what `BoxFit.cover` cropped away
+  /// without decoding the JPEG a second time just to ask its dimensions.
+  @visibleForTesting
+  static Size? parseFrameSize(Map<String, dynamic> raw) {
+    final size = raw['imageSize'];
+    if (size is! Map) return null;
+    final width = _toDouble(size['width']);
+    final height = _toDouble(size['height']);
+    if (width == null || height == null || width <= 0 || height <= 0) {
+      return null;
+    }
+    return Size(width, height);
   }
 
   static double? _toDouble(Object? value) {
