@@ -162,8 +162,17 @@ flutter:
     #
     #   weapon_yolov8n_fp16.tflite  6.13 MB  read by ultralytics_yolo
     #   phrase_classifier.json      0.20 MB  read by core/audio, pure Dart
-    #   emotion_mobilenetv3_fp16    3.09 MB  NOT wired — supporting evidence
-    #                                        only, and barred from the score
+    #   weapon_labels.txt           13 B     NOT read on device — the plugin
+    #                                        takes class names from metadata
+    #                                        inside the .tflite. Kept beside
+    #                                        the model as documentation of the
+    #                                        class order; the backend's own
+    #                                        copy under ml_models/ is the one
+    #                                        that is actually read.
+    #
+    # The emotion classifier is NOT here and is not bundled. It runs
+    # server-side from ml_models/emotion_mobilenetv3_fp16.onnx, on frames the
+    # phone has already uploaded, and is barred from the threat score.
     #
     # See assets/models/README.md for what each one measured and why the
     # emotion model cannot touch the threat score.

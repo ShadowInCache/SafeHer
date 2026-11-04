@@ -181,5 +181,67 @@ void main() {
       expect(score.strongestLabel, 'pistol');
       expect(score.strongestConfidence, closeTo(0.93, 1e-9));
     });
+
+    // The 6-class detector names the objects the 2-class one mistook for
+    // weapons. On the 1,385 held-out negatives it emits 10,960 boxes whose
+    // best class is a distractor. Before this filter existed, `observe`
+    // screened on confidence alone, so every one of those would have counted
+    // as a weapon hit and the model built to fix false positives would have
+    // multiplied them instead.
+    test('a confident distractor class cannot score at all', () {
+      final scorer = WeaponScorer();
+      for (var i = 0; i < 5; i++) {
+        scorer.observe(
+          [WeaponDetection(label: 'smartphone', confidence: 0.99, at: at(i))],
+          now: at(i),
+        );
+      }
+
+      final score = scorer.current(now: at(4));
+      expect(score.value, 0.0);
+      expect(score.strongestLabel, isNull);
+    });
+
+    test('a weapon is still scored when a distractor outranks it', () {
+      final scorer = WeaponScorer();
+      for (var i = 0; i < 5; i++) {
+        scorer.observe([
+          WeaponDetection(label: 'monedero', confidence: 0.98, at: at(i)),
+          WeaponDetection(label: 'knife', confidence: 0.80, at: at(i)),
+        ], now: at(i));
+      }
+
+      // The wallet is dropped, so the knife — not the higher-scoring wallet —
+      // becomes the frame's detection.
+      final score = scorer.current(now: at(4));
+      expect(score.strongestLabel, 'knife');
+      expect(score.value, closeTo(0.80, 1e-9));
+    });
+
+    test('an unrecognised label still counts, rather than failing closed', () {
+      final scorer = WeaponScorer();
+      for (var i = 0; i < 5; i++) {
+        scorer.observe(
+          [WeaponDetection(label: 'machete', confidence: 0.90, at: at(i))],
+          now: at(i),
+        );
+      }
+
+      // Deliberate: the filter is a reject list, not an allow list. A plugin
+      // upgrade that renames classes, or a label file read as indices, must
+      // not silently turn a running detector into one that always reports
+      // calm.
+      expect(scorer.current(now: at(4)).value, closeTo(0.90, 1e-9));
+    });
+
+    test('distractor matching ignores case and surrounding whitespace', () {
+      final scorer = WeaponScorer();
+      scorer.observe(
+        [WeaponDetection(label: ' SmartPhone ', confidence: 0.99, at: at(0))],
+        now: at(0),
+      );
+
+      expect(scorer.current(now: at(0)).value, 0.0);
+    });
   });
 }

@@ -29,10 +29,16 @@ expression classifier runs on it too. Its output goes into `SupportingContext`
 and **never** into `fuse()` — that boundary is a product decision recorded in
 `threat_fusion`, and `tests/test_fusion_architecture.py` fails if it drifts.
 
-The model's own numbers are the argument for it. 65.5% overall, and `fear` is
-its weakest class at 47% recall — the one expression with safety relevance is
-close to a coin toss. It is worth recording on an incident and worthless as a
-trigger.
+The model's own numbers are the argument for it, and they are the *training
+run's* own numbers rather than a verified measurement: 65.5% overall, with
+`fear` its weakest class at 47% recall — the one expression with safety
+relevance is close to a coin toss. It is worth recording on an incident and
+worthless as a trigger.
+
+Neither figure has been independently re-measured, and the test corpora are no
+longer on disk, so neither should be quoted as tested. That is tolerable only
+because this model cannot reach the score. See `docs/MODEL_TEST_REPORT.md`
+section 4.5.
 """
 
 from __future__ import annotations

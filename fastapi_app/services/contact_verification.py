@@ -32,6 +32,7 @@ from fastapi_app.repositories.auth_security import generate_code
 from fastapi_app.security import get_password_hash, verify_password
 from fastapi_app.services.onesignal import OneSignalEmailSender
 from fastapi_app.services.smtp_email import build_email_sender
+from fastapi_app.time_utils import naive_utc_now as _utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +49,6 @@ class ContactVerificationError(RuntimeError):
     """Raised when a code cannot be issued or checked."""
 
 
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def build_verification_email(*, user_name: str, contact_name: str, code: str) -> tuple[str, str]:

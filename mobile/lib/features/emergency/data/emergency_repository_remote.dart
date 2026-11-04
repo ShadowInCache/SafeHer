@@ -1,4 +1,5 @@
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_time.dart';
 import '../domain/emergency_repository.dart';
 
 /// `fastapi_app`-backed [EmergencyRepository] — `POST /api/v1/alerts/emergency`.
@@ -57,6 +58,31 @@ class EmergencyRepositoryRemote implements EmergencyRepository {
     );
     final data = response.data ?? const <String, dynamic>{};
     return _outcomeFrom(data, fallbackIncidentId: incidentId);
+  }
+
+  @override
+  Future<RetractionOutcome> retractAlert(String incidentId) async {
+    final response = await _apiClient.dio.post<Map<String, dynamic>>(
+      '/alerts/emergency/$incidentId/retract',
+    );
+    final data = response.data ?? const <String, dynamic>{};
+    final rawStatus = data['retraction_status'] as String?;
+    return RetractionOutcome(
+      incidentId: (data['incident_id'] as String?) ?? incidentId,
+      // Through `tryParseApiTime`, not `DateTime.tryParse`: a bare timestamp
+      // would otherwise be read as local time and be wrong by the phone's UTC
+      // offset. A value that will not parse resolves to null, which the
+      // screen reads as "the server did not say" rather than "not
+      // retracted" — the request succeeded either way.
+      retractedAt: tryParseApiTime(data['retracted_at']),
+      contactsNotified: (data['contacts_notified'] as num?)?.toInt(),
+      alreadyRetracted: data['already_retracted'] == true,
+      // Anything other than an explicit "in_progress" counts as settled, for
+      // the same reason `_progressFrom` does it: an older backend that does
+      // not send the field must not leave the screen spinning forever on a
+      // correction that has in fact gone out.
+      settled: rawStatus != 'in_progress',
+    );
   }
 
   /// Both endpoints describe the same thing, so they are read the same way.

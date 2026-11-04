@@ -24,6 +24,10 @@ class TestEndToEnd(unittest.TestCase):
     def setUpClass(cls):
         cls.base_url = TEST_CONFIG['API_BASE_URL']
         cls.access_token = None
+        # Why there is no token, which is not the same question as whether
+        # there is one. See `_require_auth`.
+        cls.server_reachable = False
+        cls.auth_failure = None
 
         email = f"integration-{uuid4().hex}@safeherapp.com"
         password = TEST_CONFIG.get('TEST_USER_PASSWORD', 'TestPass123!')
@@ -46,11 +50,42 @@ class TestEndToEnd(unittest.TestCase):
                 json={'email': email, 'password': password},
                 timeout=5,
             )
+            # The server answered, so from here on a missing token is a real
+            # defect rather than a missing environment.
+            cls.server_reachable = True
             if response.status_code == 200:
                 cls.access_token = response.json().get('access_token')
-        except requests.RequestException:
-            cls.access_token = None
-    
+                if not cls.access_token:
+                    cls.auth_failure = (
+                        "login returned 200 with no access_token in the body: "
+                        f"{response.text[:200]}"
+                    )
+            else:
+                cls.auth_failure = (
+                    f"login returned {response.status_code}: {response.text[:200]}"
+                )
+        except requests.RequestException as exc:
+            cls.auth_failure = f"{type(exc).__name__}: {exc}"
+
+    def _require_auth(self):
+        """Skip when there is no server; FAIL when there is one and login broke.
+
+        These two conditions used to collapse into a single
+        `skipTest("Authentication failed")`, which meant a genuine regression
+        in login was indistinguishable from nobody having started the backend.
+        A safety system's end-to-end tests reporting "skipped" either way is
+        the failure mode where the suite stays green and tells you nothing.
+        """
+        if self.access_token:
+            return
+        if not self.server_reachable:
+            self.skipTest(f"API Gateway not running ({self.auth_failure})")
+        self.fail(
+            "the API Gateway is running but a freshly registered user could "
+            f"not log in -- {self.auth_failure}. This is a real failure in "
+            "registration or login, not a missing test environment."
+        )
+
     def test_user_registration_to_device_pairing(self):
         """Test complete flow: registration -> login -> device pairing"""
         try:
@@ -102,8 +137,7 @@ class TestEndToEnd(unittest.TestCase):
     
     def test_threat_detection_to_alert(self):
         """Test flow: threat detected -> alert triggered -> contacts notified"""
-        if not self.access_token:
-            self.skipTest("Authentication failed")
+        self._require_auth()
 
         try:
             response = requests.post(
@@ -132,8 +166,7 @@ class TestEndToEnd(unittest.TestCase):
     
     def test_device_data_to_incident_storage(self):
         """Test flow: device sends data -> processed -> stored as incident"""
-        if not self.access_token:
-            self.skipTest("Authentication failed")
+        self._require_auth()
 
         try:
             response = requests.post(
@@ -160,8 +193,7 @@ class TestEndToEnd(unittest.TestCase):
     
     def test_sos_trigger_complete_flow(self):
         """Test SOS: trigger -> location sent -> contacts notified -> evidence stored"""
-        if not self.access_token:
-            self.skipTest("Authentication failed")
+        self._require_auth()
 
         try:
             response = requests.post(

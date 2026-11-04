@@ -19,6 +19,7 @@ from fastapi_app.models import Incident, IncidentShare, Media
 from fastapi_app.schemas import UserPublic
 from fastapi_app.security import get_current_user
 from fastapi_app.services.evidence_store import EvidenceStore, EvidenceStoreError
+from fastapi_app.time_utils import utc_epoch_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -269,7 +270,10 @@ async def sign_upload(
         secure=True,
     )
 
-    timestamp = int(datetime.utcnow().timestamp())
+    # Not `datetime.utcnow().timestamp()`: that reads the naive value as local
+    # time and signs with a timestamp wrong by the host's UTC offset, which
+    # Cloudinary rejects as stale. See `time_utils.utc_epoch_seconds`.
+    timestamp = utc_epoch_seconds()
     params = {
         "timestamp": timestamp,
         "folder": payload.folder,

@@ -37,6 +37,7 @@ from fastapi_app.models import Incident, IncidentShare, Location, Media
 from fastapi_app.schemas import UserPublic
 from fastapi_app.security import get_current_user
 from fastapi_app.services.evidence_store import EvidenceStore, EvidenceStoreError
+from fastapi_app.time_utils import naive_utc_now as _utcnow
 
 router = APIRouter(prefix="/api/v1", tags=["shares"])
 
@@ -44,8 +45,6 @@ DEFAULT_SHARE_DAYS = 7
 MAX_SHARE_DAYS = 30
 
 
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _hash_token(token: str) -> str:

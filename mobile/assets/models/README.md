@@ -2,11 +2,12 @@
 
 ## `weapon_yolov8n_fp16.tflite`
 
-YOLOv8-nano, two classes, LiteRT with fp16 weights. **6.13 MB.**
+YOLOv8-nano, two classes, LiteRT with fp16 weights. **6.13 MB** — a
+6,129,244-byte graph plus a 428-byte appended class-name archive.
 
 | | |
 |---|---|
-| Classes | `0 pistol`, `1 knife` — order matters, see `weapon_labels.txt` |
+| Classes | `0 pistol`, `1 knife` — order matters. On device the names come from metadata **inside this file**, not from `weapon_labels.txt`; see below. |
 | Input | `1×640×640×3` (NHWC), RGB, float32, normalised 0–1 |
 | Output | `1×6×8400` — `[cx, cy, w, h, pistol_conf, knife_conf]` per anchor, **box coordinates normalised 0–1** |
 | Trained | v2, 2026-08-31, 120 epochs, RTX 3050 |
@@ -17,7 +18,7 @@ YOLOv8-nano, two classes, LiteRT with fp16 weights. **6.13 MB.**
 658 images, 783 boxes. Never trained on, never used to pick a checkpoint, and
 **byte-identical between v1 and v2** so the two are directly comparable.
 
-| | v1 fp32 | v2 fp32 | **v2 INT8 (this file)** |
+| | v1 fp32 | v2 fp32 | **v2 INT8 (ONNX, server-side)** |
 |---|---|---|---|
 | Size | 6.22 MB | 6.24 MB | **3.36 MB** |
 | mAP@0.5 | 0.8936 | 0.9067 | **0.9013** |
@@ -31,6 +32,36 @@ Quantisation costs about half a point of mAP@0.5 and one point of recall for a
 46% size reduction. Measured, not assumed — a quantised detector that had lost
 ten points of recall would still load, still run and still draw boxes; it would
 simply miss more knives.
+
+**No column above describes this file.** The INT8 column was previously labelled
+"this file", which was wrong: the shipped asset is fp16 and the INT8 artifact is
+the server-side ONNX. The fp16 file in this directory measures **mAP@0.5 0.9056**
+on the same 658-image split, and **precision 0.932 / recall 0.805** at the
+deployed confidence floor of 0.55. See `docs/MODEL_TEST_REPORT.md` §4.1, which is
+the authority for these figures.
+
+Accuracy on this split is also not the number that matters most. The split
+contains **no weapon-free images**, so it measures precision *given* a weapon is
+present. On real weapon-free frames the detector fires on 20.3% of them at the
+deployed floor — see §5 of the report.
+
+### Class names come from inside this file
+
+The Ultralytics plugin reads class names from an uncompressed ZIP appended after
+the FlatBuffer, holding one entry named `TFLITE_ULTRALYTICS_METADATA.json` whose
+`names` field is an index→name object. With no such archive the plugin falls back
+to `labelName()`'s positional string and every detection arrives as `"class 0"`,
+`"class 1"`.
+
+This file carried no metadata until 2026-11-02, so that fallback was live.
+`weapon_labels.txt` did **not** cover it — nothing on the device reads that file;
+its only reader is `fastapi_app/services/weapon_detector.py`. Because
+`WeaponScorer` decides what counts as a weapon by *name*, the gap mattered: see
+§7.2 of the report for why it was survivable here and would be fatal for a model
+with distractor classes.
+
+If you re-export this model, **attach the metadata again**.
+`tests/test_weapon_model_metadata.py` fails if you forget.
 
 ### What v2 fixed
 

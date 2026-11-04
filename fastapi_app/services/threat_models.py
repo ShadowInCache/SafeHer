@@ -34,9 +34,18 @@ Where each one runs, and what it measured:
             source dataset, 14.6% produce a detection at 0.55. See
             `WeaponScorer` for what that means for the score.
 
-    emotion  trained (65.5%) and deliberately NOT a fusion input. It is
-             supporting evidence only; `test_fusion_architecture.py` enforces
-             that it can never reach the score.
+    emotion  deliberately NOT a fusion input. It is supporting evidence only;
+             `test_fusion_architecture.py` enforces that it can never reach the
+             score.
+
+             Its 65.5% is the training run's own reported test accuracy
+             (`emotion_recognition/runs/metrics.json`, which also records
+             best_val_accuracy 0.6392). It has NOT been independently
+             re-measured and must not be quoted as a tested figure: the three
+             test corpora are no longer on disk, so re-measuring it is blocked
+             on re-acquiring data, not on effort. Because the model gates no
+             alarm, this is a disclosure problem rather than a safety one.
+             See `docs/MODEL_TEST_REPORT.md` section 4.5.
 
 Two things this pipeline still does not do, both recorded so neither gets
 assumed:

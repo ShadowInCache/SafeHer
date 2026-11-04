@@ -4,6 +4,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, PlainSerializer, field_validator
 
+from fastapi_app.time_utils import naive_utc_now
+
 
 def _ensure_utc(value: datetime) -> datetime:
     """Tag a naive timestamp as UTC.
@@ -79,7 +81,7 @@ class UserPublic(UserBase):
     # SRS FR-EMG-02 -- the score at which SafeHer raises the alarm unasked.
     threat_threshold: float = 0.75
     deletion_requested_at: Optional[UtcDatetime] = None
-    created_at: UtcDatetime = Field(default_factory=datetime.utcnow)
+    created_at: UtcDatetime = Field(default_factory=naive_utc_now)
     updated_at: Optional[UtcDatetime] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -257,6 +259,18 @@ class IncidentPublic(BaseModel):
     # "complete" once it has finished, "failed" if it crashed. None means no
     # dispatch was ever attempted for this incident.
     dispatch_status: Optional[str] = None
+
+    # Set when the owner stood this alert down as a false alarm. None is the
+    # normal state of a real emergency, so this must never be rendered as
+    # "not yet retracted".
+    #
+    # Carried on every incident response, not just the retract one, because
+    # the history screen would otherwise show a corrected false alarm as an
+    # emergency that happened — and a woman scrolling her own incident list
+    # should not have to re-read an alert she already took back.
+    retracted_at: Optional[UtcDatetime] = None
+    retraction_status: Optional[str] = None
+    retraction_contacts_notified: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 

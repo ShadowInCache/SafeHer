@@ -20,6 +20,7 @@ from fastapi_app.services.incident_summary import (
 )
 from fastapi_app.services.notifications import send_fcm_notification
 from fastapi_app.config import Settings, get_settings
+from fastapi_app.time_utils import naive_utc_now
 
 router = APIRouter(prefix="/api/v1/incidents", tags=["incidents"])
 
@@ -235,7 +236,7 @@ async def generate_incident_summary(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
 
     incident.ai_summary = summary
-    incident.ai_summary_generated_at = datetime.utcnow()
+    incident.ai_summary_generated_at = naive_utc_now()
     await session.commit()
 
     return {

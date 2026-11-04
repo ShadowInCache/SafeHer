@@ -149,3 +149,39 @@ def maps_link(latitude: Optional[float], longitude: Optional[float]) -> Optional
     if latitude is None or longitude is None:
         return None
     return f"https://maps.google.com/?q={latitude:.6f},{longitude:.6f}"
+
+
+def build_retraction_sms(*, user_name: str, local_time: str) -> str:
+    """Composes the "it was a false alarm" message that follows a retraction.
+
+    This is the correction for an automatic alert that should not have gone
+    out. Auto-SOS dispatches the instant fusion crosses the threshold, with
+    no cancellable countdown in front of it (see `threat_fusion`), so the
+    only way back is to tell the same people afterwards.
+
+    Written to be unambiguous on a lock screen, where it may arrive seconds
+    after the alarm and directly beneath it. "SAFE" leads, because a reader
+    skimming two SafeHer texts in a row has to be able to tell at a glance
+    which one is current -- a correction that reads as a second emergency is
+    worse than none.
+
+    One segment, like the alert. Unlike the alert there is nothing here worth
+    truncating a name for: no location, no evidence link, nothing that loses
+    meaning when trimmed.
+    """
+    body = (
+        f"SafeHer: FALSE ALARM. {user_name} is safe -- the earlier SafeHer "
+        f"alert was sent automatically in error ({local_time}). No help is needed."
+    )
+    if len(body) <= SMS_SEGMENT_LIMIT:
+        return body
+
+    # Trim the name rather than the meaning. Every other clause here is
+    # load-bearing: that it is false, that she is safe, and that nobody
+    # needs to act.
+    overflow = len(body) - SMS_SEGMENT_LIMIT
+    trimmed = user_name[: max(1, len(user_name) - overflow - 1)].rstrip()
+    return (
+        f"SafeHer: FALSE ALARM. {trimmed} is safe -- the earlier SafeHer "
+        f"alert was sent automatically in error ({local_time}). No help is needed."
+    )[:SMS_SEGMENT_LIMIT]

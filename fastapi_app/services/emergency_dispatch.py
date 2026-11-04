@@ -34,6 +34,13 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_app.config import Settings
+# Imported at module scope rather than resolved at the call site: this name was
+# used by the push branch of `_notify_contact` without ever being imported, so
+# every fan-out that reached a contact who is *also* a SafeHer user raised
+# `NameError` instead of sending them a push -- and because that exception
+# escapes `dispatch_to_contacts`, it abandoned every contact after that one in
+# the user's priority order. See `tests/test_incident_retraction.py`.
+from fastapi_app.deps import fcm_credentials
 from fastapi_app.models import EmergencyContact, FcmToken, NotificationLog, User
 from fastapi_app.repositories import emergency_contacts as contacts_repo
 from fastapi_app.services.notifications import send_fcm_notification
@@ -43,6 +50,7 @@ from fastapi_app.services.onesignal import (
     OneSignalEmailSender,
     OneSignalNotConfigured,
     build_emergency_email,
+    build_retraction_email,
 )
 from fastapi_app.services.smtp_email import build_email_sender
 from fastapi_app.services.sms import (
@@ -50,6 +58,7 @@ from fastapi_app.services.sms import (
     SmsNotConfigured,
     SmsSender,
     build_emergency_sms,
+    build_retraction_sms,
     maps_link,
 )
 
@@ -129,10 +138,23 @@ async def dispatch_to_contacts(
     evidence_url: Optional[str] = None,
     sms_sender: Optional[SmsSender] = None,
     email_sender: Optional[OneSignalEmailSender] = None,
+    should_continue=None,
 ) -> DispatchReport:
     """Notifies every emergency contact. Never raises — a partial failure is
     reported, not thrown, because the incident is already recorded and the
     caller must still return a response to someone in danger.
+
+    [should_continue] is an optional async predicate consulted *before* each
+    contact. Returning False abandons the rest of the fan-out.
+
+    It exists for retraction. An automatic alert can be stood down within
+    seconds of going out, and the fan-out it is standing down may still be
+    running — three contacts, three channels each, with retries, is not
+    instant. Without this check the correction would race the alarm and lose:
+    contacts further down the priority list would receive "FALSE ALARM"
+    first and "EMERGENCY" afterwards, which is the worst possible ordering.
+    Stopping here means those contacts are never alarmed at all, so they need
+    no correction.
     """
     contacts = await contacts_repo.list_by_user(session, user_id=user.id)
     report = DispatchReport()
@@ -167,6 +189,16 @@ async def dispatch_to_contacts(
     # `list_by_user` already orders by priority, so this loop is the user's
     # own ranking.
     for contact in contacts:
+        # Checked before the first contact as well as between them: a
+        # retraction can land between the task being queued and it starting.
+        if should_continue is not None and not await should_continue():
+            logger.warning(
+                "Dispatch for incident %s stopped after %s of %s contacts",
+                incident_id,
+                len(report.results),
+                len(contacts),
+            )
+            break
         result = await _notify_contact(
             session=session,
             settings=settings,
@@ -230,6 +262,19 @@ async def run_dispatch_in_background(
                 logger.error("Dispatch for incident %s: user %s is gone", incident_id, user_id)
                 return
 
+            async def not_retracted() -> bool:
+                """True while this incident has not been stood down.
+
+                Read on its own session on purpose. The outer session is
+                mid-fan-out and has `incident` cached from before the
+                retraction request existed, so asking it would return the
+                stale row and the fan-out would keep alarming contacts after
+                she had said she was safe.
+                """
+                async with SessionLocal() as probe:
+                    row = await probe.get(Incident, incident_id)
+                    return row is None or row.retracted_at is None
+
             report = await dispatch_to_contacts(
                 session=session,
                 settings=settings,
@@ -238,6 +283,7 @@ async def run_dispatch_in_background(
                 latitude=latitude,
                 longitude=longitude,
                 evidence_url=evidence_url,
+                should_continue=not_retracted,
             )
 
             incident = await session.get(Incident, incident_id)
@@ -628,3 +674,329 @@ text-decoration:none;display:inline-block">Open the report</a></p>
 revoked at any time. If {safe_user} has not been in touch, contact your
 local emergency services.</p>
 </body></html>"""
+
+
+# ------------------------------------------------------------------ retraction
+
+# The retraction fan-out's state machine, on `incidents.retraction_status`.
+# Deliberately the same vocabulary as the dispatch one, and deliberately a
+# separate column -- see migration 0015 for why the two must be able to
+# disagree.
+RETRACTION_IN_PROGRESS = "in_progress"
+RETRACTION_COMPLETE = "complete"
+RETRACTION_FAILED = "failed"
+
+# How long the app keeps the "stand it down" action in front of her after an
+# automatic alert, in seconds.
+#
+# This is a *prompt* duration, not a deadline. Nothing in this module or in
+# the router refuses a retraction that arrives later, and that asymmetry is
+# on purpose: the only thing a server-side deadline could achieve is
+# withholding a correction she has decided to send, and there is no reading
+# of this product where that is the safer behaviour. A contact who was told
+# she was in danger should be told she is fine whenever she says so.
+#
+# Sixty seconds is how long the prompt stays prominent, chosen against the
+# fan-out rather than against her reaction time: retries and three channels
+# per contact mean a dispatch can still be running for tens of seconds, and
+# the prompt should outlast it so the common case is a retraction that stops
+# the alarm instead of chasing it.
+RETRACTION_PROMPT_SECONDS = 60
+
+
+async def reached_contacts_for_incident(
+    session: AsyncSession, *, incident_id: str, incident=None
+) -> list[str]:
+    """The contacts an alert for this incident actually got to.
+
+    Two sources, unioned, because neither alone is both complete and current:
+
+    * **The notification log.** `_log` commits per contact per channel as the
+      fan-out runs, so these rows exist the moment a message is accepted.
+      That is what makes them usable mid-dispatch, which is exactly when a
+      retraction arrives. They miss one case: a contact reached *only* by
+      push, which `_notify_contact` does not log.
+    * **`incidents.contacts_reached`.** Complete, push included -- but only
+      written once the whole fan-out finishes, so during the first seconds it
+      is empty or absent.
+
+    Erring towards over-inclusion is correct here. A contact who receives a
+    stand-down for an alarm they never saw is briefly confused; a contact who
+    received the alarm and no stand-down may call the police. Those are not
+    symmetric mistakes.
+    """
+    reached: set[str] = set()
+
+    prefix = f"incident={incident_id} contact="
+    rows = (
+        await session.execute(
+            select(NotificationLog).where(
+                NotificationLog.status == "sent",
+                # `startswith(..., autoescape=True)` rather than a bare LIKE
+                # pattern. Incident ids are chosen by the *client* -- that is
+                # what makes a retry idempotent -- so an id containing `_` or
+                # `%` would be interpreted as a LIKE wildcard and match the log
+                # rows of a *different* incident belonging to the same user.
+                # Standing down alert A would then send a false-alarm message
+                # to the contacts of alert B, which may be a live emergency.
+                NotificationLog.payload.startswith(prefix, autoescape=True),
+            )
+        )
+    ).scalars().all()
+    for row in rows:
+        # `_log` writes "incident=<id> contact=<id>", with " reason=..." only
+        # on failures. Split defensively anyway: a malformed payload must not
+        # turn a retraction into a 500.
+        tail = (row.payload or "")[len(prefix) :].split(" ", 1)[0].strip()
+        if tail:
+            reached.add(tail)
+
+    if incident is not None:
+        raw = getattr(incident, "contacts_reached", None)
+        if raw:
+            try:
+                parsed = json.loads(raw)
+            except (ValueError, TypeError):
+                parsed = None
+            if isinstance(parsed, list):
+                reached.update(str(item) for item in parsed)
+
+    return sorted(reached)
+
+
+async def retract_to_contacts(
+    *,
+    session: AsyncSession,
+    settings: Settings,
+    user: User,
+    incident_id: str,
+    contact_ids: Sequence[str],
+    sms_sender: Optional[SmsSender] = None,
+    email_sender: Optional[OneSignalEmailSender] = None,
+) -> DispatchReport:
+    """Tells the contacts who were alarmed that it was a false alarm.
+
+    The correction goes out on every channel the alarm could have used, not
+    just the cheap one. `send_evidence_followup` deliberately limits itself to
+    email, on the grounds that a second text saying "there is also a
+    recording" is not worth the per-message cost -- that reasoning does not
+    carry over here. A contact holding an SMS that says someone is in danger
+    has to be corrected on the channel they are holding; leaving them with
+    only an email they may not read for hours is the failure this whole
+    mechanism exists to prevent.
+
+    Never raises, for the same reason the alarm fan-out does not: the
+    retraction is already recorded, and a channel refusing a message must be
+    reported rather than thrown at a caller who cannot act on it.
+    """
+    report = DispatchReport()
+    if not contact_ids:
+        return report
+
+    wanted = set(contact_ids)
+    contacts = [
+        contact
+        for contact in await contacts_repo.list_by_user(session, user_id=user.id)
+        if contact.id in wanted
+    ]
+    if not contacts:
+        # Every alarmed contact has since been deleted. Nothing to send, and
+        # not a failure -- but worth a line, because "retracted, 0 notified"
+        # otherwise looks identical to a retraction that silently did nothing.
+        logger.info(
+            "Retraction for incident %s: none of the %s alarmed contacts still exist",
+            incident_id,
+            len(wanted),
+        )
+        return report
+
+    sender = sms_sender or SmsSender(
+        account_sid=settings.twilio_account_sid,
+        auth_token=settings.twilio_auth_token,
+        from_number=settings.twilio_from_number,
+    )
+    emailer = email_sender or build_email_sender(
+        settings,
+        onesignal_sender=OneSignalEmailSender(
+            app_id=settings.onesignal_app_id,
+            api_key=settings.onesignal_api_key,
+        ),
+    )
+
+    display_name = (user.full_name or user.email or "A SafeHer user").strip()
+    local_time = datetime.now(timezone.utc).strftime("%H:%M UTC")
+    body = build_retraction_sms(user_name=display_name, local_time=local_time)
+
+    for contact in contacts:
+        result = ContactDispatchResult(contact_id=contact.id, contact_name=contact.name)
+
+        if sender.is_configured:
+            error = await _with_retries(lambda: sender.send(to=contact.phone, body=body))
+            if error is None:
+                result.delivered_channels.append("sms")
+                await _log(session, user.id, "sms", "retraction_sent", incident_id, contact.id)
+            else:
+                result.failures["sms"] = error
+                await _log(
+                    session,
+                    user.id,
+                    "sms",
+                    "retraction_failed",
+                    incident_id,
+                    contact.id,
+                    reason=error,
+                )
+        else:
+            result.failures["sms"] = "Twilio is not configured"
+            await _log(
+                session,
+                user.id,
+                "sms",
+                "retraction_skipped_not_configured",
+                incident_id,
+                contact.id,
+            )
+
+        if contact.email:
+            if emailer is not None and emailer.is_configured:
+                subject, html_body = build_retraction_email(
+                    user_name=display_name,
+                    contact_name=contact.name,
+                    local_time=local_time,
+                )
+                error = await _with_retries(
+                    lambda: emailer.send(
+                        to=contact.email, subject=subject, html_body=html_body
+                    )
+                )
+                if error is None:
+                    result.delivered_channels.append("email")
+                    await _log(
+                        session, user.id, "email", "retraction_sent", incident_id, contact.id
+                    )
+                else:
+                    result.failures["email"] = error
+                    await _log(
+                        session,
+                        user.id,
+                        "email",
+                        "retraction_failed",
+                        incident_id,
+                        contact.id,
+                        reason=error,
+                    )
+            else:
+                result.failures["email"] = "No email channel is configured"
+                await _log(
+                    session,
+                    user.id,
+                    "email",
+                    "retraction_skipped_not_configured",
+                    incident_id,
+                    contact.id,
+                )
+
+        tokens = await _tokens_for_contact(session, contact)
+        if tokens and fcm_credentials(settings).is_configured:
+            delivered = False
+            for token in tokens:
+                error = await _with_retries(
+                    lambda token=token: send_fcm_notification(
+                        credentials=fcm_credentials(settings),
+                        token=token.token,
+                        title="SafeHer: false alarm",
+                        body=body,
+                        data={
+                            "incident_id": incident_id,
+                            # A distinct type, so a contact's app can replace
+                            # the emergency notification rather than stacking
+                            # a second one underneath it.
+                            "type": "emergency_contact_retraction",
+                            "from_user_id": user.id,
+                        },
+                        session=session,
+                        user_id=token.user_id,
+                        device_id=token.device_id,
+                    )
+                )
+                if error is None:
+                    delivered = True
+            if delivered:
+                result.delivered_channels.append("push")
+            else:
+                result.failures["push"] = "No device accepted the notification"
+
+        report.results.append(result)
+
+    return report
+
+
+async def run_retraction_in_background(
+    *,
+    settings: Settings,
+    user_id: str,
+    incident_id: str,
+) -> None:
+    """Fans the correction out after the retract request has already answered.
+
+    Same shape and same reasoning as `run_dispatch_in_background`: its own
+    session, because the request-scoped one is closed by the time this runs,
+    and it never raises, because there is no caller left to catch anything.
+    """
+    from fastapi_app.db import SessionLocal
+    from fastapi_app.models import Incident
+    from fastapi_app.realtime import manager
+
+    try:
+        async with SessionLocal() as session:
+            user = await session.get(User, user_id)
+            incident = await session.get(Incident, incident_id)
+            if user is None or incident is None:
+                logger.error(
+                    "Retraction for incident %s: user or incident is gone", incident_id
+                )
+                return
+
+            contact_ids = await reached_contacts_for_incident(
+                session, incident_id=incident_id, incident=incident
+            )
+            report = await retract_to_contacts(
+                session=session,
+                settings=settings,
+                user=user,
+                incident_id=incident_id,
+                contact_ids=contact_ids,
+            )
+
+            incident = await session.get(Incident, incident_id)
+            if incident is not None:
+                incident.retraction_status = RETRACTION_COMPLETE
+                incident.retraction_contacts_notified = report.contacts_notified
+                await session.commit()
+
+            await manager.broadcast_to_user(
+                user_id,
+                {
+                    "type": "retraction_complete",
+                    "incident_id": incident_id,
+                    "contacts_total": report.contacts_total,
+                    "contacts_notified": report.contacts_notified,
+                    "contacts_reached": report.reached_contact_ids,
+                    "contacts_failed": report.failed_contact_ids,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+    except Exception as exc:  # noqa: BLE001 - see docstring
+        logger.exception("Retraction for incident %s failed: %s", incident_id, exc)
+        try:
+            async with SessionLocal() as session:
+                incident = await session.get(Incident, incident_id)
+                if incident is not None:
+                    incident.retraction_status = RETRACTION_FAILED
+                    await session.commit()
+        except Exception:  # noqa: BLE001
+            # `retracted_at` is already committed, so the incident is
+            # correctly marked as stood down whatever happens here. Only the
+            # fan-out's own outcome is at risk, and losing it must not mask
+            # the error above.
+            logger.exception("Could not record retraction failure for %s", incident_id)

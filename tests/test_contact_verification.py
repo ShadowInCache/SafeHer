@@ -39,6 +39,7 @@ from fastapi_app.services.contact_verification import (
     send_verification_code,
 )
 from fastapi_app.services.emergency_dispatch import dispatch_to_contacts
+from fastapi_app.time_utils import naive_utc_now
 
 
 class CapturingEmailSender:
@@ -296,7 +297,7 @@ class TestContactVerification(unittest.IsolatedAsyncioTestCase):
 
         async with SessionLocal() as session:
             row = await session.get(EmergencyContact, contact["id"])
-            row.verification_expires_at = datetime.utcnow() - timedelta(minutes=1)
+            row.verification_expires_at = naive_utc_now() - timedelta(minutes=1)
             await session.commit()
 
         async with SessionLocal() as session:

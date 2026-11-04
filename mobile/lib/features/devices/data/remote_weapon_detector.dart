@@ -1,4 +1,6 @@
 
+import 'dart:ui' show Size;
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
@@ -104,6 +106,14 @@ class RemoteWeaponDetector implements WeaponDetector {
 
   @override
   Future<void> dispose() async {}
+
+  /// The server reports a label and a confidence and no box, so there is
+  /// nothing to draw and no frame size worth carrying. Stated explicitly
+  /// rather than inherited so the absence reads as a decision about the
+  /// endpoint rather than an oversight: see `/alerts/weapon-frame`, whose
+  /// response carries `weapon_confidence` and `weapon_label` only.
+  @override
+  Size? get lastFrameSize => null;
 }
 
 /// The server cannot score frames at all.

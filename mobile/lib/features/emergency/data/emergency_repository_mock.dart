@@ -33,6 +33,25 @@ class EmergencyRepositoryMock implements EmergencyRepository {
     );
   }
 
+  /// Mock mode retracts successfully, and reports the correction as still
+  /// fanning out on the first call — the same shape as the real backend, so
+  /// the "standing down…" state is explorable rather than skipped.
+  @override
+  Future<RetractionOutcome> retractAlert(String incidentId) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    final already = _retracted.contains(incidentId);
+    _retracted.add(incidentId);
+    return RetractionOutcome(
+      incidentId: incidentId,
+      retractedAt: DateTime.now(),
+      contactsNotified: already ? 2 : null,
+      alreadyRetracted: already,
+      settled: already,
+    );
+  }
+
+  final Set<String> _retracted = <String>{};
+
   @override
   Future<DispatchOutcome> fetchDispatchStatus(String incidentId) async {
     await Future.delayed(const Duration(milliseconds: 200));

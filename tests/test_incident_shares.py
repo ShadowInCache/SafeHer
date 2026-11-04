@@ -27,6 +27,7 @@ from fastapi_app.models import IncidentShare
 from fastapi_app.deps import get_evidence_store
 from fastapi_app.routers.shares import MAX_SHARE_DAYS, _hash_token
 from fastapi_app.services.evidence_store import EvidenceStore, derive_key
+from fastapi_app.time_utils import naive_utc_now
 
 _RECORDING = b"fake audio evidence bytes" * 16
 
@@ -132,7 +133,7 @@ class TestIncidentShares(unittest.IsolatedAsyncioTestCase):
         share = await self._share()
 
         expires = datetime.fromisoformat(share["expires_at"])
-        self.assertAlmostEqual((expires - datetime.utcnow()).days, 6, delta=1)
+        self.assertAlmostEqual((expires - naive_utc_now()).days, 6, delta=1)
 
     async def test_only_the_owner_can_mint_a_link(self):
         other = {"Authorization": f"Bearer {await self._login()}"}
@@ -193,7 +194,7 @@ class TestIncidentShares(unittest.IsolatedAsyncioTestCase):
         share = await self._share()
         async with SessionLocal() as session:
             row = await session.get(IncidentShare, share["id"])
-            row.expires_at = datetime.utcnow() - timedelta(minutes=1)
+            row.expires_at = naive_utc_now() - timedelta(minutes=1)
             await session.commit()
 
         response = await self.client.get(f"/api/v1/share/{share['token']}")
@@ -205,7 +206,7 @@ class TestIncidentShares(unittest.IsolatedAsyncioTestCase):
         share = await self._share()
         async with SessionLocal() as session:
             row = await session.get(IncidentShare, share["id"])
-            row.expires_at = datetime.utcnow() - timedelta(minutes=1)
+            row.expires_at = naive_utc_now() - timedelta(minutes=1)
             await session.commit()
 
         # The recording is decrypted per request precisely so that expiry

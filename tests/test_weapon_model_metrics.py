@@ -75,7 +75,37 @@ NEG_BASE = Path(
 TEST_IMAGES = Path("D:/SafeHer-ML/weapon_detection/datasets/merged/images/test")
 
 CONFIDENCE_FLOOR = 0.55
-WINDOW = 5
+
+# `WeaponScorer`'s own default window, which is NOT what runs. `ThreatPipeline`
+# builds `WeaponDetectionService` without passing a scorer, so that service's
+# `_defaultScorer()` decides -- window 15, frameTimeout 5 s. This file used to
+# pin only the default and call it "the deployed constants", so the deployed
+# window could have been changed to anything without a single test noticing.
+DEFAULT_WINDOW = 5
+DEPLOYED_WINDOW = 15
+DEPLOYED_FRAME_TIMEOUT_SECONDS = 5
+ON_DEVICE_INTERVAL_MS = 200
+
+DETECTION_SERVICE = (
+    ROOT / "mobile/lib/features/devices/data/weapon_detection_service.dart"
+)
+PIPELINE = ROOT / "mobile/lib/features/safety/data/threat_pipeline.dart"
+
+# The arithmetic below models the scorer. It divides by whichever window the
+# thing being described actually uses, so name it explicitly at each use rather
+# than letting one `WINDOW` stand for both.
+WINDOW = DEFAULT_WINDOW
+
+# The TFLite asset is a FlatBuffer followed by an appended Ultralytics metadata
+# archive, which is how the plugin learns its class names (see
+# `tests/test_weapon_model_metadata.py`). TFLite finds its root table from the
+# file header and ignores trailing bytes, so inference reads the FlatBuffer
+# only. Every measurement in this file is therefore a property of the graph, and
+# the graph is what gets pinned below -- which is why that hash is unchanged
+# from the run that produced these numbers even though the file on disk grew by
+# 428 bytes when the metadata was attached.
+TFLITE_GRAPH_BYTES = 6129244
+PK_LOCAL_HEADER = b"PK\x03\x04"
 
 
 def _sha256(path: Path) -> str:
@@ -87,9 +117,33 @@ def test_the_artifacts_are_the_ones_that_were_measured():
     assert _sha256(ONNX) == (
         "45811e6a65ab995363f9d97e59cd9f77961b5f914cf5bda9e9133f3fa0e1ff2e"
     ), "the server-side ONNX changed -- re-measure before trusting this file"
-    assert _sha256(TFLITE) == (
+
+    data = TFLITE.read_bytes()
+    graph, trailer = data[:TFLITE_GRAPH_BYTES], data[TFLITE_GRAPH_BYTES:]
+    assert hashlib.sha256(graph).hexdigest() == (
         "b5625bcf6bc1d86f8780e5acbc989f5759efea0c80d6f1e3fe9761625d87c338"
-    ), "the APK TFLite changed -- re-measure before trusting this file"
+    ), "the APK TFLite graph changed -- re-measure before trusting this file"
+
+    # Splitting at a hard-coded offset is only honest if the split is the real
+    # boundary: anything else and a graph change could hide in the 'trailer'.
+    assert not trailer or trailer.startswith(PK_LOCAL_HEADER), (
+        f"bytes at offset {TFLITE_GRAPH_BYTES} are not the start of an appended "
+        f"archive, so TFLITE_GRAPH_BYTES is no longer the graph/metadata "
+        f"boundary and the hash above is pinning the wrong span"
+    )
+
+
+def test_the_shipped_asset_is_the_one_that_was_built():
+    """Pin the whole file too, so what goes into the APK is still exact.
+
+    Separate from the graph pin above because the two answer different
+    questions. A failure here with the graph pin intact means the metadata
+    changed, which cannot alter any measurement in this file. A failure of the
+    graph pin means the detector itself changed and every number here is stale.
+    """
+    assert _sha256(TFLITE) == (
+        "afcfbe8c8664e2ecf34bd74ff32ac55ca3fdf1f884f7cbc6626fb70cf94a347b"
+    ), "the APK TFLite asset changed -- confirm the graph pin above still holds"
 
 
 def test_the_classes_are_still_only_pistol_and_knife():
@@ -106,7 +160,15 @@ def test_the_classes_are_still_only_pistol_and_knife():
     "source, pattern, expected, label",
     [
         (SCORER, r"confidenceFloor = ([0-9.]+)", CONFIDENCE_FLOOR, "scorer floor"),
-        (SCORER, r"this\.window = (\d+)", WINDOW, "scorer window"),
+        (SCORER, r"this\.window = (\d+)", DEFAULT_WINDOW, "scorer default window"),
+        # The values that actually run. Pinned separately from the defaults
+        # above, because they are set somewhere else entirely.
+        (DETECTION_SERVICE, r"WeaponScorer\(window: (\d+)", DEPLOYED_WINDOW,
+         "DEPLOYED scorer window"),
+        (DETECTION_SERVICE, r"frameTimeout: const Duration\(seconds: (\d+)\)",
+         DEPLOYED_FRAME_TIMEOUT_SECONDS, "DEPLOYED frame timeout"),
+        (PIPELINE, r"Duration\(milliseconds: (\d+)\)\s*:\s*const Duration\(seconds: 2\)",
+         ON_DEVICE_INTERVAL_MS, "DEPLOYED on-device inference interval"),
         (FUSION, r"DEFAULT_THREAT_THRESHOLD = ([0-9.]+)", 0.75, "auto-SOS threshold"),
         (FUSION, r"EMA_ALPHA = ([0-9.]+)", 0.30, "EMA alpha"),
         (FUSION, r"SOLO_SIGNAL_RETENTION = ([0-9.]+)", 0.50, "solo retention"),

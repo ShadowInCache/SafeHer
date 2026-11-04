@@ -204,8 +204,15 @@ async def on_shutdown() -> None:
             task.cancel()
             try:
                 await task
-            except Exception:
+            except asyncio.CancelledError:
+                # The expected outcome, and the reason this needs naming
+                # explicitly: `CancelledError` derives from `BaseException`,
+                # not `Exception`, so a bare `except Exception` here caught
+                # none of the cancellations it was written to absorb while
+                # still swallowing the genuine failures below.
                 pass
+            except Exception:
+                logger.exception("%s did not shut down cleanly", attr)
 
 
 @app.get("/")

@@ -35,6 +35,7 @@ from fastapi_app.security import (
 from fastapi_app.services.firebase_auth import verify_firebase_id_token
 from fastapi_app.repositories import auth_security
 from fastapi_app.services import email as email_service
+from fastapi_app.time_utils import naive_utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +146,7 @@ async def register(
                     f"privacy {expected_privacy})."
                 ),
             )
-        accepted_at = datetime.utcnow()
+        accepted_at = naive_utc_now()
 
     hashed = get_password_hash(payload.password)
     try:

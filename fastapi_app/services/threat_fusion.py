@@ -108,6 +108,27 @@ SOLO_SIGNAL_RETENTION = 0.50
 # SRS §6.2: smoothed(t) = 0.30*raw(t) + 0.70*smoothed(t-1)
 EMA_ALPHA = 0.30
 
+# How long a stored smoothed score stays usable as `previous`.
+#
+# [smooth] takes a first reading as-is, deliberately: seeding at zero would
+# halve a genuine spike on the very first sample, the one most likely to be the
+# emergency. That protection only works if "first" means first *of this
+# episode*, and the caller's store had no notion of age -- so a score left over
+# from a previous session was smoothed against days later, and the reading was
+# never treated as first.
+#
+# The direction of that bug was towards missing an alarm. A stale previous of
+# 0.70 turns a genuine first spike of 0.80 into 0.73, which is below the 0.75
+# default threshold: the alarm that should have fired on the first sample does
+# not fire at all.
+#
+# The phone posts about once a second and drops any signal older than 10 s, so
+# a gap longer than this means no sensor reported for several multiples of the
+# device's own freshness window. Treating that as a new episode errs towards
+# raising an alarm rather than missing one, which is the trade this codebase
+# already makes for losing the store on restart.
+SMOOTHING_STATE_TTL_SECONDS = 30
+
 # SRS FR-EMG-02 / §6.2 default when a user has expressed no preference.
 DEFAULT_THREAT_THRESHOLD = 0.75
 

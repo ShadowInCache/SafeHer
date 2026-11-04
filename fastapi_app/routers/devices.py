@@ -7,6 +7,7 @@ from fastapi_app.db import get_session
 from fastapi_app.repositories import devices as device_repo
 from fastapi_app.schemas import DeviceHeartbeatRequest, DevicePublic, DeviceRegisterRequest, UserPublic
 from fastapi_app.security import get_current_user
+from fastapi_app.time_utils import naive_utc_now
 
 router = APIRouter(prefix="/api/v1/devices", tags=["devices"])
 
@@ -71,7 +72,7 @@ async def update_device_heartbeat(
     if not device or device.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
 
-    device.last_seen = datetime.utcnow()
+    device.last_seen = naive_utc_now()
     if payload.battery_level is not None:
         device.battery_level = payload.battery_level
     if payload.signal_strength is not None:

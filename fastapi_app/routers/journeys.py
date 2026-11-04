@@ -40,6 +40,7 @@ from fastapi_app.schemas import (
 from fastapi_app.security import get_current_user
 from fastapi_app.time_utils import to_utc_iso, utc_now_iso
 from fastapi_app.services.notifications import send_fcm_notification
+from fastapi_app.time_utils import naive_utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -299,7 +300,7 @@ async def escalate_overdue_journey(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Journey is not active"
         )
-    if journey.expected_arrival_at > datetime.utcnow():
+    if journey.expected_arrival_at > naive_utc_now():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Journey has not run out of time yet"
         )

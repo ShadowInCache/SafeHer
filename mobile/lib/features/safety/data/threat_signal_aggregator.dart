@@ -57,8 +57,19 @@ class ThreatSignalAggregator {
     this.postInterval = const Duration(seconds: 1),
     this.maxAge = const Duration(seconds: 10),
     DateTime Function()? clock,
+    this.onAutoDispatch,
   })  : _apiClient = apiClient,
         _now = clock ?? DateTime.now;
+
+  /// Called with the incident id when the server reports that *it* raised the
+  /// alarm, not the user.
+  ///
+  /// This is the only moment the phone learns an automatic alert went out.
+  /// Auto-SOS is decided server-side, inside the response to a reading this
+  /// class posted, so without this callback nothing in the app knows it
+  /// happened — which is how a false automatic alarm used to reach her
+  /// contacts with no way for her to stand it down.
+  final void Function(String incidentId)? onAutoDispatch;
 
   final ApiClient _apiClient;
   final Duration postInterval;
@@ -202,6 +213,12 @@ class ThreatSignalAggregator {
     postAttempts++;
     try {
       final response = await _apiClient.dio.post('/alerts/analyze', data: payload);
+      // Deliberately *before* the logging call and not inside it. The verdict
+      // used to be read only by `_logExchange`, which is gated on
+      // `kLogThreatSignals` — so building with `--dart-define=
+      // SAFEHER_LOG_SIGNALS=false` would have left the app unable to notice
+      // its own automatic alarm, and her unable to take it back.
+      _noticeAutoDispatch(response.data);
       if (kLogThreatSignals) _logExchange(payload, response.data);
     } on DioException catch (error) {
       final reason = error.response?.statusCode ?? error.type.name;
@@ -225,6 +242,10 @@ class ThreatSignalAggregator {
       if (_worthRetrying(payload)) {
         try {
           final retry = await _apiClient.dio.post('/alerts/analyze', data: payload);
+          // The retried reading is the strong one, so this is the response
+          // most likely to carry a dispatch. Checked for the same reason as
+          // the first.
+          _noticeAutoDispatch(retry.data);
           if (kLogThreatSignals) {
             debugPrint('SafeHer: analyze -> retry succeeded after $reason');
             _logExchange(payload, retry.data);
@@ -240,6 +261,32 @@ class ThreatSignalAggregator {
       _posting = false;
     }
   }
+
+  /// Tells [onAutoDispatch] when a reading turned into an automatic alert.
+  ///
+  /// `auto_sos` is always present and always a map — it reports the decision
+  /// *including the decision not to dispatch*, so only `triggered == true`
+  /// means an alert actually went out. Reading it for null instead would
+  /// claim an alarm on every single reading.
+  ///
+  /// The same incident is reported only once. A dispatch is deduplicated
+  /// server-side for two minutes, but the readings keep flowing at one a
+  /// second, and nothing guarantees the response stops naming the incident —
+  /// so without this the prompt would be rebuilt sixty times a minute and her
+  /// tap could land on a freshly replaced widget.
+  void _noticeAutoDispatch(Object? body) {
+    final callback = onAutoDispatch;
+    if (callback == null || body is! Map) return;
+    final sos = body['auto_sos'];
+    if (sos is! Map || sos['triggered'] != true) return;
+    final incidentId = sos['incident_id'];
+    if (incidentId is! String || incidentId.isEmpty) return;
+    if (incidentId == _lastAnnouncedIncident) return;
+    _lastAnnouncedIncident = incidentId;
+    callback(incidentId);
+  }
+
+  String? _lastAnnouncedIncident;
 
   /// One line per reading: what we sent, and what the fusion engine made of it.
   ///

@@ -1,6 +1,8 @@
+import asyncio
 import json
 import logging
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import uuid4
 
@@ -34,6 +36,7 @@ from fastapi_app.schemas import (
 )
 from fastapi_app.security import get_current_user
 from fastapi_app.time_utils import to_utc_iso, utc_now_iso
+from fastapi_app.services import emergency_dispatch as dispatch
 from fastapi_app.services import threat_fusion, threat_models, weapon_detector
 from fastapi_app.services.emergency_dispatch import (
     DISPATCH_COMPLETE,
@@ -43,6 +46,7 @@ from fastapi_app.services.emergency_dispatch import (
 )
 from fastapi_app.services.notifications import send_fcm_notification
 from fastapi_app.services.processor_client import process_threat
+from fastapi_app.time_utils import naive_utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -51,15 +55,59 @@ router = APIRouter(prefix="/api/v1/alerts", tags=["alerts"])
 _latest_scores: dict[str, dict[str, Any]] = {}
 
 # SRS §6.2 smoothing needs the previous smoothed value. In memory, like
-# `_latest_scores`: losing it on restart costs one unsmoothed reading, which
-# errs towards raising an alarm rather than missing one. The deduplication
-# window is deliberately *not* kept here -- that one is read from the
-# database, because forgetting it would mean alerting every contact twice.
-_smoothed_scores: dict[str, float] = {}
-# The banded level each user was last in. Held only so `level_for` can apply
-# hysteresis on the way down; losing it on restart costs one un-damped band
-# transition, never a missed alarm.
-_threat_levels: dict[str, 'threat_fusion.ThreatLevel'] = {}
+# The smoothing state for each user: the last smoothed score, the band it was
+# in, and *when* that was recorded.
+#
+# Losing it on restart costs one unsmoothed reading, which errs towards raising
+# an alarm rather than missing one. The deduplication window is deliberately
+# *not* kept here -- that one is read from the database, because forgetting it
+# would mean alerting every contact twice.
+#
+# The timestamp is load-bearing rather than diagnostic. Without it a score left
+# over from an earlier session was used as `previous` however old it was, which
+# defeated `smooth`'s rule that a first reading is taken as-is and could hold a
+# genuine first spike below the threshold. See
+# `threat_fusion.SMOOTHING_STATE_TTL_SECONDS`.
+#
+# Both this and the lock below are per-process. That is correct for the single
+# uvicorn worker this runs on (see `app.py`), and it is a real constraint on
+# scaling out: with two workers a user's readings would split across two
+# independent EMA states and two independent locks, which would both weaken
+# smoothing and reopen the double-dispatch race below. Moving to more than one
+# worker means moving this state to Redis or Postgres first.
+@dataclass
+class _SmoothingState:
+    smoothed: float
+    level: 'threat_fusion.ThreatLevel'
+    at: datetime
+
+
+_smoothing_state: dict[str, _SmoothingState] = {}
+
+# One lock per user, held across "read the last auto alert, decide, write the
+# incident".
+#
+# The deduplication window is read from the database and the flag that closes
+# it is written several awaits later. Two requests arriving together -- the
+# phone posts to `/analyze` every second and `/heartbeat` can land alongside
+# it -- could both read "no previous auto alert", both clear the window check,
+# and both raise the alarm. Measured before this existed: three concurrent
+# readings produced two dispatches, so every emergency contact would have been
+# called twice for one emergency, which is the precise failure the window was
+# written to prevent.
+_user_locks: dict[str, asyncio.Lock] = {}
+
+
+def _lock_for(user_id: str) -> asyncio.Lock:
+    """The lock for one user, created on first use.
+
+    Keyed per user so one woman's emergency never waits behind another's.
+    """
+    lock = _user_locks.get(user_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _user_locks[user_id] = lock
+    return lock
 
 
 async def _auto_dispatch_if_threatened(
@@ -82,6 +130,37 @@ async def _auto_dispatch_if_threatened(
     told unless she pressed SOS herself, which is precisely the case
     FR-EMG-02 covers: the situations where she cannot.
     """
+    # Everything from here to the commit that sets `auto_dispatched` is one
+    # critical section. See `_user_locks` for the double dispatch this closes.
+    async with _lock_for(user_id):
+        return await _auto_dispatch_locked(
+            background_tasks=background_tasks,
+            session=session,
+            settings=settings,
+            user_id=user_id,
+            signals=signals,
+            incident=incident,
+            weapon_confidence=weapon_confidence,
+            in_high_risk_zone=in_high_risk_zone,
+            scores=scores,
+            weapon_label=weapon_label,
+        )
+
+
+async def _auto_dispatch_locked(
+    *,
+    background_tasks: Optional[BackgroundTasks],
+    session: AsyncSession,
+    settings: Settings,
+    user_id: str,
+    signals: threat_fusion.ThreatSignals,
+    incident: Optional[Incident],
+    weapon_confidence: float,
+    in_high_risk_zone: bool,
+    scores: Optional[threat_models.ModalityScores],
+    weapon_label: Optional[str],
+) -> dict[str, Any]:
+    """The body of [_auto_dispatch_if_threatened], under that user's lock."""
     owner = await session.get(User, user_id)
     if owner is None:
         return {"triggered": False, "reason": "no such user"}
@@ -116,17 +195,29 @@ async def _auto_dispatch_if_threatened(
     # `weapon_confidence` and `in_high_risk_zone` are still not inputs to the
     # score -- see the module doc in `threat_fusion` for why context was
     # removed -- and are recorded on the incident as supporting evidence.
+    # A score from an abandoned session must not be smoothed against. Past the
+    # TTL this reading begins a new episode and `smooth` takes it as-is, which
+    # is what keeps a genuine first spike at full strength.
+    now = datetime.now(timezone.utc)
+    previous = _smoothing_state.get(user_id)
+    if previous is not None and (
+        now - previous.at
+    ) > timedelta(seconds=threat_fusion.SMOOTHING_STATE_TTL_SECONDS):
+        previous = None
+
     decision = threat_fusion.evaluate(
         signals=signals,
-        previous_smoothed=_smoothed_scores.get(user_id),
-        previous_level=_threat_levels.get(user_id),
+        previous_smoothed=previous.smoothed if previous else None,
+        previous_level=previous.level if previous else None,
         threshold=threshold,
+        moment=now,
         last_alert_at=last_auto,
     )
     if decision is None:
         return {"triggered": False, "reason": "no signal reported"}
-    _smoothed_scores[user_id] = decision.smoothed_score
-    _threat_levels[user_id] = decision.level
+    _smoothing_state[user_id] = _SmoothingState(
+        smoothed=decision.smoothed_score, level=decision.level, at=now
+    )
 
     if not decision.should_trigger:
         if decision.suppressed_by_dedup:
@@ -209,7 +300,7 @@ async def _auto_dispatch_if_threatened(
         incident.contacts_notified = report.contacts_notified
         incident.contacts_reached = json.dumps(report.reached_contact_ids)
         incident.contacts_failed = json.dumps(report.failed_contact_ids)
-        incident.dispatch_completed_at = datetime.utcnow()
+        incident.dispatch_completed_at = naive_utc_now()
         await session.commit()
         notified = report.contacts_notified
 
@@ -566,6 +657,120 @@ async def get_dispatch_status(
             if incident.dispatch_completed_at
             else None
         ),
+    }
+
+
+@router.post("/emergency/{incident_id}/retract", status_code=status.HTTP_202_ACCEPTED)
+async def retract_emergency(
+    incident_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: UserPublic = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+):
+    """Stands an alert down and tells the contacts it reached that she is safe.
+
+    This is the only way back from an automatic alert. Auto-SOS has no
+    cancellable countdown in front of it -- a recorded decision, because the
+    situations it exists for are the ones where she cannot reach the screen
+    to confirm anything -- so a false automatic alarm reaches her contacts
+    before she can stop it. Without this endpoint her sister had been told
+    she was in danger and nothing she could do afterwards said otherwise.
+
+    Two things happen, in this order, and the order is the point:
+
+    1. `retracted_at` is committed *before* anything is sent. An in-flight
+       fan-out re-reads that column between contacts, so committing first
+       stops the remaining alarm messages. Sending first and committing
+       afterwards would let the correction overtake the alarm, leaving a
+       contact with "FALSE ALARM" followed by "EMERGENCY".
+    2. The correction fans out in the background, for the same reason the
+       alarm does: three channels per contact with retries is not something
+       to hold a request open for.
+
+    Idempotent. A double tap, or a retry from a flaky connection, must not
+    send every contact two stand-downs -- so an already-retracted incident
+    answers with what the first call produced.
+
+    Deliberately *not* restricted to automatic alerts. A manual SOS already
+    has a countdown, so this matters less there, but a woman who dispatched
+    by mistake and let the countdown run out needs the same way back.
+    """
+    incident = await session.get(Incident, incident_id)
+    if incident is None or incident.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
+
+    if incident.retracted_at is not None:
+        return _retraction_response(incident, already=True)
+
+    # Step 1: make the stand-down durable and visible to the running fan-out.
+    incident.retracted_at = naive_utc_now()
+    incident.retraction_status = dispatch.RETRACTION_IN_PROGRESS
+    await session.commit()
+    await session.refresh(incident)
+
+    logger.warning(
+        "Incident %s retracted by its owner (auto_dispatched=%s)",
+        incident_id,
+        incident.auto_dispatched,
+    )
+
+    # Step 2: correct the people who were actually told.
+    if background_tasks is not None:
+        background_tasks.add_task(
+            dispatch.run_retraction_in_background,
+            settings=settings,
+            user_id=current_user.id,
+            incident_id=incident_id,
+        )
+    else:
+        # No background queue (a direct internal call, or a test driving this
+        # handler). Run inline rather than marking the incident retracted and
+        # never telling anyone -- a retraction nobody receives is the one
+        # outcome this endpoint cannot leave behind.
+        owner = await session.get(User, current_user.id)
+        if owner is None:
+            # The account went away between authenticating and here. The
+            # stand-down is already committed, which is the part that matters;
+            # there is simply nobody to send it on behalf of.
+            incident.retraction_status = dispatch.RETRACTION_FAILED
+            await session.commit()
+            await session.refresh(incident)
+            return _retraction_response(incident, already=False)
+
+        contact_ids = await dispatch.reached_contacts_for_incident(
+            session, incident_id=incident_id, incident=incident
+        )
+        report = await dispatch.retract_to_contacts(
+            session=session,
+            settings=settings,
+            user=owner,
+            incident_id=incident_id,
+            contact_ids=contact_ids,
+        )
+        incident.retraction_status = dispatch.RETRACTION_COMPLETE
+        incident.retraction_contacts_notified = report.contacts_notified
+        await session.commit()
+        await session.refresh(incident)
+
+    return _retraction_response(incident, already=False)
+
+
+def _retraction_response(incident: Incident, *, already: bool) -> dict:
+    """What a retract call reports back.
+
+    `already_retracted` is reported rather than hidden so the client can tell
+    "your tap did this" from "this was already stood down" -- on a screen
+    whose whole job is reassurance, those are different messages.
+    """
+    return {
+        "incident_id": incident.id,
+        "retracted_at": (
+            to_utc_iso(incident.retracted_at) if incident.retracted_at else None
+        ),
+        "retraction_status": incident.retraction_status,
+        "contacts_notified": incident.retraction_contacts_notified,
+        "already_retracted": already,
     }
 
 

@@ -13,6 +13,7 @@ import 'core/security/app_lock.dart';
 import 'core/theme/app_theme.dart';
 import 'features/devices/data/glove_autoconnect_providers.dart';
 import 'features/devices/data/glove_link_providers.dart';
+import 'features/safety/presentation/widgets/auto_sos_retraction_banner.dart';
 import 'features/safety/presentation/widgets/safety_trigger_listener.dart';
 import 'firebase_options.dart';
 
@@ -225,9 +226,18 @@ class SafeHerApp extends ConsumerWidget {
       // listener: the lock covers what is on screen, while the shake gesture
       // and the rest of the app keep running underneath it. Locking is opt-in
       // (Profile > Security) and the lock screen keeps its own route to SOS.
+      // `AutoSosRetractionBanner` is the outermost of the three for the same
+      // reason the shake listener is above the router: an automatic alert is
+      // raised server-side against a background reading, so the way to stand
+      // it down has to be reachable from any screen — and above AppLock,
+      // because a locked phone is exactly the case auto-SOS fires in, and a
+      // correction she cannot reach until she unlocks is one her contacts do
+      // not get.
       builder: (context, child) => SaAmbientBackground(
-        child: AppLock(
-          child: SafetyTriggerListener(child: child ?? const SizedBox.shrink()),
+        child: AutoSosRetractionBanner(
+          child: AppLock(
+            child: SafetyTriggerListener(child: child ?? const SizedBox.shrink()),
+          ),
         ),
       ),
     );
