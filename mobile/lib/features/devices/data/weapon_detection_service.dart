@@ -314,6 +314,30 @@ class WeaponDetectionService {
       final detections = await _detector.detect(frame);
       _inferencesRun++;
       _recordLatency(started.elapsed);
+      // "It ran and found nothing" and "it never ran" look identical on screen
+      // and produced identical logs, which cost a whole hardware session to
+      // tell apart by hand. One line on the first inference and then one in
+      // every hundred settles it, and carries the latency that no measurement
+      // off a real device has ever recorded.
+      if (_inferencesRun == 1 || _inferencesRun % 100 == 0) {
+        debugPrint(
+          'SafeHer: weapon inference #$_inferencesRun in '
+          '${started.elapsedMilliseconds} ms, '
+          '${detections.length} detection(s), '
+          'frames received $_framesReceived, dropped $_droppedFrames',
+        );
+      }
+      if (detections.isNotEmpty) {
+        // Only while something is actually in view, so this is quiet on an
+        // ordinary journey. A class name and a confidence describe the model's
+        // output, not the person carrying the phone.
+        debugPrint(
+          'SafeHer: weapon detections: ${detections.map(
+                (d) => '${d.label} ${d.confidence.toStringAsFixed(2)}'
+                    '${d.box == null ? ' (no box)' : ''}',
+              ).join(', ')}',
+        );
+      }
       if (_disposed) return;
       final observedAt = _now();
       final score = _scorer.observe(detections, now: observedAt);
@@ -329,12 +353,27 @@ class WeaponDetectionService {
           ),
         );
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
       _inferencesFailed++;
       // One failed inference is not evidence about the world, so it records
       // nothing — neither a hit nor an empty frame. Recording an empty frame
       // would let a broken detector quietly vote the score down to zero and
       // look exactly like a camera pointed at nothing.
+      //
+      // But the reason used to be discarded with it, and that made a detector
+      // throwing on every frame indistinguishable from a camera pointed at
+      // nothing — the count rose where nobody could see it and the UI said
+      // "watching". The first failure is reported in full and then one in
+      // every hundred, so a permanent fault is visible without flooding the
+      // log at the inference rate.
+      if (_inferencesFailed == 1 || _inferencesFailed % 100 == 0) {
+        debugPrint(
+          'SafeHer: weapon inference failed (#$_inferencesFailed): $error',
+        );
+        if (_inferencesFailed == 1) {
+          debugPrintStack(stackTrace: stackTrace, maxFrames: 8);
+        }
+      }
     } finally {
       _busy = false;
     }

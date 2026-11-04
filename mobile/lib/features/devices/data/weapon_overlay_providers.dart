@@ -68,9 +68,14 @@ final weaponOverlayDetectorProvider =
 
   final service = WeaponDetectionService(
     detector: UltralyticsWeaponDetector(),
-    // The same rate the pipeline uses on Android. Lower would make the box
-    // visibly lag the video; higher would heat the phone to no visible gain,
-    // since the stream itself only delivers 10-15 fps.
+    // The same rate the pipeline uses on Android, and now known to be far
+    // faster than the stream needs. Measured on a Samsung SM-M166P
+    // (arm64-v8a, Android 15, LiteRT on GPU) on 2026-11-04: the glasses
+    // delivered **3.1 frames per second**, not the 10-15 this comment used to
+    // assume, and a warm inference took **99 ms** against 1,981 ms for the
+    // first one while LiteRT compiled for the GPU. So the 200 ms interval
+    // never throttles anything — every frame that arrives is scored, and the
+    // ceiling is the camera, not the phone.
     inferenceInterval: const Duration(milliseconds: 200),
   );
   unawaited(service.prepareDetector());

@@ -1,7 +1,7 @@
 name: safeher_app
 description: AI-Powered Wearable Safety Application for Women
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.0+5
 
 environment:
   sdk: '>=3.8.0 <4.0.0'

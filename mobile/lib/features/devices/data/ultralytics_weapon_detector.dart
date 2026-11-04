@@ -2,6 +2,7 @@
 import 'dart:ui' show Size;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 
 import '../domain/weapon_scorer.dart';
@@ -43,6 +44,14 @@ class UltralyticsWeaponDetector implements WeaponDetector {
 
   static const modelAsset = 'assets/models/weapon_yolov8n_fp16.tflite';
 
+  /// The class names, in the order the model was trained in.
+  ///
+  /// Read from the bundled file rather than written out here, because the
+  /// order is load-bearing: `data.yaml` trained `0: pistol, 1: knife`, and a
+  /// list that drifted from it would label every knife a firearm with total
+  /// confidence. One file, checked against the dataset, is the only defence.
+  static const labelsAsset = 'assets/models/weapon_labels.txt';
+
   /// Below this the plugin does not even report a box.
   ///
   /// Deliberately lower than [WeaponScorer.confidenceFloor], which is 0.55.
@@ -61,6 +70,7 @@ class UltralyticsWeaponDetector implements WeaponDetector {
     if (_unavailable) return false;
     try {
       _loaded = await _yolo.loadModel();
+      if (_loaded) await _loadLabels();
     } catch (_) {
       _loaded = false;
     }
@@ -69,6 +79,28 @@ class UltralyticsWeaponDetector implements WeaponDetector {
     _unavailable = !_loaded;
     return _loaded;
   }
+
+  /// Reads the class names once, so a detection can be named.
+  ///
+  /// Failure is tolerated: without the list, [resolveLabel] keeps the plugin's
+  /// own `class 0` and the detection still counts toward the alarm. A weapon
+  /// that cannot be named is still a weapon, and discarding it to avoid an
+  /// ugly label would trade the safety feature for the caption.
+  Future<void> _loadLabels() async {
+    if (_labels.isNotEmpty) return;
+    try {
+      final raw = await rootBundle.loadString(labelsAsset);
+      _labels = raw
+          .split('\n')
+          .map((line) => line.trim())
+          .where((line) => line.isNotEmpty)
+          .toList(growable: false);
+    } catch (_) {
+      _labels = const [];
+    }
+  }
+
+  List<String> _labels = const [];
 
   /// Loads the model ahead of the first frame — see [WeaponDetector.prepare].
   /// Failure is not raised: [ensureLoaded] records it, and `detect` returns
@@ -90,7 +122,12 @@ class UltralyticsWeaponDetector implements WeaponDetector {
     // dimensions would double the per-frame cost for a number the plugin
     // already told us.
     if (frameSize != null) _lastFrameSize = frameSize;
-    return parseDetections(raw, at: DateTime.now(), frameSize: frameSize);
+    return parseDetections(
+      raw,
+      at: DateTime.now(),
+      frameSize: frameSize,
+      labels: _labels,
+    );
   }
 
   @override
@@ -103,11 +140,42 @@ class UltralyticsWeaponDetector implements WeaponDetector {
   /// returned by `predict` is loosely typed, and a plugin upgrade that renames
   /// a key must not silently become "no weapons anywhere" — the failure mode
   /// where a safety feature keeps running and always reports calm.
+  /// Turns the plugin's `class 1` back into `knife`.
+  ///
+  /// The bundled export carries no embedded metadata — the plugin says so on
+  /// every load ("No embedded labels found and none provided") — so
+  /// `Predictor.labelName` names each class `class <index>`. That index is the
+  /// *only* class information that survives the channel: `Box.index` exists in
+  /// Kotlin and `YOLOPlugin` never puts it on the wire, sending `box.cls` under
+  /// both `class` and `className`. So it is read back out of the synthetic
+  /// name here and resolved against [labelsAsset].
+  ///
+  /// Measured on a real device before this existed: a knife in view reported
+  /// `class 0`, which is `pistol`. An incident record naming a firearm when a
+  /// knife was seen is worse than one naming nothing.
+  ///
+  /// A name that is *not* of that synthetic shape is a real label and is kept
+  /// untouched, so attaching metadata to the model later retires this path on
+  /// its own rather than fighting it.
+  @visibleForTesting
+  static String resolveLabel(String raw, List<String> labels) {
+    final match = _syntheticClassName.firstMatch(raw.trim());
+    if (match == null) return raw;
+    final index = int.tryParse(match.group(1)!);
+    if (index == null || index < 0 || index >= labels.length) return raw;
+    return labels[index];
+  }
+
+  /// Exactly `Predictor.labelName`'s fallback format, anchored at both ends so
+  /// a genuine class called "class action" is never mistaken for one.
+  static final _syntheticClassName = RegExp(r'^class\s+(-?\d+)$');
+
   @visibleForTesting
   static List<WeaponDetection> parseDetections(
     Map<String, dynamic> raw, {
     required DateTime at,
     Size? frameSize,
+    List<String> labels = const [],
   }) {
     final boxes = raw['boxes'] ?? raw['detections'] ?? raw['results'];
     if (boxes is! List) return const [];
@@ -123,7 +191,7 @@ class UltralyticsWeaponDetector implements WeaponDetector {
 
       detections.add(
         WeaponDetection(
-          label: label,
+          label: resolveLabel(label, labels),
           confidence: confidence,
           at: at,
           box: parseBox(entry, frameSize: frameSize),

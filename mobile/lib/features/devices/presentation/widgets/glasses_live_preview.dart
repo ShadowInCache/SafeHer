@@ -217,8 +217,18 @@ class _DetectionStatus extends ConsumerWidget {
     final state = ref.watch(weaponOverlayStateProvider).valueOrNull;
     final visible = state?.visibleAt(DateTime.now()) ?? const [];
     if (visible.isEmpty) {
+      // "Watching" used to be said whether or not a single frame had ever
+      // reached the model. During a Safe Journey the camera is opened by a
+      // trigger rather than by arming (`CameraActivationPolicy`), so the
+      // ordinary case is a detector that is loaded, running and receiving
+      // nothing — and this line claimed it had looked and seen a calm street.
+      // That is the project's own absent-is-not-zero rule, broken in the one
+      // place a person actually reads.
+      final received = detector.metrics.framesReceived;
       return _StatusLine(
-        text: 'Watching — no weapon detected.',
+        text: received == 0
+            ? 'No video reaching the detector yet — nothing has been examined.'
+            : 'Watching — no weapon detected.',
         colour: onSurface.withValues(alpha: 0.6),
       );
     }

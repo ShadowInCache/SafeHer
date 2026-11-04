@@ -29,10 +29,15 @@ import '../../domain/weapon_scorer.dart';
 /// ## What this deliberately does not do: exact frame pairing
 ///
 /// Boxes are drawn over whichever frame is on screen now, not over the frame
-/// they were computed from. Inference runs at ~5 fps against a 10–15 fps
-/// stream, so a box trails its own frame by up to one inference interval plus
-/// the inference itself — on the order of 200 ms plus latency, unmeasured on
-/// real hardware.
+/// they were computed from, so a box trails its own frame by up to one
+/// inference interval plus the inference itself.
+///
+/// Measured on a Samsung SM-M166P (arm64-v8a, Android 15, LiteRT on GPU) on
+/// 2026-11-04: the glasses delivered **3.1 fps** and a warm inference took
+/// **99 ms**, with the first one taking 1,981 ms while LiteRT compiled for the
+/// GPU. At 3 fps a frame is on screen for ~320 ms, which dominates the 99 ms
+/// of inference — so the visible lag is roughly one frame, and shortening the
+/// inference interval cannot improve it.
 ///
 /// Pairing them exactly would mean holding each frame back until its inference
 /// finished, which delays the video to improve the rectangle, on a screen

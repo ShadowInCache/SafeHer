@@ -159,4 +159,83 @@ void main() {
       expect(detections.single.box, isNull);
     });
   });
+
+  group('resolveLabel', () {
+    // The order the model was trained in: data.yaml says `0: pistol,
+    // 1: knife`, matching assets/models/weapon_labels.txt.
+    const labels = ['pistol', 'knife'];
+
+    test('names the class the plugin could only number', () {
+      // Measured on a real device on 2026-11-04: a knife in view reported
+      // `class 0`, which read as a firearm. This is that bug.
+      expect(UltralyticsWeaponDetector.resolveLabel('class 1', labels), 'knife');
+      expect(
+        UltralyticsWeaponDetector.resolveLabel('class 0', labels),
+        'pistol',
+      );
+    });
+
+    test('keeps a real label untouched', () {
+      // Attaching metadata to the model later must retire this path quietly,
+      // not fight it.
+      expect(UltralyticsWeaponDetector.resolveLabel('knife', labels), 'knife');
+    });
+
+    test('an index past the list is left as it came', () {
+      // Better an ugly `class 7` than confidently calling the eighth class a
+      // pistol because the list is two long.
+      expect(
+        UltralyticsWeaponDetector.resolveLabel('class 7', labels),
+        'class 7',
+      );
+      expect(
+        UltralyticsWeaponDetector.resolveLabel('class -1', labels),
+        'class -1',
+      );
+    });
+
+    test('no labels loaded still yields a usable detection', () {
+      expect(UltralyticsWeaponDetector.resolveLabel('class 1', const []),
+          'class 1');
+    });
+
+    test('a genuine class name that merely starts with "class" survives', () {
+      expect(
+        UltralyticsWeaponDetector.resolveLabel('class action', labels),
+        'class action',
+      );
+    });
+
+    test('parseDetections names the detection, not just the resolver', () {
+      // The vacuity guard: `resolveLabel` being right is worth nothing if
+      // `parseDetections` never calls it.
+      final detections = UltralyticsWeaponDetector.parseDetections(
+        const {
+          'boxes': [
+            {'className': 'class 1', 'confidence': 0.61},
+          ],
+        },
+        at: DateTime(2026, 11, 4),
+        labels: labels,
+      );
+
+      expect(detections.single.label, 'knife');
+    });
+
+    test('an unnamed detection still counts toward the alarm', () {
+      // `isWeaponClass` is a denylist, so a nameless class must not be
+      // silently excluded from scoring just because it could not be named.
+      final detections = UltralyticsWeaponDetector.parseDetections(
+        const {
+          'boxes': [
+            {'className': 'class 0', 'confidence': 0.61},
+          ],
+        },
+        at: DateTime(2026, 11, 4),
+      );
+
+      expect(detections.single.label, 'class 0');
+      expect(detections.single.isWeaponClass, isTrue);
+    });
+  });
 }
