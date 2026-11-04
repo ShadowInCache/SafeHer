@@ -1,0 +1,145 @@
+{
+  "generated_utc": "2026-11-04T04:51:56+00:00",
+  "artifact": "mobile/assets/models/weapon_yolov8n_fp16.tflite",
+  "artifact_sha256": "afcfbe8c8664e2ecf34bd74ff32ac55ca3fdf1f884f7cbc6626fb70cf94a347b",
+  "test_split": {
+    "path": "D:\\SafeHer-ML\\weapon_detection\\datasets\\merged\\images\\test",
+    "images": 658,
+    "note": "Locked test split. Held out from training by directory, 70/20/10 by image, seed 20260830."
+  },
+  "confidence_floor": 0.55,
+  "figures": {
+    "precision_recall_curve.png": "measurement over the full test split",
+    "f1_vs_confidence_curve.png": "measurement over the full test split",
+    "precision_vs_confidence_curve.png": "measurement over the full test split",
+    "recall_vs_confidence_curve.png": "measurement over the full test split",
+    "confusion_matrix.png": "measurement over the full test split",
+    "confusion_matrix_normalised.png": "measurement over the full test split",
+    "val_val_batch0_pred.jpg": "val batch predictions, drawn by ultralytics",
+    "val_val_batch1_pred.jpg": "val batch predictions, drawn by ultralytics",
+    "val_val_batch2_pred.jpg": "val batch predictions, drawn by ultralytics",
+    "val_val_batch0_labels.jpg": "val batch ground-truth labels, for comparison",
+    "val_val_batch1_labels.jpg": "val batch ground-truth labels, for comparison",
+    "val_val_batch2_labels.jpg": "val batch ground-truth labels, for comparison"
+  },
+  "measured": {
+    "map50": 0.9068,
+    "map50_95": 0.6317,
+    "per_class_map50": {
+      "pistol": 0.9316,
+      "knife": 0.882
+    },
+    "instances": 783,
+    "images": 658
+  },
+  "annotated_detections": {
+    "what_this_is": "ILLUSTRATION, not a metric. A fixed-stride sample of the held-out test split, drawn at the confidence floor the app applies. Includes whatever the model misses.",
+    "sampling": "every 54th image of the sorted listing, first 12",
+    "confidence_floor": 0.55,
+    "results": [
+      {
+        "image": "test_000000_e0dc90a20648d735.jpg",
+        "detections": []
+      },
+      {
+        "image": "test_000054_armas (1100).jpg",
+        "detections": [
+          {
+            "class": "pistol",
+            "confidence": 0.9333
+          }
+        ]
+      },
+      {
+        "image": "test_000108_armas (880).jpg",
+        "detections": [
+          {
+            "class": "pistol",
+            "confidence": 0.8258
+          }
+        ]
+      },
+      {
+        "image": "test_000162_knife_602.jpg",
+        "detections": [
+          {
+            "class": "knife",
+            "confidence": 0.8401
+          }
+        ]
+      },
+      {
+        "image": "test_000216_knife_1260.jpg",
+        "detections": [
+          {
+            "class": "knife",
+            "confidence": 0.8382
+          }
+        ]
+      },
+      {
+        "image": "test_000270_armas (1267).jpg",
+        "detections": [
+          {
+            "class": "pistol",
+            "confidence": 0.7693
+          }
+        ]
+      },
+      {
+        "image": "test_000324_armas (114).jpg",
+        "detections": [
+          {
+            "class": "pistol",
+            "confidence": 0.7586
+          }
+        ]
+      },
+      {
+        "image": "test_000378_knife_161.jpg",
+        "detections": [
+          {
+            "class": "knife",
+            "confidence": 0.6011
+          }
+        ]
+      },
+      {
+        "image": "test_000432_armas (989).jpg",
+        "detections": [
+          {
+            "class": "pistol",
+            "confidence": 0.8825
+          }
+        ]
+      },
+      {
+        "image": "test_000486_knife_870.jpg",
+        "detections": [
+          {
+            "class": "knife",
+            "confidence": 0.7901
+          }
+        ]
+      },
+      {
+        "image": "test_000540_sharpenKnife096.jpg",
+        "detections": [
+          {
+            "class": "knife",
+            "confidence": 0.826
+          }
+        ]
+      },
+      {
+        "image": "test_000594_armas (1530).jpg",
+        "detections": [
+          {
+            "class": "pistol",
+            "confidence": 0.8961
+          }
+        ]
+      }
+    ]
+  }
+}

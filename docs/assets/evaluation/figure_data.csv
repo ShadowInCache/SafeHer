@@ -1,0 +1,65 @@
+figure,row_or_x,series,value
+benchmark_conformance,Weapon YOLOv8n — phone fp16 TFLite,mAP@0.5,0.9068
+benchmark_conformance,Weapon YOLOv8n — phone fp16 TFLite,target,0.88
+benchmark_conformance,Weapon YOLOv8n — server int8 ONNX,mAP@0.5,0.9023
+benchmark_conformance,Weapon YOLOv8n — server int8 ONNX,target,0.88
+benchmark_conformance,Weapon YOLOv8n — 6-class candidate,mAP@0.5,0.8938
+benchmark_conformance,Weapon YOLOv8n — 6-class candidate,target,0.88
+benchmark_conformance,Audio ASR→TF-IDF→LR — clean ASR,F1,0.9401
+benchmark_conformance,Audio ASR→TF-IDF→LR — clean ASR,target,0.9
+benchmark_conformance,Audio ASR→TF-IDF→LR — degraded ASR,F1,0.8709
+benchmark_conformance,Audio ASR→TF-IDF→LR — degraded ASR,target,0.9
+benchmark_conformance,Glove XGBoost — 5-class,accuracy,0.8886
+benchmark_conformance,Glove XGBoost — 5-class,target,0.95
+audio_threshold_sweep,0.3,F1 (the target metric),0.8319
+audio_threshold_sweep,0.35,F1 (the target metric),0.8374
+audio_threshold_sweep,0.4,F1 (the target metric),0.8458
+audio_threshold_sweep,0.45,F1 (the target metric),0.858
+audio_threshold_sweep,0.5,F1 (the target metric),0.8709
+audio_threshold_sweep,0.55,F1 (the target metric),0.8603
+audio_threshold_sweep,0.6,F1 (the target metric),0.8575
+audio_threshold_sweep,0.65,F1 (the target metric),0.8345
+audio_threshold_sweep,0.7,F1 (the target metric),0.8223
+audio_threshold_sweep,0.75,F1 (the target metric),0.8053
+audio_threshold_sweep,0.8,F1 (the target metric),0.8114
+audio_threshold_sweep,0.3,recall,0.9372
+audio_threshold_sweep,0.35,recall,0.9199
+audio_threshold_sweep,0.4,recall,0.8961
+audio_threshold_sweep,0.45,recall,0.8896
+audio_threshold_sweep,0.5,recall,0.8831
+audio_threshold_sweep,0.55,recall,0.8528
+audio_threshold_sweep,0.6,recall,0.8398
+audio_threshold_sweep,0.65,recall,0.7749
+audio_threshold_sweep,0.7,recall,0.7511
+audio_threshold_sweep,0.75,recall,0.7208
+audio_threshold_sweep,0.8,recall,0.7078
+audio_threshold_sweep,0.3,specificity,0.4206
+audio_threshold_sweep,0.35,specificity,0.4921
+audio_threshold_sweep,0.4,specificity,0.5913
+audio_threshold_sweep,0.45,specificity,0.6627
+audio_threshold_sweep,0.5,specificity,0.7341
+audio_threshold_sweep,0.55,specificity,0.7619
+audio_threshold_sweep,0.6,specificity,0.7817
+audio_threshold_sweep,0.65,specificity,0.8492
+audio_threshold_sweep,0.7,specificity,0.8611
+audio_threshold_sweep,0.75,specificity,0.873
+audio_threshold_sweep,0.8,specificity,0.9325
+audio_threshold_sweep,0.3,precision,0.7478
+audio_threshold_sweep,0.35,precision,0.7685
+audio_threshold_sweep,0.4,precision,0.8008
+audio_threshold_sweep,0.45,precision,0.8286
+audio_threshold_sweep,0.5,precision,0.8589
+audio_threshold_sweep,0.55,precision,0.8678
+audio_threshold_sweep,0.6,precision,0.8758
+audio_threshold_sweep,0.65,precision,0.904
+audio_threshold_sweep,0.7,precision,0.9084
+audio_threshold_sweep,0.75,precision,0.9123
+audio_threshold_sweep,0.8,precision,0.9506
+glove_gate_cascade,1 raw argmax,FALL recall,0.758
+glove_gate_cascade,2 + firmware confidence gate,FALL recall,0.653
+glove_gate_cascade,3 + firmware SUDDEN debounce,FALL recall,0.653
+glove_gate_cascade,4 + app GloveConfirmation,FALL recall,0.558
+glove_gate_cascade,1 raw argmax,false-positive rate,0.135
+glove_gate_cascade,2 + firmware confidence gate,false-positive rate,0.074
+glove_gate_cascade,3 + firmware SUDDEN debounce,false-positive rate,0.054
+glove_gate_cascade,4 + app GloveConfirmation,false-positive rate,0.02
