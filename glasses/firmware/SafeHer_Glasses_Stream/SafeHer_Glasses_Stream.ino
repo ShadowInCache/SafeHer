@@ -176,17 +176,31 @@ void startCamera() {
   //
   // If FB-OVF errors return on the serial monitor, this is the first thing to
   // put back to FRAMESIZE_QVGA; a stable QVGA stream beats a stuttering VGA one.
-  config.frame_size = FRAMESIZE_QVGA;
+  //
+  // Measured 2026-11-04, straight off the glasses onto a PC: QVGA delivered
+  // 320x240 frames of ~3.6 kB, and the shipped detector scored a bare wall at
+  // pistol 0.351 — above its own 0.35 reporting threshold, on a frame with no
+  // weapon in it. A real knife in view read as `pistol` on the phone almost
+  // every frame. At 320x240 the blade is a few pixels wide, so what survives
+  // JPEG is a dark elongated blob closer to a pistol's silhouette than a
+  // knife's. VGA matches the model's 640 input and removes the upscale.
+  config.frame_size = FRAMESIZE_VGA;
 
   // Lower number = better quality on this driver. 20 was chosen for a smaller
   // frame at QVGA; 12 at VGA keeps frames near 30-60 kB, which is what
   // sustains a usable rate over 2.4 GHz WiFi.
-  config.jpeg_quality = 20;
+  config.jpeg_quality = 12;
 
   // SafeHer app: two buffers so capture and transmit overlap. With one, the
   // sensor stalls waiting for the previous frame to finish sending and the
   // frame rate roughly halves. Needs PSRAM, which the Sense variant has.
-  config.fb_count = 1;
+  //
+  // This is also what makes VGA viable. The FB-OVF stuttering that sent the
+  // frame size back to QVGA was measured with one buffer, which is the stall
+  // this fixes — so the two settings were never independent, and reverting
+  // the frame size alone while leaving this at 1 repeats the original test
+  // rather than a new one. The psramFound() guard below still drops both.
+  config.fb_count = 2;
 
   config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
   config.fb_location = CAMERA_FB_IN_PSRAM;

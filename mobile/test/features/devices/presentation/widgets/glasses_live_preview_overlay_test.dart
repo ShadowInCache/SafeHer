@@ -47,6 +47,7 @@ GlassesPreviewSource _source() => GlassesPreviewSource(
 
 Widget _harness({
   required bool detectorRunning,
+  bool framesArriving = true,
   WeaponOverlayState? overlay,
 }) {
   return ProviderScope(
@@ -59,11 +60,17 @@ Widget _harness({
           GlassesStreamStatus.streaming,
         ),
       ),
-      weaponOverlayDetectorProvider.overrideWith(
-        (ref) => detectorRunning
-            ? WeaponDetectionService(detector: _StubDetector())
-            : null,
-      ),
+      weaponOverlayDetectorProvider.overrideWith((ref) {
+        if (!detectorRunning) return null;
+        final service = WeaponDetectionService(detector: _StubDetector());
+        // A loaded detector that has been sent nothing is the ordinary case
+        // during a Safe Journey, because the camera is opened by a trigger
+        // rather than by arming. It must not read as "watching".
+        if (framesArriving) {
+          service.watch(Stream<Uint8List>.value(_onePixelPng));
+        }
+        return service;
+      }),
       weaponOverlayStateProvider.overrideWith(
         (ref) => overlay == null
             ? const Stream<WeaponOverlayState>.empty()
@@ -112,9 +119,29 @@ void main() {
       overlay: stateWith(const [], at: DateTime.now()),
     ));
     await _show(tester);
+    await tester.pump(const Duration(milliseconds: 20));
 
     expect(find.textContaining('no weapon detected'), findsOneWidget);
     expect(find.byType(WeaponDetectionOverlay), findsNothing);
+  });
+
+  testWidgets('does not claim to be watching before a frame has arrived',
+      (tester) async {
+    // The defect this pins cost a whole hardware session: during a journey the
+    // camera is opened by a trigger, so a loaded detector routinely receives
+    // nothing — and the line said "Watching — no weapon detected", which is
+    // the app asserting it looked at the street and found it calm.
+    await tester.pumpWidget(_harness(
+      detectorRunning: true,
+      framesArriving: false,
+      overlay: stateWith(const [], at: DateTime.now()),
+    ));
+    await _show(tester);
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(find.textContaining('No video reaching the detector'), findsOneWidget);
+    expect(find.textContaining('no weapon detected'), findsNothing,
+        reason: 'nothing was examined, so nothing can be reported as absent');
   });
 
   testWidgets('draws the box and names the weapon with its confidence',
